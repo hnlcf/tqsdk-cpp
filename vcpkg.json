@@ -1,0 +1,11 @@
+{
+  "dependencies": [
+    "boost-asio",
+    "boost-beast",
+    "fmt",
+    "nlohmann-json",
+    "openssl",
+    "spdlog",
+    "gtest"
+  ]
+}

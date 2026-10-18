@@ -1,0 +1,115 @@
+---
+# 需要 clang-format >= 17（推荐 18+），以完整支持 C++20 协程、concepts 和 requires
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+
+# ---------- 缩进与列宽 ----------
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+AccessModifierOffset: -4
+
+# ---------- 大括号 (K&R / Attach) ----------
+BreakBeforeBraces: Attach
+
+# ---------- 短块策略 ----------
+AllowShortBlocksOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+AllowShortLoopsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+
+# ---------- 函数与参数 ----------
+AlwaysBreakAfterReturnType: None
+AlignAfterOpenBracket: Align
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+PackConstructorInitializers: Never
+IndentWrappedFunctionNames: false
+
+# ---------- 模板与 concepts ----------
+BreakTemplateDeclarations: Yes
+BreakBeforeConceptDeclarations: Always
+IndentRequiresClause: true
+RequiresClausePosition: OwnLine
+RequiresExpressionIndentation: OuterScope
+
+# ---------- 对齐 ----------
+AlignEscapedNewlines: Right
+AlignOperands: Align
+AlignTrailingComments: true
+AlignArrayOfStructures: None
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: false
+
+# ---------- 指针 / 引用 ----------
+DerivePointerAlignment: false
+PointerAlignment: Left
+
+# ---------- 空格 ----------
+SpaceAfterCStyleCast: false
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyBlock: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+
+# ---------- 换行 ----------
+BreakBeforeTernaryOperators: true
+BreakBeforeBinaryOperators: None
+BreakInheritanceList: BeforeColon
+Cpp11BracedListStyle: true
+LambdaBodyIndentation: Signature
+
+# ---------- 空行 ----------
+EmptyLineBeforeAccessModifier: LogicalBlock
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+SeparateDefinitionBlocks: Leave
+
+# ---------- 命名空间 ----------
+NamespaceIndentation: None
+CompactNamespaces: false
+FixNamespaceComments: true
+ShortNamespaceLines: 0
+
+# ---------- 其他 ----------
+IndentCaseLabels: false
+IndentGotoLabels: false
+IndentPPDirectives: BeforeHash
+InsertBraces: false
+InsertNewlineAtEOF: true
+ReflowComments: true
+SortIncludes: CaseSensitive
+SortUsingDeclarations: Lexicographic
+
+# ---------- #include 分组 ----------
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^"pch\.h(pp)?"'
+    Priority: 0
+  - Regex: '^<(asio|boost)/'
+    Priority: 2
+  - Regex: '^<(openssl|nlohmann|spdlog|gtest|gmock)/'
+    Priority: 3
+  - Regex: '^<[a-z_0-9]+\.h(pp)?>'
+    Priority: 4
+  - Regex: '^<[^>]+>$'
+    Priority: 5
+  - Regex: '^"tqsdk/'
+    Priority: 6
+  - Regex: '^".*"'
+    Priority: 7
+IncludeIsMainRegex: '(_test)?$'

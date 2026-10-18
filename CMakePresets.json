@@ -1,0 +1,17 @@
+{
+    "version": 2,
+    "configurePresets": [
+        {
+            "name": "default",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "TQSDK_ENABLE_CTP": "OFF",
+                "TQSDK_BUILD_EXAMPLES": "OFF",
+                "TQSDK_BUILD_TESTS": "OFF"
+            }
+        }
+    ]
+}
