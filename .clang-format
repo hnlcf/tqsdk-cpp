@@ -47,8 +47,8 @@ AlignEscapedNewlines: Right
 AlignOperands: Align
 AlignTrailingComments: true
 AlignArrayOfStructures: None
-AlignConsecutiveAssignments: false
-AlignConsecutiveDeclarations: false
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
 AlignConsecutiveMacros: false
 
 # ---------- 指针 / 引用 ----------
@@ -91,12 +91,12 @@ IndentGotoLabels: false
 IndentPPDirectives: BeforeHash
 InsertBraces: false
 InsertNewlineAtEOF: true
-ReflowComments: true
+ReflowComments: false
 SortIncludes: CaseSensitive
 SortUsingDeclarations: Lexicographic
 
 # ---------- #include 分组 ----------
-IncludeBlocks: Regroup
+IncludeBlocks: Preserve
 IncludeCategories:
   - Regex: '^"pch\.h(pp)?"'
     Priority: 0
