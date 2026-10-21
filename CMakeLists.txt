@@ -36,6 +36,8 @@ add_library(tqsdk_core
     # src/gateway/sim_td_gateway.cpp
 )
 
+target_precompile_headers(tqsdk_core PRIVATE include/tqsdk/pch.h)
+
 target_include_directories(tqsdk_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
