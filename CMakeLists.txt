@@ -120,8 +120,14 @@ if(TQSDK_BUILD_TESTS)
     enable_testing()
 
     add_executable(tqsdk_tests
-        tests/channel_test.cpp
-        tests/diff_merge_test.cpp
+        tests/channel/channel_test.cpp
+        tests/channel/channel_basic_test.cpp
+        tests/channel/channel_bounded_test.cpp
+        tests/channel/channel_close_test.cpp
+        tests/channel/channel_multiplex_test.cpp
+    )
+    target_include_directories(tqsdk_tests PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>
     )
     target_link_libraries(tqsdk_tests PRIVATE tqsdk_core GTest::gtest_main)
 

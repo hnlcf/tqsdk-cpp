@@ -10,7 +10,7 @@
                 "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
                 "TQSDK_ENABLE_CTP": "OFF",
                 "TQSDK_BUILD_EXAMPLES": "OFF",
-                "TQSDK_BUILD_TESTS": "OFF"
+                "TQSDK_BUILD_TESTS": "ON"
             }
         }
     ]
