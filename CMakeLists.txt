@@ -125,6 +125,7 @@ if(TQSDK_BUILD_TESTS)
         tests/channel/channel_bounded_test.cpp
         tests/channel/channel_close_test.cpp
         tests/channel/channel_multiplex_test.cpp
+        tests/util/spawn_logged_test.cpp
     )
     target_include_directories(tqsdk_tests PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>
