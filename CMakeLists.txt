@@ -15,6 +15,7 @@ endif()
 # ---------- vcpkg 依赖查找 ----------
 find_package(Boost CONFIG REQUIRED COMPONENTS asio beast)
 find_package(OpenSSL CONFIG REQUIRED)
+find_package(magic_enum CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 
@@ -48,6 +49,7 @@ target_link_libraries(tqsdk_core PUBLIC
     Boost::beast
     OpenSSL::SSL
     OpenSSL::Crypto
+    magic_enum::magic_enum
     nlohmann_json::nlohmann_json
     spdlog::spdlog
 )

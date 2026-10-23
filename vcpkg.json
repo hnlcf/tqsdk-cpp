@@ -3,9 +3,10 @@
     "boost-asio",
     "boost-beast",
     "fmt",
+    "gtest",
     "nlohmann-json",
     "openssl",
     "spdlog",
-    "gtest"
+    "magic-enum"
   ]
 }
