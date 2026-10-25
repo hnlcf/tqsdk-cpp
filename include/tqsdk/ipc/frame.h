@@ -5,6 +5,7 @@
 using namespace boost;
 
 namespace tqsdk {
+namespace ipc {
 
 /// IPC 帧类型定义
 ///
@@ -60,23 +61,15 @@ struct Frame {
     uint8_t       payload[]; // 帧负载
 };
 
-class FrameCodec {
-public:
-    // 编码：返回完整帧字节串（含长度头）
-    static std::vector<uint8_t> encode(const Frame& frame);
-    static std::vector<uint8_t>
-    encode(FrameType type, FrameEncoding encoding, std::span<uint8_t> payload);
-
-    // 异步读一帧：内部先读 6 字节头，再读 payload
-    static asio::awaitable<Frame> async_read(asio::local::stream_protocol::socket& socket);
-
-    // 异步写一帧：单次 async_write（保证不与其他写交错，调用方需串行化）
-    static asio::awaitable<void> async_write(asio::local::stream_protocol::socket& socket,
-                                             const Frame&                          frame);
-    static asio::awaitable<void> async_write(asio::local::stream_protocol::socket& socket,
-                                             FrameType                             type,
-                                             FrameEncoding                         encoding,
-                                             const std::vector<uint8_t>&           payload);
+/// 接收侧结果：与 Frame 一一对应，但 payload 用 vector 承载以便 move
+struct ReceivedFrame {
+    FrameType            type;
+    FrameEncoding        encoding;
+    std::vector<uint8_t> payload;
 };
 
+using ConstSlice   = std::span<const uint8_t>;
+using MutableSlice = std::span<uint8_t>;
+
+} // namespace ipc
 } // namespace tqsdk
