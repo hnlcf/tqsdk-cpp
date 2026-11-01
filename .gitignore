@@ -9,11 +9,6 @@ CMakeUserPresets.json
 auth_codes.txt
 brokers.json
 
-# ---- 第三方 SDK 二进制（本地放置，不入库）----
-third_party/ctp/*.so
-third_party/ctp/*.dll
-third_party/ctp/*.lib
-
 # ---- 编辑器 / 系统杂项 ----
 .idea/
 .vscode/
