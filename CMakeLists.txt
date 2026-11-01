@@ -29,6 +29,7 @@ endif()
 add_library(tqsdk_core
     src/api/tq_api.cpp
     src/ipc/uds_channel.cpp
+    src/data/diff_merge_engine.cpp
     # src/data/data_manager.cpp
     # src/data/diff_merge_engine.cpp
     # src/channel/channel.cpp
@@ -128,6 +129,9 @@ if(TQSDK_BUILD_TESTS)
         tests/channel/channel_bounded_test.cpp
         tests/channel/channel_close_test.cpp
         tests/channel/channel_multiplex_test.cpp
+        tests/data/data_manager_test.cpp
+        tests/data/diff_merge_test.cpp
+        tests/data/entity_store_test.cpp
         tests/ipc/uds_channel_test.cpp
         tests/util/serde_test.cpp
         tests/util/spawn_logged_test.cpp
