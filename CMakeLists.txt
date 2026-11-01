@@ -135,6 +135,8 @@ if(TQSDK_BUILD_TESTS)
         tests/ipc/uds_channel_test.cpp
         tests/util/serde_test.cpp
         tests/util/spawn_logged_test.cpp
+        tests/e2e/mock_e2e_test.cpp
+        tests/e2e/mock_e2e_edges_test.cpp
     )
     target_include_directories(tqsdk_tests PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>
