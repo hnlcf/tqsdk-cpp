@@ -30,13 +30,13 @@ add_library(tqsdk_core
     src/api/tq_api.cpp
     src/ipc/uds_channel.cpp
     src/data/diff_merge_engine.cpp
+    src/gateway/sim/sim_td_gateway.cpp
     # src/data/data_manager.cpp
     # src/data/diff_merge_engine.cpp
     # src/channel/channel.cpp
     # src/gateway/tq_md_gateway.cpp
     # src/gateway/tq_td_gateway.cpp
     # src/gateway/sim_md_gateway.cpp
-    # src/gateway/sim_td_gateway.cpp
 )
 
 target_precompile_headers(tqsdk_core PRIVATE include/tqsdk/pch.h)
@@ -137,6 +137,7 @@ if(TQSDK_BUILD_TESTS)
         tests/util/spawn_logged_test.cpp
         tests/e2e/mock_e2e_test.cpp
         tests/e2e/mock_e2e_edges_test.cpp
+        tests/e2e/sim_td_e2e_test.cpp
     )
     target_include_directories(tqsdk_tests PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>
