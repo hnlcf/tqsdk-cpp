@@ -12,14 +12,15 @@ void DiffMergeEngine::apply(const nlohmann::json& push) {
         std::string_view k = it.key();
         if (k == "quotes") {
             merge_quotes(it.value());
-
         } else if (k == "trade") {
             merge_trade(it.value());
-
         } else if (k == "klines") {
             merge_klines(it.value());
+        } else {
+            // 未知顶层路由忽略
+            spdlog::error("Unimplemented route for merging: {}", k);
+            continue;
         }
-        // 未知顶层路由忽略
     }
 }
 
