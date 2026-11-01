@@ -8,10 +8,12 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_CXX_COMPILER": "clang++",
                 "CMAKE_CXX_FLAGS": "-fsanitize=address -fno-omit-frame-pointer -g",
-                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address -fuse-ld=mold",
+                "CMAKE_SHARED_LINKER_FLAGS": "-fuse-ld=mold",
                 "TQSDK_ENABLE_CTP": "OFF",
-                "TQSDK_BUILD_EXAMPLES": "OFF",
+                "TQSDK_BUILD_EXAMPLES": "ON",
                 "TQSDK_BUILD_TESTS": "ON"
             }
         }

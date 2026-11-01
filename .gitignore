@@ -6,6 +6,8 @@ vcpkg_installed/
 CMakeUserPresets.json
 
 # ---- 敏感 / 本机信息（切勿入库）----
+.env
+.env.*
 auth_codes.txt
 brokers.json
 

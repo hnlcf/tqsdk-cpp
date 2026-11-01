@@ -258,6 +258,44 @@ TEST(MockE2EEdges, CancelOrderAck) {
     EXPECT_EQ(oid, "rid_manual");
 }
 
+// get_kline_serial 语义：调用即创建本地流（非空），重复调用复用同一流；
+// 随后注入 klines 能在该流上读到 bars。默认 mock 网关不覆写 subscribe_kline，
+// 走基类空实现，不影响本地流创建。
+TEST(MockE2EEdges, GetKlineSerialCreatesAndReuses) {
+    Fixture f;
+
+    KlineStream* first  = nullptr;
+    KlineStream* second = nullptr;
+    uint64_t     cap    = 0;
+    std::size_t  nbars  = 0;
+
+    f.spawn([&]() -> asio::awaitable<void> {
+        // 创建即返回非空流，重复调用复用同一流。
+        first  = f.api->get_kline_serial("SHFE.rb2610", 60000000000LL, 20);
+        second = f.api->get_kline_serial("SHFE.rb2610", 60000000000LL, 20);
+        if (first) {
+            cap = first->capacity;
+        }
+        // 等注入的 klines 合并后读到 bars。
+        co_await f.api->wait_update();
+        auto* k = f.api->get_kline("SHFE.rb2610", 60000000000LL);
+        if (k) {
+            nbars = k->bars.size();
+        }
+        co_return;
+    });
+
+    f.pump(20);
+    f.md->inject(json::parse(R"({"klines":{"SHFE.rb2610":{"60000000000":
+        [{"datetime":192837300000000,"open":3800,"high":3810,"low":3790,"close":3805}]}}})"));
+    f.finish_and_check();
+
+    ASSERT_NE(first, nullptr);
+    EXPECT_EQ(first, second); // 复用同一流
+    EXPECT_EQ(cap, 20u);      // capacity 取 view_width
+    EXPECT_EQ(nbars, 1u);
+}
+
 // ---- 无网关分支：只给 md，不给 td ----
 
 // insert_order 在没有 td 时立即错误终态（不需要 wait_update）

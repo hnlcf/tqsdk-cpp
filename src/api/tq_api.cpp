@@ -177,6 +177,26 @@ KlineStream* TqApi::get_kline(std::string_view symbol, int64_t duration_ns) {
     return data_.klines.find(symbol, duration_ns);
 }
 
+KlineStream* TqApi::get_kline_serial(std::string_view symbol, int64_t duration_ns, int view_width) {
+    if (view_width <= 0) {
+        view_width = 200;
+    }
+    // 按需创建本地空流（已存在则复用），capacity 取 view_width。
+    KlineStream& k = data_.klines.get_or_create(std::string(symbol), duration_ns, view_width);
+
+    // 发起订阅（异步，不等数据到达）。
+    if (md_) {
+        std::string sym = std::string(symbol);
+        co_spawn_logged(
+            ex_,
+            [](MarketDataGateway& md, std::string s, int64_t dur, int w) -> asio::awaitable<void> {
+                co_await md.subscribe_kline(s, dur, w);
+            }(*md_, std::move(sym), duration_ns, view_width),
+            "TqApi.subscribe_kline");
+    }
+    return &k;
+}
+
 bool TqApi::is_changing(const Quote& q, uint64_t field_bits) const noexcept {
     return (q.changed_fields & field_bits) != 0;
 }

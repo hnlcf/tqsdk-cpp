@@ -58,6 +58,13 @@ public:
     // K 线流；不存在返回 nullptr（需先由数据更新创建）。
     KlineStream* get_kline(std::string_view symbol, int64_t duration_ns);
 
+    // 获取（并按需创建+订阅）K 线序列，语义对齐 TqSdk 的 get_kline_serial：
+    //   - 若该 (symbol, duration) 序列尚不存在，则在本地创建空流并发起订阅；
+    //   - 返回序列指针（非空），后续通过 wait_update() + 本指针读取 bars。
+    // view_width 为期望保留的 bar 根数（同时决定订阅请求的宽度）。
+    KlineStream*
+    get_kline_serial(std::string_view symbol, int64_t duration_ns, int view_width = 200);
+
     // 判断某实体本轮的某字段是否变化。
     bool is_changing(const Quote& q, uint64_t field_bits) const noexcept;
     bool is_changing(const Order& o, uint64_t field_bits) const noexcept;

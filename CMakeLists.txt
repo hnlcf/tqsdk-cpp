@@ -31,6 +31,9 @@ add_library(tqsdk_core
     src/ipc/uds_channel.cpp
     src/data/diff_merge_engine.cpp
     src/gateway/sim/sim_td_gateway.cpp
+    src/gateway/tq/tq_md_protocol.cpp
+    src/gateway/tq/tq_md_gateway.cpp
+    src/util/log.cpp
     # src/data/data_manager.cpp
     # src/data/diff_merge_engine.cpp
     # src/channel/channel.cpp
@@ -124,6 +127,8 @@ if(TQSDK_BUILD_TESTS)
     enable_testing()
 
     add_executable(tqsdk_tests
+        tests/main.cpp
+        tests/msg_test.cpp
         tests/channel/channel_test.cpp
         tests/channel/channel_basic_test.cpp
         tests/channel/channel_bounded_test.cpp
@@ -135,14 +140,17 @@ if(TQSDK_BUILD_TESTS)
         tests/ipc/uds_channel_test.cpp
         tests/util/serde_test.cpp
         tests/util/spawn_logged_test.cpp
+        tests/util/log_test.cpp
         tests/e2e/mock_e2e_test.cpp
         tests/e2e/mock_e2e_edges_test.cpp
         tests/e2e/sim_td_e2e_test.cpp
+        tests/gateway/tq_md_protocol_test.cpp
+        tests/e2e/tq_md_network_test.cpp
     )
     target_include_directories(tqsdk_tests PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>
     )
-    target_link_libraries(tqsdk_tests PRIVATE tqsdk_core GTest::gtest_main)
+    target_link_libraries(tqsdk_tests PRIVATE tqsdk_core GTest::gtest)
 
     include(GoogleTest)
     gtest_discover_tests(tqsdk_tests)

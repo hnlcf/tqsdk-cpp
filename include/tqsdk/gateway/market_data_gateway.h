@@ -37,6 +37,17 @@ public:
 
     virtual asio::awaitable<void> subscribe(const std::vector<std::string>& symbols) = 0;
 
+    // 订阅 K 线（序列）。duration_ns 为纳秒周期，view_width 为期望根数。
+    // 默认空实现：不支持 K 线的网关（如 mock/简单网关）无需覆写即可继续工作；
+    // 需要 K 线的网关（如 TqMdGateway）覆写并通过 output() 推送 kline diff。
+    virtual asio::awaitable<void>
+    subscribe_kline(const std::string& symbol, int64_t duration_ns, int view_width) {
+        (void)symbol;
+        (void)duration_ns;
+        (void)view_width;
+        co_return;
+    }
+
     // 网关内部将收到的行情 diff 推入此通道；TqApi 的后台 md_loop 从此消费。
     virtual Channel<MarketDataEvent>& output() = 0;
 };
