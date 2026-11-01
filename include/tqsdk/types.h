@@ -55,10 +55,10 @@ enum class Direction : uint8_t {
 DEFINE_ENUM_JSON_SERIALIZE(Direction)
 
 enum class Offset : uint8_t {
-    Open,
-    Close,
-    CloseToday,
-    CloseYesterday
+    OPEN,
+    CLOSE,
+    CLOSETODAY,
+    CLOSEYESTERDAY,
 };
 DEFINE_ENUM_JSON_SERIALIZE(Offset)
 

@@ -8,7 +8,39 @@
 namespace tqsdk {
 
 enum class PositionField : uint64_t {
-    // TODO
+    exchange_id               = 1ull << 0,
+    volume_long_today         = 1ull << 1,
+    volume_long_his           = 1ull << 2,
+    volume_long               = 1ull << 3,
+    volume_long_frozen_today  = 1ull << 4,
+    volume_long_frozen_his    = 1ull << 5,
+    volume_short_today        = 1ull << 6,
+    volume_short_his          = 1ull << 7,
+    volume_short              = 1ull << 8,
+    volume_short_frozen_today = 1ull << 9,
+    volume_short_frozen_his   = 1ull << 10,
+    order_volume_buy_open     = 1ull << 11,
+    order_volume_buy_close    = 1ull << 12,
+    order_volume_sell_open    = 1ull << 13,
+    order_volume_sell_close   = 1ull << 14,
+    open_price_long           = 1ull << 15,
+    open_price_short          = 1ull << 16,
+    open_cost_long            = 1ull << 17,
+    open_cost_short           = 1ull << 18,
+    position_price_long       = 1ull << 19,
+    position_price_short      = 1ull << 20,
+    position_cost_long        = 1ull << 21,
+    position_cost_short       = 1ull << 22,
+    last_price                = 1ull << 23,
+    float_profit_long         = 1ull << 24,
+    float_profit_short        = 1ull << 25,
+    float_profit              = 1ull << 26,
+    position_profit_long      = 1ull << 27,
+    position_profit_short     = 1ull << 28,
+    position_profit           = 1ull << 29,
+    margin_long               = 1ull << 30,
+    margin_short              = 1ull << 31,
+    margin                    = 1ull << 32,
 };
 
 struct Position {

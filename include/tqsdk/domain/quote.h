@@ -7,45 +7,63 @@
 
 namespace tqsdk {
 
-// Quote fields
 enum class QuoteField : uint64_t {
-    datetime          = 1ull << 0,
-    last_price        = 1ull << 1,
-    pre_settlement    = 1ull << 2,
-    pre_close         = 1ull << 3,
-    pre_open_interest = 1ull << 4,
-    open              = 1ull << 5,
-    highest           = 1ull << 6,
-    lowest            = 1ull << 7,
-    volume            = 1ull << 8,
-    turnover          = 1ull << 9,
-    open_interest     = 1ull << 10,
-    close             = 1ull << 11,
-    average           = 1ull << 12,
-    settlement        = 1ull << 13,
-    upper_limit       = 1ull << 14,
-    lower_limit       = 1ull << 15,
-    bid_price1        = 1ull << 16,
-    ask_price1        = 1ull << 17,
-    bid_price2        = 1ull << 18,
-    ask_price2        = 1ull << 19,
-    bid_price3        = 1ull << 20,
-    ask_price3        = 1ull << 21,
-    bid_price4        = 1ull << 22,
-    ask_price4        = 1ull << 23,
-    bid_price5        = 1ull << 24,
-    ask_price5        = 1ull << 25,
-    bid_volume1       = 1ull << 26,
-    ask_volume1       = 1ull << 27,
-    bid_volume2       = 1ull << 28,
-    ask_volume2       = 1ull << 29,
-    bid_volume3       = 1ull << 30,
-    ask_volume3       = 1ull << 31,
-    bid_volume4       = 1ull << 32,
-    ask_volume4       = 1ull << 33,
-    bid_volume5       = 1ull << 34,
-    ask_volume5       = 1ull << 35,
+    // ---- 合约静态信息 ----
+    datetime                = 1ull << 0,
+    volume_multiple         = 1ull << 1,
+    price_tick              = 1ull << 2,
+    price_decs              = 1ull << 3,
+    max_market_order_volume = 1ull << 4,
+    min_market_order_volume = 1ull << 5,
+    max_limit_order_volume  = 1ull << 6,
+    min_limit_order_volume  = 1ull << 7,
+    margin                  = 1ull << 8,
+    commission              = 1ull << 9,
+
+    // ---- 价格 ----
+    last_price        = 1ull << 10,
+    pre_settlement    = 1ull << 11,
+    pre_close         = 1ull << 12,
+    pre_open_interest = 1ull << 13,
+    open              = 1ull << 14,
+    highest           = 1ull << 15,
+    lowest            = 1ull << 16,
+    volume            = 1ull << 17,
+    turnover          = 1ull << 18,
+    open_interest     = 1ull << 19,
+    close             = 1ull << 20,
+    average           = 1ull << 21,
+    settlement        = 1ull << 22,
+    upper_limit       = 1ull << 23,
+    lower_limit       = 1ull << 24,
+
+    // ---- 五档盘口价格 ----
+    bid_price1 = 1ull << 25,
+    ask_price1 = 1ull << 26,
+    bid_price2 = 1ull << 27,
+    ask_price2 = 1ull << 28,
+    bid_price3 = 1ull << 29,
+    ask_price3 = 1ull << 30,
+    bid_price4 = 1ull << 31,
+    ask_price4 = 1ull << 32,
+    bid_price5 = 1ull << 33,
+    ask_price5 = 1ull << 34,
+
+    // ---- 五档盘口量 ----
+    bid_volume1 = 1ull << 35,
+    ask_volume1 = 1ull << 36,
+    bid_volume2 = 1ull << 37,
+    ask_volume2 = 1ull << 38,
+    bid_volume3 = 1ull << 39,
+    ask_volume3 = 1ull << 40,
+    bid_volume4 = 1ull << 41,
+    ask_volume4 = 1ull << 42,
+    bid_volume5 = 1ull << 43,
+    ask_volume5 = 1ull << 44,
 };
+
+// 编译期保证全部字段位不越界
+static_assert(static_cast<uint64_t>(QuoteField::ask_volume5) < (1ull << 63));
 
 struct Quote {
     /// 时间

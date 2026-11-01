@@ -8,7 +8,23 @@
 namespace tqsdk {
 
 enum class AccountField : uint64_t {
-    // TODO
+    currency          = 1ull << 0,
+    pre_balance       = 1ull << 1,
+    deposit           = 1ull << 2,
+    withdraw          = 1ull << 3,
+    static_balance    = 1ull << 4,
+    close_profit      = 1ull << 5,
+    commission        = 1ull << 6,
+    premium           = 1ull << 7,
+    position_profit   = 1ull << 8,
+    float_profit      = 1ull << 9,
+    balance           = 1ull << 10,
+    margin            = 1ull << 11,
+    frozen_margin     = 1ull << 12,
+    frozen_commission = 1ull << 13,
+    frozen_premium    = 1ull << 14,
+    available         = 1ull << 15,
+    risk_ratio        = 1ull << 16,
 };
 
 struct Account {

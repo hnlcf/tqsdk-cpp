@@ -8,7 +8,16 @@
 namespace tqsdk {
 
 enum class TradeField : uint64_t {
-    // TODO
+    order_id          = 1ull << 0,
+    exchange_id       = 1ull << 1,
+    instrument_id     = 1ull << 2,
+    exchange_trade_id = 1ull << 3,
+    direction         = 1ull << 4,
+    offset            = 1ull << 5,
+    volume            = 1ull << 6,
+    price             = 1ull << 7,
+    trade_date_time   = 1ull << 8,
+    commission        = 1ull << 9,
 };
 
 struct Trade {
@@ -30,7 +39,7 @@ struct Trade {
     Direction direction = Direction::BUY;
 
     /// 开平标志
-    Offset offset = Offset::Open;
+    Offset offset = Offset::OPEN;
 
     /// 成交手数
     uint64_t volume = 0;
