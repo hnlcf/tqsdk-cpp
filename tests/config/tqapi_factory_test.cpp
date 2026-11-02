@@ -1,0 +1,289 @@
+#include "tqsdk/pch.h"
+
+#include "tqsdk/config/tqapi_factory.h"
+#include "tqsdk/ipc/ipc_session.h"
+#include "tqsdk/ipc/protocol.h"
+#include "tqsdk/ipc/uds_channel.h"
+#include "tqsdk/tqapi.h"
+
+#include "support/test_helpers.h"
+
+using namespace tqsdk;
+using json = nlohmann::json;
+
+namespace {
+
+// ============================ 配置解析 ============================
+
+TEST(TqApiConfigTest, ParseInProcessSim) {
+    auto cfg = parse_tqapi_config(R"(
+        [ipc]
+        transport = "uds"
+        encoding = "msgpack"
+
+        [md]
+        kind = "tq"
+        host = "example.com"
+        port = "8443"
+
+        [td]
+        kind = "sim"
+        initial_balance = 500000
+    )");
+
+    EXPECT_EQ(cfg.ipc.transport, IpcTransport::Uds);
+    EXPECT_EQ(cfg.ipc.encoding, ipc::FrameEncoding::MessagePack);
+    EXPECT_EQ(cfg.md.kind, MdKind::Tq);
+    EXPECT_EQ(cfg.md.host, "example.com");
+    EXPECT_EQ(cfg.md.port, "8443");
+    EXPECT_EQ(cfg.td.kind, TdKind::Sim);
+    EXPECT_DOUBLE_EQ(cfg.td.initial_balance, 500000.0);
+}
+
+TEST(TqApiConfigTest, ParseRemoteBoth) {
+    auto cfg = parse_tqapi_config(R"(
+        [ipc]
+        transport = "uds"
+        uds_dir = "/tmp"
+
+        [md]
+        kind = "remote"
+        socket = "/tmp/gw.sock"
+        name = "gw-md"
+
+        [td]
+        kind = "remote"
+        socket = "/tmp/gw.sock"
+        name = "gw-td"
+        ack_timeout_ms = 3000
+    )");
+    EXPECT_EQ(cfg.md.kind, MdKind::Remote);
+    EXPECT_EQ(cfg.md.socket, "/tmp/gw.sock");
+    EXPECT_EQ(cfg.td.kind, TdKind::Remote);
+    EXPECT_EQ(cfg.td.socket, "/tmp/gw.sock");
+    EXPECT_EQ(cfg.td.ack_timeout, std::chrono::milliseconds(3000));
+}
+
+TEST(TqApiConfigTest, ParseTcpTransport) {
+    auto cfg = parse_tqapi_config(R"(
+        [ipc]
+        transport = "tcp"
+
+        [md]
+        kind = "remote"
+        tcp_host = "127.0.0.1"
+        tcp_port = 9000
+    )");
+    EXPECT_EQ(cfg.ipc.transport, IpcTransport::Tcp);
+    EXPECT_EQ(cfg.md.tcp_host, "127.0.0.1");
+    EXPECT_EQ(cfg.md.tcp_port, 9000);
+}
+
+TEST(TqApiConfigTest, ParseDefaultsToNone) {
+    auto cfg = parse_tqapi_config("");
+    EXPECT_EQ(cfg.md.kind, MdKind::None);
+    EXPECT_EQ(cfg.td.kind, TdKind::None);
+    EXPECT_EQ(cfg.ipc.transport, IpcTransport::Uds);
+    EXPECT_EQ(cfg.ipc.encoding, ipc::FrameEncoding::Json);
+}
+
+TEST(TqApiConfigTest, ParseErrorsOnBadKind) {
+    EXPECT_THROW(parse_tqapi_config("[md]\nkind = \"bogus\"\n"), std::runtime_error);
+    EXPECT_THROW(parse_tqapi_config("[td]\nkind = \"ctp\"\n"), std::runtime_error);
+    EXPECT_THROW(parse_tqapi_config("[ipc]\ntransport = \"smoke\"\n"), std::runtime_error);
+    EXPECT_THROW(parse_tqapi_config("this is not toml === "), std::runtime_error);
+}
+
+// ============================ 进程内构造 ============================
+
+TEST(TqApiFactoryTest, BuildSimTdOnly) {
+    asio::io_context ctx;
+
+    TqApiConfig cfg;
+    cfg.td.kind            = TdKind::Sim;
+    cfg.td.initial_balance = 1'000'000.0;
+
+    std::unique_ptr<TqApi> api;
+    auto                   mk = test::spawn_joined(
+        ctx, [&]() -> asio::awaitable<void> { api = co_await make_tqapi(ctx, cfg); });
+    test::wait_all(ctx, std::chrono::seconds(2), mk);
+    mk.rethrow_if_error();
+
+    ASSERT_NE(api, nullptr);
+
+    // 用 sim 下一单，验证整条链路可用
+    bool placed = false;
+    auto body   = test::spawn_joined(ctx, [&]() -> asio::awaitable<void> {
+        InsertOrderReq req;
+        req.instrument_id = "SHFE.rb2610";
+        req.direction     = Direction::BUY;
+        req.offset        = Offset::OPEN;
+        req.price_type    = PriceType::LIMIT;
+        req.limit_price   = 3800.0;
+        req.volume        = 1;
+        Order* o          = co_await api->insert_order(req);
+        placed            = (o != nullptr);
+    });
+    test::wait_all(ctx, std::chrono::seconds(2), body);
+    body.rethrow_if_error();
+    EXPECT_TRUE(placed);
+
+    api->close();
+    test::drive_for(ctx, std::chrono::milliseconds(30));
+}
+
+TEST(TqApiFactoryTest, BuildNoneBoth) {
+    asio::io_context ctx;
+    TqApiConfig      cfg; // 全 none
+
+    std::unique_ptr<TqApi> api;
+    auto                   mk = test::spawn_joined(
+        ctx, [&]() -> asio::awaitable<void> { api = co_await make_tqapi(ctx, cfg); });
+    test::wait_all(ctx, std::chrono::seconds(2), mk);
+    mk.rethrow_if_error();
+    ASSERT_NE(api, nullptr);
+
+    api->close();
+    test::drive_for(ctx, std::chrono::milliseconds(20));
+}
+
+// ============================ 远程端到端 ============================
+//
+// 结构：先在 main 线程创建 acceptor（构造即 bind+listen），再让 make_tqapi
+// 同步 connect（因 acceptor 已 listen，连接进 backlog，不会阻塞）；之后同一条
+// io_context 驱动 node 侧的 accept 协程与 gw 侧握手，两条协程并发推进。
+// 注意 node 侧角色必须是 Node（与 gw 的 Gateway 角色不同），否则握手失败。
+
+std::string tmp_sock(const char* tag) {
+    static std::atomic<int> c{0};
+    return "/tmp/tqsdk_factory_" + std::string(tag) + "_" + std::to_string(::getpid()) + "_" +
+           std::to_string(c.fetch_add(1)) + ".sock";
+}
+
+// node（假 gw 后端）应答器：收到 Subscribe 回 SubscribeAck；
+// 收到 Command 回 CommandAck；另可主动推一条行情。
+struct FakeNode {
+    std::unique_ptr<ipc::IpcSession>  sess;
+    std::optional<ipc::SubscribeBody> got_sub;
+    std::optional<ipc::CommandBody>   got_cmd;
+};
+
+TEST(TqApiFactoryTest, RemoteMdAndTdEndToEnd) {
+    asio::io_context  ctx;
+    const std::string path = tmp_sock("e2e");
+    ::unlink(path.c_str());
+
+    asio::local::stream_protocol::acceptor acc(ctx, {path});
+
+    TqApiConfig cfg;
+    cfg.ipc.transport  = IpcTransport::Uds;
+    cfg.ipc.encoding   = ipc::FrameEncoding::Json;
+    cfg.md.kind        = MdKind::Remote;
+    cfg.md.socket      = path;
+    cfg.md.name        = "gw-md";
+    cfg.td.kind        = TdKind::Remote;
+    cfg.td.socket      = path;
+    cfg.td.name        = "gw-td";
+    cfg.td.ack_timeout = std::chrono::milliseconds(500);
+
+    // ---- node 侧：accept 后跑 IpcSession(Node) 并应答 ----
+    FakeNode node;
+    auto     node_task = test::spawn_joined(ctx, [&]() -> asio::awaitable<void> {
+        auto sock = co_await acc.async_accept(asio::use_awaitable);
+        auto ch   = std::make_unique<ipc::UdsChannel>(std::move(sock));
+
+        ipc::IpcSession::Options o;
+        o.local_role         = ipc::IpcRole::Node;
+        o.local_name         = "node";
+        o.handshake_timeout  = std::chrono::seconds(3);
+        o.heartbeat_interval = std::chrono::seconds(60);
+        o.heartbeat_timeout  = std::chrono::seconds(120);
+        node.sess = std::make_unique<ipc::IpcSession>(std::move(ch), ctx.get_executor(), o);
+        co_await node.sess->start();
+
+        // 应答循环：处理 Subscribe / Command 若干次后退出
+        for (int i = 0; i < 8; ++i) {
+            auto opt = co_await node.sess->incoming().async_receive();
+            if (!opt) {
+                break;
+            }
+            if (opt->type == ipc::FrameType::Subscribe) {
+                node.got_sub = ipc::decode_as<ipc::FrameType::Subscribe>(*opt);
+                SPDLOG_TRACE("[FakeNode] got Subscribe");
+                co_await node.sess->send_body<ipc::FrameType::SubscribeAck>(
+                    ipc::SubscribeAckBody{true, ""});
+            } else if (opt->type == ipc::FrameType::Command) {
+                node.got_cmd = ipc::decode_as<ipc::FrameType::Command>(*opt);
+                SPDLOG_TRACE("[FakeNode] got Command rid={}", node.got_cmd->rid);
+                co_await node.sess->send_body<ipc::FrameType::CommandAck>(
+                    ipc::CommandAckBody{CommandAck{true, node.got_cmd->rid, ""}});
+            }
+        }
+    });
+
+    // ---- gw 侧：按配置造 TqApi（同步 connect + 后台握手）----
+    std::unique_ptr<TqApi> api;
+    auto                   mk = test::spawn_joined(
+        ctx, [&]() -> asio::awaitable<void> { api = co_await make_tqapi(ctx, cfg); });
+
+    // 驱动：等待 TqApi 建好（握手完成）
+    ASSERT_TRUE(test::drive_until(ctx, [&] { return mk.is_done(); }, std::chrono::seconds(3)));
+    mk.rethrow_if_error();
+    ASSERT_NE(api, nullptr);
+
+    // 订阅 + 下单
+    bool ordered     = false;
+    auto client_task = test::spawn_joined(ctx, [&]() -> asio::awaitable<void> {
+        // 触发 md 订阅：通过 get_quote 间接订阅（sim/tq 会订阅；remote 也会发 Subscribe）
+        (void)api->get_quote("SHFE.rb2610");
+
+        InsertOrderReq req;
+        req.instrument_id = "SHFE.rb2610";
+        req.direction     = Direction::BUY;
+        req.offset        = Offset::OPEN;
+        req.price_type    = PriceType::LIMIT;
+        req.limit_price   = 3800.0;
+        req.volume        = 1;
+        CommandAck ack    = co_await api->cancel_order(CancelOrderReq{"rid_x", ""});
+        SPDLOG_TRACE("[FakeNode] cancel_order returned success={} order_id={}",
+                     (int)ack.success,
+                     ack.order_id);
+        (void)ack;
+        ordered = true;
+    });
+
+    ASSERT_TRUE(
+        test::drive_until(ctx, [&] { return client_task.is_done(); }, std::chrono::seconds(3)));
+    client_task.rethrow_if_error();
+    EXPECT_TRUE(ordered) << "cancel_order did not complete";
+
+    // 继续驱动，让 node 处理完成若干帧
+    test::drive_for(ctx, std::chrono::milliseconds(100));
+
+    // node 应收到过 Command（撤单）
+    EXPECT_TRUE(node.got_cmd.has_value()) << "node did not receive Command";
+    if (node.got_cmd) {
+        EXPECT_EQ(node.got_cmd->op, ipc::CommandOp::CancelOrder);
+        EXPECT_EQ(node.got_cmd->cancel.order_id, "rid_x");
+        // rid 作为关联键必须随帧携带
+        EXPECT_EQ(node.got_cmd->rid, "rid_x");
+    }
+
+    SPDLOG_TRACE("[test] before api close, got_cmd={}", node.got_cmd.has_value());
+    api->close();
+    SPDLOG_TRACE("[test] after api close");
+    if (node.sess) {
+        node.sess->close();
+    }
+    // 必须先把后台协程（md_loop/td_loop/client/node 读循环）驱动到退出，
+    // 再析构 api/node.sess；否则 Channel 析构时仍挂着 waiter（UAF）。
+    test::drive_for(ctx, std::chrono::milliseconds(200));
+    SPDLOG_TRACE("[test] after drive");
+    api.reset();
+    node.sess.reset();
+    test::drive_for(ctx, std::chrono::milliseconds(100));
+    SPDLOG_TRACE("[test] teardown done");
+    ::unlink(path.c_str());
+}
+
+} // namespace

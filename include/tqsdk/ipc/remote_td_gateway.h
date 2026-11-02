@@ -18,11 +18,19 @@ namespace ipc {
 ///     event_output()，供 TqApi 的 td_loop 消费。
 ///
 /// 依赖一个已就绪的 IpcClient（共享同一条连接）。
+///
+/// 生命周期两种模式（同 RemoteMdGateway）：
+///   - 非拥有：构造传 IpcClient&；
+///   - 拥有：构造传 std::shared_ptr<IpcClient>，与共享者共同持有，最后持有者析构时 stop()。
 class RemoteTdGateway : public TradingGateway {
 public:
-    RemoteTdGateway(IpcClient&              client,
-                    asio::any_io_executor   ex,
+    RemoteTdGateway(IpcClient&                client,
+                    asio::any_io_executor     ex,
                     std::chrono::milliseconds ack_timeout = std::chrono::seconds(10));
+    RemoteTdGateway(std::shared_ptr<IpcClient> client,
+                    asio::any_io_executor      ex,
+                    std::chrono::milliseconds  ack_timeout = std::chrono::seconds(10));
+    ~RemoteTdGateway() override;
 
     asio::awaitable<void> start() override;
     asio::awaitable<void> stop() override;
@@ -39,10 +47,11 @@ public:
 private:
     void push(TradeEvent ev);
 
-    IpcClient&             client_;
-    asio::any_io_executor  ex_;
-    Channel<TradeEvent>    ch_;
-    std::chrono::milliseconds ack_timeout_;
+    std::shared_ptr<IpcClient> client_owner_; ///< 拥有模式下的共享所有权（可空）
+    IpcClient&                 client_;
+    asio::any_io_executor      ex_;
+    Channel<TradeEvent>        ch_;
+    std::chrono::milliseconds  ack_timeout_;
 };
 
 } // namespace ipc

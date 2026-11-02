@@ -29,14 +29,17 @@ std::optional<spdlog::level::level_enum> parse_log_level(std::string_view name) 
 }
 
 void setup_logging(const LogOptions& options) {
-    // 1) 决定级别：options.level > env > info
-    spdlog::cfg::load_env_levels(kLogLevelEnv);
-
-    bool                      override_env = !options.level.empty();
-    std::string               level_name   = options.level;
-    spdlog::level::level_enum level        = spdlog::level::info;
-    if (override_env) {
-        level = parse_log_level(level_name).value_or(spdlog::level::info);
+    // 1) 决定级别：options.level > env(TQSDK_LOG_LEVEL) > info
+    spdlog::level::level_enum level = spdlog::level::info;
+    if (!options.level.empty()) {
+        level = parse_log_level(options.level).value_or(spdlog::level::info);
+    } else if (const char* env = std::getenv(kLogLevelEnv); env != nullptr) {
+        // 直接从环境变量解析，随后应用到新建的默认 logger 上。
+        // （不能只靠 spdlog::cfg::load_env_levels：它在下方替换默认 logger 前调用，
+        //   级别会落在旧 logger 上而丢失。）
+        if (auto lv = parse_log_level(env)) {
+            level = *lv;
+        }
     }
 
     // 2) 控制台 sink（着色或朴素，取决于 colored 与是否 tty）。
@@ -62,9 +65,7 @@ void setup_logging(const LogOptions& options) {
 
     // 4) 组装 multipart logger 并设为默认。
     auto logger = std::make_shared<spdlog::logger>("tqsdk", sinks.begin(), sinks.end());
-    if (override_env) {
-        logger->set_level(level);
-    }
+    logger->set_level(level);
     logger->flush_on(spdlog::level::warn); // warn 及以上立即刷盘，便于崩溃前留痕
     spdlog::set_default_logger(logger);
 

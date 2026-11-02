@@ -36,6 +36,7 @@ add_library(tqsdk_core
     src/ipc/ipc_client.cpp
     src/ipc/remote_md_gateway.cpp
     src/ipc/remote_td_gateway.cpp
+    src/config/tqapi_factory.cpp
     src/data/diff_merge_engine.cpp
     src/gateway/sim/sim_td_gateway.cpp
     src/gateway/tq/tq_md_protocol.cpp
@@ -50,6 +51,10 @@ add_library(tqsdk_core
 )
 
 target_precompile_headers(tqsdk_core PRIVATE include/tqsdk/pch.h)
+
+# 保留 TRACE/DEBUG 级日志语句（运行时再按级别过滤）。
+# 未定义时 spdlog 默认 SPDLOG_LEVEL_INFO，会把 SPDLOG_TRACE/DEBUG 编译期剔除。
+target_compile_definitions(tqsdk_core PUBLIC SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
 
 target_include_directories(tqsdk_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -152,6 +157,7 @@ if(TQSDK_BUILD_TESTS)
         tests/ipc/protocol_e2e_test.cpp
         tests/ipc/ipc_session_test.cpp
         tests/ipc/ipc_proxy_test.cpp
+        tests/config/tqapi_factory_test.cpp
         tests/util/serde_test.cpp
         tests/util/spawn_logged_test.cpp
         tests/util/log_test.cpp

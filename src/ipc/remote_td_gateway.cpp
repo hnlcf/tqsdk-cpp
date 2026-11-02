@@ -15,6 +15,22 @@ RemoteTdGateway::RemoteTdGateway(IpcClient&                client,
     client_.set_td_handler([this](ReceivedFrame&& f) { on_frame(std::move(f)); });
 }
 
+RemoteTdGateway::RemoteTdGateway(std::shared_ptr<IpcClient> client,
+                                 asio::any_io_executor      ex,
+                                 std::chrono::milliseconds  ack_timeout)
+    : client_owner_(std::move(client)),
+      client_(*client_owner_),
+      ex_(ex),
+      ch_(ex),
+      ack_timeout_(ack_timeout) {
+    client_.set_td_handler([this](ReceivedFrame&& f) { on_frame(std::move(f)); });
+}
+
+RemoteTdGateway::~RemoteTdGateway() {
+    // 清空自己在 client 上的处理器，避免 std::function 持有悬空 this。
+    client_.set_td_handler(nullptr);
+}
+
 asio::awaitable<void> RemoteTdGateway::start() {
     co_return;
 }
@@ -35,7 +51,9 @@ asio::awaitable<CommandAck> RemoteTdGateway::insert_order(const InsertOrderReq& 
 
 asio::awaitable<CommandAck> RemoteTdGateway::cancel_order(const CancelOrderReq& req) {
     CommandBody body;
-    body.op     = CommandOp::CancelOrder;
+    body.op = CommandOp::CancelOrder;
+    // 关联键：撤单以被撤单的 order_id 作为 rid（回执据此匹配等待者）。
+    body.rid    = req.order_id;
     body.cancel = req;
     co_return co_await client_.send_command_and_wait(body, ack_timeout_);
 }
@@ -53,7 +71,7 @@ void RemoteTdGateway::on_frame(ReceivedFrame&& frame) {
     switch (frame.type) {
     case FrameType::TradePush: {
         try {
-            auto body = decode_as<FrameType::TradePush>(frame);
+            auto       body = decode_as<FrameType::TradePush>(frame);
             TradeEvent ev;
             ev.kind    = TradeEvent::Kind::Diff;
             ev.payload = std::move(body.data);
@@ -67,7 +85,7 @@ void RemoteTdGateway::on_frame(ReceivedFrame&& frame) {
         // 命令级即时回执：IpcClient 已完成 send_command_and_wait 的关联；
         // 这里额外把 Ack 作为 TradeEvent::Kind::Ack 推给上层（TqApi 可选消费）。
         try {
-            auto body = decode_as<FrameType::CommandAck>(frame);
+            auto       body = decode_as<FrameType::CommandAck>(frame);
             TradeEvent ev;
             ev.kind = TradeEvent::Kind::Ack;
             ev.ack  = body.ack;

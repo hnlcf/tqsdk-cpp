@@ -215,9 +215,10 @@ struct CommandBody {
 };
 inline void to_json(json& j, const CommandBody& m) {
     j = json{{"op", m.op}};
+    // rid 是命令的唯一关联键（回执据此匹配），两种 op 均需携带。
+    j["rid"] = m.rid;
     switch (m.op) {
     case CommandOp::InsertOrder:
-        j["rid"]    = m.rid;
         j["insert"] = json{{"instrument_id", m.insert.instrument_id},
                            {"exchange_id", m.insert.exchange_id},
                            {"direction", m.insert.direction},
@@ -236,10 +237,10 @@ inline void to_json(json& j, const CommandBody& m) {
     }
 }
 inline void from_json(const json& j, CommandBody& m) {
-    m.op = j.at("op").get<CommandOp>();
+    m.op  = j.at("op").get<CommandOp>();
+    m.rid = j.value("rid", OrderId{});
     switch (m.op) {
     case CommandOp::InsertOrder: {
-        m.rid                  = j.at("rid").get<OrderId>();
         const json& ins        = j.at("insert");
         m.insert.instrument_id = ins.at("instrument_id").get<InstrumentId>();
         m.insert.exchange_id   = ins.value("exchange_id", ExchangeId{});

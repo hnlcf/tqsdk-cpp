@@ -47,17 +47,41 @@ void TqApi::close() {
         return;
     }
     closed_ = true;
+    SPDLOG_TRACE("[TqApi] close begin (md={} td={})", (void*)md_.get(), (void*)td_.get());
 
     // 关闭通道即可让 md_loop / td_loop 以 nullopt 退出。
     if (md_) {
         md_->output().close();
+        SPDLOG_TRACE("[TqApi] closed md output");
     }
     if (td_) {
         td_->event_output().close();
+        SPDLOG_TRACE("[TqApi] closed td output");
     }
+
+    // 执行额外清理钩子（如远程网关共享的 IpcClient 连接）。
+    for (auto& hook : close_hooks_) {
+        if (hook) {
+            SPDLOG_TRACE("[TqApi] run close hook");
+            hook();
+        }
+    }
+    close_hooks_.clear();
 
     // 唤醒所有挂起的 wait_update：closed_ 置位后它们会返回 false。
     update_signal_.notify();
+    SPDLOG_TRACE("[TqApi] close done");
+}
+
+void TqApi::add_close_hook(std::function<void()> hook) {
+    if (closed_) {
+        // 已关闭：立即执行，避免资源泄漏。
+        if (hook) {
+            hook();
+        }
+        return;
+    }
+    close_hooks_.push_back(std::move(hook));
 }
 
 // ---------- 后台消费循环 ----------

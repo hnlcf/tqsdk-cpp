@@ -13,6 +13,20 @@ RemoteMdGateway::RemoteMdGateway(IpcClient& client, asio::any_io_executor ex)
     client_.set_md_handler([this](ReceivedFrame&& f) { on_frame(std::move(f)); });
 }
 
+RemoteMdGateway::RemoteMdGateway(std::shared_ptr<IpcClient> client, asio::any_io_executor ex)
+    : client_owner_(std::move(client)),
+      client_(*client_owner_),
+      ex_(ex),
+      ch_(ex) {
+    client_.set_md_handler([this](ReceivedFrame&& f) { on_frame(std::move(f)); });
+}
+
+RemoteMdGateway::~RemoteMdGateway() {
+    // 清空自己在 client 上的处理器，避免 std::function 持有悬空 this。
+    // （约定：一条连接仅挂一个 md 网关，故置空不会误伤其它实例。）
+    client_.set_md_handler(nullptr);
+}
+
 asio::awaitable<void> RemoteMdGateway::start() {
     // 连接与分发由 IpcClient 负责；这里无额外动作。
     co_return;
@@ -49,7 +63,7 @@ void RemoteMdGateway::on_frame(ReceivedFrame&& frame) {
     switch (frame.type) {
     case FrameType::MarketDataPush: {
         try {
-            auto body = decode_as<FrameType::MarketDataPush>(frame);
+            auto            body = decode_as<FrameType::MarketDataPush>(frame);
             MarketDataEvent ev;
             ev.kind    = (body.kind == MdPushKind::Kline) ? MarketDataEvent::Kind::Kline
                                                           : MarketDataEvent::Kind::Diff;
@@ -62,7 +76,7 @@ void RemoteMdGateway::on_frame(ReceivedFrame&& frame) {
     }
     case FrameType::GatewayEvent: {
         try {
-            auto body = decode_as<FrameType::GatewayEvent>(frame);
+            auto            body = decode_as<FrameType::GatewayEvent>(frame);
             MarketDataEvent ev;
             switch (body.kind) {
             case GatewayEventKind::Disconnected:

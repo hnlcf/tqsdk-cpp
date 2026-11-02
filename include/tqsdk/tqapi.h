@@ -43,6 +43,11 @@ public:
     // 关闭网关通道，令后台协程退出。幂等。
     void close();
 
+    // 注册一个在 close() 时同步执行的清理钩子（按注册顺序调用）。
+    // 用于关闭网关之外、TqApi 不直接持有的资源（例如远程模式下共享的
+    // IpcClient 连接）。幂等：close() 已执行后再注册会立即调用一次。
+    void add_close_hook(std::function<void()> hook);
+
     // ---- 等待事件 ----
     // 挂起直到有 diff 合并；返回 true 表示有更新，false 表示已关闭。
     // 进入下一轮时清空 changed_fields（"自上次 wait 以来"）。
@@ -96,6 +101,8 @@ private:
     bool                  closed_       = false;
     bool                  cleared_once_ = false; // 首轮 wait 前无需清位
     std::atomic<uint64_t> order_seq_{0};
+
+    std::vector<std::function<void()>> close_hooks_;
 };
 
 } // namespace tqsdk

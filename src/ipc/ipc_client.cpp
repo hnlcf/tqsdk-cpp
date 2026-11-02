@@ -42,8 +42,8 @@ asio::awaitable<CommandAck> IpcClient::send_command_and_wait(const CommandBody& 
     auto bytes = encode_body(body, encoding_);
     co_await send_bytes(FrameType::Command, bytes);
 
-    // 以 rid 作为关联键（撤单用 order_id）。
-    OrderId rid = (body.op == CommandOp::InsertOrder) ? body.rid : body.cancel.order_id;
+    // 以 body.rid 作为关联键（调用方必须填写；撤单通常用 order_id）。
+    OrderId rid = body.rid;
 
     AckWaiter w(co_await asio::this_coro::executor);
     pending_acks_[rid] = &w;
