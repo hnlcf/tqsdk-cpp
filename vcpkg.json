@@ -2,12 +2,13 @@
   "dependencies": [
     "boost-asio",
     "boost-beast",
+    "cli11",
     "fmt",
     "gtest",
     "magic-enum",
     "nlohmann-json",
     "openssl",
     "spdlog",
-    "cli11"
+    "tomlplusplus"
   ]
 }
