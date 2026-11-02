@@ -140,6 +140,49 @@ TEST(ProtocolCodec, OpaqueRoundtrip) {
     EXPECT_EQ(out.data, in.data);
 }
 
+TEST(ProtocolCodec, MarketDataPushKindRoundtrip) {
+    MarketDataPushBody in;
+    in.kind  = MdPushKind::Kline;
+    in.data  = {{"klines", json::object()}};
+    auto out = roundtrip_json(in);
+    EXPECT_EQ(out.kind, MdPushKind::Kline);
+    EXPECT_EQ(out.data, in.data);
+
+    // 旧格式兼容：裸 diff（无 kind/data 包裹）应被识别为 Diff 且整体作为 data。
+    ReceivedFrame legacy{FrameType::MarketDataPush, FrameEncoding::Json, [&] {
+                             auto d = json{{"quotes", {{"SHFE.rb2610", {{"last_price", 1.0}}}}}};
+                             auto s = d.dump();
+                             return std::vector<uint8_t>(s.begin(), s.end());
+                         }()};
+    auto          leg = decode_body<MarketDataPushBody>(legacy);
+    EXPECT_EQ(leg.kind, MdPushKind::Diff);
+    EXPECT_DOUBLE_EQ(leg.data["quotes"]["SHFE.rb2610"]["last_price"].get<double>(), 1.0);
+}
+
+TEST(ProtocolCodec, TradePushKindRoundtrip) {
+    TradePushBody in;
+    in.kind  = TradePushKind::Diff;
+    in.data  = {{"trade", json::object()}};
+    auto out = roundtrip_json(in);
+    EXPECT_EQ(out.kind, TradePushKind::Diff);
+    EXPECT_EQ(out.data, in.data);
+}
+
+TEST(ProtocolCodec, GatewayEventRoundtrip) {
+    GatewayEventBody in{GatewayEventKind::Error, "conn refused"};
+    auto             out = roundtrip_json(in);
+    EXPECT_EQ(out.kind, GatewayEventKind::Error);
+    EXPECT_EQ(out.text, "conn refused");
+
+    // 通过 decode_as<GatewayEvent> 校验映射已从 OpaqueBody 改为强类型。
+    ReceivedFrame f{FrameType::GatewayEvent,
+                    FrameEncoding::Json,
+                    encode_body(GatewayEventBody{GatewayEventKind::Disconnected, "bye"})};
+    auto          ev = decode_as<FrameType::GatewayEvent>(f);
+    EXPECT_EQ(ev.kind, GatewayEventKind::Disconnected);
+    EXPECT_EQ(ev.text, "bye");
+}
+
 // ---------------- MessagePack：验证序列化抽象可切换 ----------------
 
 TEST(ProtocolCodec, MsgpackHelloEquivJson) {

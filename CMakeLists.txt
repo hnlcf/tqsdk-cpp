@@ -33,6 +33,9 @@ add_library(tqsdk_core
     src/ipc/uds_channel.cpp
     src/ipc/tcp_channel.cpp
     src/ipc/ipc_session.cpp
+    src/ipc/ipc_client.cpp
+    src/ipc/remote_md_gateway.cpp
+    src/ipc/remote_td_gateway.cpp
     src/data/diff_merge_engine.cpp
     src/gateway/sim/sim_td_gateway.cpp
     src/gateway/tq/tq_md_protocol.cpp
@@ -148,6 +151,7 @@ if(TQSDK_BUILD_TESTS)
         tests/ipc/protocol_test.cpp
         tests/ipc/protocol_e2e_test.cpp
         tests/ipc/ipc_session_test.cpp
+        tests/ipc/ipc_proxy_test.cpp
         tests/util/serde_test.cpp
         tests/util/spawn_logged_test.cpp
         tests/util/log_test.cpp

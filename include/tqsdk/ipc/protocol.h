@@ -119,24 +119,77 @@ inline void from_json(const json& j, SubscribeAckBody& m) {
 // 行情 / 交易推送（payload 为内部 diff JSON，原样承载）
 // ---------------------------------------------------------------------------
 
+/// 行情推送类别：与进程内 MarketDataEvent::Kind 语义对齐，让 RemoteMdGateway
+/// 能在对端还原出正确的事件类型（而不只是个 diff）。
+enum class MdPushKind : uint8_t {
+    Diff  = 0, ///< 普通行情 diff
+    Kline = 1, ///< K 线 diff
+};
+DEFINE_ENUM_JSON_SERIALIZE(MdPushKind)
+
 struct MarketDataPushBody {
-    json data = json::object(); ///< 与天勤 rtn_data 同构的行情 diff
+    MdPushKind kind = MdPushKind::Diff; ///< 事件类别（默认 Diff）
+    json       data = json::object();   ///< 与天勤 rtn_data 同构的行情 diff
 };
 inline void to_json(json& j, const MarketDataPushBody& m) {
-    j = m.data;
+    j = json{{"kind", m.kind}, {"data", m.data}};
 }
 inline void from_json(const json& j, MarketDataPushBody& m) {
-    m.data = j;
+    // 兼容旧帧：若没有 kind/data 包裹，则整体视作 data（旧格式为裸 diff）。
+    if (j.is_object() && j.contains("kind") && j.contains("data")) {
+        m.kind = j.at("kind").get<MdPushKind>();
+        m.data = j.at("data");
+    } else {
+        m.kind = MdPushKind::Diff;
+        m.data = j;
+    }
 }
 
+/// 交易推送类别：对齐 TradeEvent::Kind。
+enum class TradePushKind : uint8_t {
+    Diff = 0, ///< 订单/成交/账户 diff（含 user.*）
+};
+DEFINE_ENUM_JSON_SERIALIZE(TradePushKind)
+
 struct TradePushBody {
-    json data = json::object(); ///< 含 user.orders / user.trades / user.accounts 等
+    TradePushKind kind = TradePushKind::Diff;
+    json          data = json::object(); ///< 含 user.orders / user.trades / user.accounts 等
 };
 inline void to_json(json& j, const TradePushBody& m) {
-    j = m.data;
+    j = json{{"kind", m.kind}, {"data", m.data}};
 }
 inline void from_json(const json& j, TradePushBody& m) {
-    m.data = j;
+    if (j.is_object() && j.contains("kind") && j.contains("data")) {
+        m.kind = j.at("kind").get<TradePushKind>();
+        m.data = j.at("data");
+    } else {
+        m.kind = TradePushKind::Diff;
+        m.data = j;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 网关事件（连接状态 / 错误）：gateway -> core，再转给 strategy
+// ---------------------------------------------------------------------------
+
+/// 网关连接状态事件类别。
+enum class GatewayEventKind : uint8_t {
+    Connected    = 0, ///< 与柜台/服务器已连接
+    Disconnected = 1, ///< 与柜台/服务器断开
+    Error        = 2, ///< 网关内部错误
+};
+DEFINE_ENUM_JSON_SERIALIZE(GatewayEventKind)
+
+struct GatewayEventBody {
+    GatewayEventKind kind = GatewayEventKind::Connected;
+    std::string      text; ///< kind == Error / Disconnected 时的人类可读描述
+};
+inline void to_json(json& j, const GatewayEventBody& m) {
+    j = json{{"kind", m.kind}, {"text", m.text}};
+}
+inline void from_json(const json& j, GatewayEventBody& m) {
+    m.kind = j.at("kind").get<GatewayEventKind>();
+    m.text = j.value("text", std::string{});
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +327,7 @@ using FrameBody = std::variant<HelloBody,
                                TradePushBody,
                                CommandBody,
                                CommandAckBody,
+                               GatewayEventBody,
                                HeartbeatBody,
                                GoodbyeBody>;
 
@@ -335,7 +389,7 @@ struct BodyFor<FrameType::Diff> {
 };
 template <>
 struct BodyFor<FrameType::GatewayEvent> {
-    using type = OpaqueBody;
+    using type = GatewayEventBody;
 };
 template <>
 struct BodyFor<FrameType::QueryOrders> {
