@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(tqsdk_cpp LANGUAGES CXX)
+project(tqsdk_cpp VERSION 0.1.0 LANGUAGES CXX)
 
 # ---------- 全局设置 ----------
 set(CMAKE_CXX_STANDARD 20)
@@ -189,3 +189,57 @@ if(TQSDK_BUILD_TESTS)
     include(GoogleTest)
     gtest_discover_tests(tqsdk_tests)
 endif()
+
+# ==========================================================
+# 安装规则
+# ==========================================================
+if(TQSDK_BUILD_APPS)
+    install(TARGETS tqsdk-gw tqsdk-node
+            RUNTIME DESTINATION bin)
+endif()
+
+# tqsdk_core：默认是静态库(ARCHIVE)；若以后 BUILD_SHARED_LIBS=ON，
+# 则 .so/.dll 分别走 LIBRARY / RUNTIME，所以三种都写上最稳。
+install(TARGETS tqsdk_core
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin)
+
+# 头文件：include/ 下的内容原样铺到 <prefix>/include/
+install(DIRECTORY include/
+        DESTINATION include
+        FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
+
+# CTP 网关（可选）
+if(TQSDK_ENABLE_CTP)
+    install(TARGETS tqsdk_ctp_gateway
+            ARCHIVE DESTINATION lib
+            LIBRARY DESTINATION lib
+            RUNTIME DESTINATION bin)
+    # IMPORTED 目标不能被 install(TARGETS)，必须手动拷 CTP 自带的动态库，
+    # 否则用户解压后 tqsdk-gw 运行时会找不到 libthost*_se.so
+    install(FILES "${CTP_TRADER_LIB}" "${CTP_MD_LIB}" DESTINATION lib)
+    # Windows 上还需把 thosttraderapi_se.dll / thostmduserapi_se.dll 一起装进来
+endif()
+
+# ==========================================================
+# CPack：生成 .tar.gz
+# ==========================================================
+set(CPACK_PACKAGE_NAME "tqsdk_cpp")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "TQSDK C++ core library, gateway and node")
+set(CPACK_PACKAGE_VENDOR "TQSDK")
+set(CPACK_PACKAGE_CONTACT "dev@example.com")
+
+set(CPACK_GENERATOR "TGZ")
+set(CPACK_PACKAGE_FILE_NAME
+    "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+
+# 包内前缀：解压后得到 <包名>/opt/tqsdk/{bin,lib,include}
+# 若想解压出来直接是 bin/lib/include，把它设为 "/"（绿色分发常用）
+set(CPACK_PACKAGING_INSTALL_PREFIX "/")
+
+# 源码包先关掉，避免 cpack --config 时额外生成 source tarball
+set(CPACK_SOURCE_GENERATOR "")
+
+include(CPack)

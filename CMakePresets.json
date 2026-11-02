@@ -1,5 +1,5 @@
 {
-    "version": 2,
+    "version": 6,
     "configurePresets": [
         {
             "name": "default",
@@ -11,6 +11,23 @@
                 "CMAKE_CXX_COMPILER": "clang++",
                 "CMAKE_CXX_FLAGS": "-fsanitize=address -fno-omit-frame-pointer -g",
                 "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address -fuse-ld=mold",
+                "CMAKE_SHARED_LINKER_FLAGS": "-fuse-ld=mold",
+                "TQSDK_ENABLE_CTP": "OFF",
+                "TQSDK_BUILD_EXAMPLES": "ON",
+                "TQSDK_BUILD_TESTS": "ON"
+            }
+        },
+        {
+            "name": "package",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_CXX_COMPILER": "clang++",
+                "VCPKG_TARGET_TRIPLET": "x64-linux-release",
+                "VCPKG_HOST_TRIPLET": "x64-linux-release",
+                "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=mold",
                 "CMAKE_SHARED_LINKER_FLAGS": "-fuse-ld=mold",
                 "TQSDK_ENABLE_CTP": "OFF",
                 "TQSDK_BUILD_EXAMPLES": "ON",
