@@ -73,6 +73,16 @@ public:
         }
     }
 
+    // 是否已完成（不 rethrow、不触发失败）。用于"边驱动边检测"的循环。
+    bool is_done() const noexcept { return state_->done; }
+
+    // 若已完成且带异常则 rethrow；未完成不失败。
+    void rethrow_if_error() {
+        if (state_->eptr) {
+            std::rethrow_exception(state_->eptr);
+        }
+    }
+
 private:
     struct State {
         std::exception_ptr eptr;
@@ -85,6 +95,43 @@ private:
 template <typename Fn>
 JoinedSpawn spawn_joined(boost::asio::io_context& ctx, Fn&& fn) {
     return JoinedSpawn(ctx, std::forward<Fn>(fn));
+}
+
+// 边驱动 io_context 边等待谓词成立（或超时），返回是否在超时前成立。
+//
+// 为什么需要它：IpcSession 这类常驻对象的后台协程（读循环/心跳/看门狗）会长期
+// 持有 pending 的 timer / socket 读，使 io_context 永远不会自己排空，
+// 因此绝不能用无参 io.run() 来"等某个操作完成"——会永远阻塞。
+// 只能分片 run_for，并在每片之间检查条件。
+template <typename Pred>
+bool drive_until(boost::asio::io_context&  ctx,
+                 Pred&&                    pred,
+                 std::chrono::milliseconds timeout = std::chrono::seconds(5)) {
+    auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (!pred()) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= deadline) {
+            return false;
+        }
+        ctx.restart();
+        ctx.run_for(std::min<std::chrono::steady_clock::duration>(deadline - now,
+                                                                  std::chrono::milliseconds(20)));
+    }
+    return true;
+}
+
+// 驱动 ctx 运行指定时长（不等待任何条件）。
+inline void drive_for(boost::asio::io_context&  ctx,
+                      std::chrono::milliseconds total = std::chrono::milliseconds(50)) {
+    ctx.restart();
+    ctx.run_for(total);
+}
+
+// 等待一组 JoinedSpawn 全部完成（同时驱动 ctx）。对常驻后台协程安全。
+template <typename... Spawns>
+void wait_all(boost::asio::io_context& ctx, std::chrono::milliseconds timeout, Spawns&... spawns) {
+    auto all_done = [&]() { return (spawns.is_done() && ...); };
+    drive_until(ctx, all_done, timeout);
 }
 
 } // namespace tqsdk::test

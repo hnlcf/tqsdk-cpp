@@ -77,6 +77,7 @@ asio::awaitable<void> TqMdGateway::send_cmd(nlohmann::json cmd) {
         co_return;
     }
     auto payload = cmd.dump();
+    SPDLOG_TRACE("[TqMd] sent: {}", payload);
 
     // 串行化写入：Beast 不允许并发 async_write。
     auto guard = co_await AsyncMutex::acquire(write_mutex_);
@@ -153,7 +154,7 @@ asio::awaitable<void> TqMdGateway::do_connect_and_run() {
         resolver_.emplace(ex_);
         auto results = co_await resolver_->async_resolve(host_, port_, use_awaitable);
         if (results.empty()) {
-            spdlog::error("[TqMd] resolve {}:{} returned empty", host_, port_);
+            SPDLOG_ERROR("[TqMd] resolve {}:{} returned empty", host_, port_);
             co_return;
         }
 
@@ -164,7 +165,7 @@ asio::awaitable<void> TqMdGateway::do_connect_and_run() {
 
         // SNI + 证书主机名校验。
         if (!SSL_set_tlsext_host_name(ws_->next_layer().native_handle(), host_.c_str())) {
-            spdlog::error("[TqMd] failed to set SNI hostname");
+            SPDLOG_ERROR("[TqMd] failed to set SNI hostname");
             co_return;
         }
         ws_->next_layer().set_verify_callback(ssl::host_name_verification(host_));
@@ -187,7 +188,7 @@ asio::awaitable<void> TqMdGateway::do_connect_and_run() {
             }));
         co_await ws_->async_handshake(host_, path_, use_awaitable);
 
-        spdlog::info("[TqMd] connected to {}{}", host_, path_);
+        SPDLOG_INFO("[TqMd] connected to {}{}", host_, path_);
 
         // 连接就绪：补发已有订阅。
         if (!pending_subs_.empty()) {
@@ -208,15 +209,15 @@ asio::awaitable<void> TqMdGateway::do_connect_and_run() {
         co_await read_loop();
     } catch (const boost::system::system_error& e) {
         if (e.code() == asio::error::operation_aborted) {
-            spdlog::debug("[TqMd] connect/read aborted (shutdown)");
+            SPDLOG_DEBUG("[TqMd] connect/read aborted (shutdown)");
         } else if (e.code() == beast::websocket::error::closed) {
-            spdlog::info("[TqMd] websocket closed by server");
+            SPDLOG_INFO("[TqMd] websocket closed by server");
         } else {
-            spdlog::error("[TqMd] connect error: {} ({})", e.what(), e.code().value());
+            SPDLOG_ERROR("[TqMd] connect error: {} ({})", e.what(), e.code().value());
             fatal_error = std::string("connect error: ") + e.what();
         }
     } catch (const std::exception& e) {
-        spdlog::error("[TqMd] exception: {}", e.what());
+        SPDLOG_ERROR("[TqMd] exception: {}", e.what());
         fatal_error = std::string("exception: ") + e.what();
     }
 
@@ -247,7 +248,7 @@ asio::awaitable<void> TqMdGateway::read_loop() {
         try {
             frame = nlohmann::json::parse(text);
         } catch (const std::exception& e) {
-            spdlog::warn("[TqMd] bad json frame: {}", e.what());
+            SPDLOG_WARN("[TqMd] bad json frame: {}", e.what());
             continue;
         }
 
@@ -257,7 +258,7 @@ asio::awaitable<void> TqMdGateway::read_loop() {
                 co_await deliver_rtn_data(frame["data"]);
             }
         } else if (aid == "rsp_login") {
-            spdlog::debug("[TqMd] login session: {}", frame.value("session_id", ""));
+            SPDLOG_DEBUG("[TqMd] login session: {}", frame.value("session_id", ""));
         } else {
             // 其他 rtn_* / 通知帧：阶段4 忽略。
         }

@@ -40,50 +40,55 @@ asio::awaitable<void> run(TqApi&               api,
                           int64_t              duration_ns,
                           std::chrono::seconds duration,
                           asio::steady_timer&  stop_timer) {
-    api.get_quote(symbol);
-    auto* kline = api.get_kline_serial(symbol, duration_ns, 20);
+    // 订阅一次：get_quote 返回稳定引用（EntityStore 用 unordered_map，引用跨 rehash 有效），
+    // 之后循环里直接读 q，无需重复调用。
+    Quote& q     = api.get_quote(symbol);
+    auto*  kline = api.get_kline_serial(symbol, duration_ns, 20);
 
     std::atomic<bool> stopped{false};
     stop_timer.expires_after(duration);
     stop_timer.async_wait([&stopped](const boost::system::error_code& ec) {
         if (!ec) {
-            spdlog::info("[demo] 计时结束，准备退出");
+            SPDLOG_INFO("[demo] 计时结束，准备退出");
             stopped = true;
         }
     });
 
     int ticks = 0;
     while (!stopped) {
+        SPDLOG_DEBUG("[demo] 等待行情更新...");
         bool got = co_await api.wait_update();
+        SPDLOG_DEBUG("[demo] 收到行情更新，got={}", got);
+
         if (!got) {
+            SPDLOG_INFO("[demo] api 已关闭，退出");
             break; // 已关闭
         }
         ++ticks;
 
-        auto& q = api.get_quote(symbol);
         if (std::isfinite(q.last_price)) {
-            spdlog::info("[quote] {} last={} bid1={} ask1={} vol={} turn={}",
-                         symbol,
-                         q.last_price,
-                         q.bid_price1,
-                         q.ask_price1,
-                         q.volume,
-                         q.turnover);
+            SPDLOG_INFO("[quote] {} last={} bid1={} ask1={} vol={} turn={}",
+                        symbol,
+                        q.last_price,
+                        q.bid_price1,
+                        q.ask_price1,
+                        q.volume,
+                        q.turnover);
         }
 
         if (kline && !kline->bars.empty()) {
             const auto& b = kline->bars.back();
-            spdlog::info("[kline] {} {} O={} H={} L={} C={} V={}",
-                         symbol,
-                         fmt_ts(b.datetime),
-                         b.open,
-                         b.high,
-                         b.low,
-                         b.close,
-                         b.volume);
+            SPDLOG_INFO("[kline] {} {} O={} H={} L={} C={} V={}",
+                        symbol,
+                        fmt_ts(b.datetime),
+                        b.open,
+                        b.high,
+                        b.low,
+                        b.close,
+                        b.volume);
         }
     }
-    spdlog::info("[demo] 共收到 {} 次更新，退出", ticks);
+    SPDLOG_INFO("[demo] 共收到 {} 次更新，退出", ticks);
     co_return;
 }
 
@@ -91,7 +96,7 @@ asio::awaitable<void> run(TqApi&               api,
 
 int main(int argc, char** argv) {
     LogOptions opts;
-    opts.level = "info";
+    opts.level = "trace";
     setup_logging(opts);
 
     const std::string symbol      = argc > 1 ? argv[1] : "SHFE.rb2610";
@@ -111,14 +116,14 @@ int main(int argc, char** argv) {
     asio::co_spawn(
         ctx,
         [api_ptr, sym, duration_ns, &stop_timer]() -> asio::awaitable<void> {
-            co_await run(*api_ptr, sym, duration_ns, std::chrono::seconds(20), stop_timer);
+            co_await run(*api_ptr, sym, duration_ns, std::chrono::seconds(60 * 10), stop_timer);
         },
         [](std::exception_ptr ep) {
             if (ep) {
                 try {
                     std::rethrow_exception(ep);
                 } catch (const std::exception& e) {
-                    spdlog::error("[demo] 协程异常：{}", e.what());
+                    SPDLOG_ERROR("[demo] 协程异常：{}", e.what());
                 }
             }
         });

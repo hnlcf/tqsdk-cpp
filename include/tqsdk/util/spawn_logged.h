@@ -17,14 +17,14 @@ void co_spawn_logged(boost::asio::any_io_executor ex, F&& f, std::string_view ta
             } catch (const boost::system::system_error& e) {
                 // operation_aborted 是关闭路径,降级为 warn
                 if (e.code() == boost::asio::error::operation_aborted) {
-                    spdlog::debug("[{}] coroutine aborted (normal shutdown)", tag);
+                    SPDLOG_DEBUG("[{}] coroutine aborted (normal shutdown)", tag);
                 } else {
-                    spdlog::error("[{}] system_error: {} ({})", tag, e.what(), e.code().value());
+                    SPDLOG_ERROR("[{}] system_error: {} ({})", tag, e.what(), e.code().value());
                 }
             } catch (const std::exception& e) {
-                spdlog::error("[{}] exception: {}", tag, e.what());
+                SPDLOG_ERROR("[{}] exception: {}", tag, e.what());
             } catch (...) {
-                spdlog::error("[{}] unknown exception", tag);
+                SPDLOG_ERROR("[{}] unknown exception", tag);
             }
         });
 }

@@ -198,7 +198,7 @@ tqsdk::setup_logging(opts);
 
 ### 实时行情示例（quote + kline）
 
-`examples/demo_strategy.cpp` 连接天勤免费行情服务器，实时打印盘口与 K 线：
+`examples/demo.cpp` 连接天勤免费行情服务器，实时打印盘口与 K 线：
 
 ```bash
 ./build/tqsdk_demo                          # 默认 SHFE.rb2610，60s K 线

@@ -43,6 +43,9 @@
 #include <fmt/format.h>
 #include <magic_enum/magic_enum.hpp>
 
+#include <spdlog/cfg/env.h>
 #include <spdlog/spdlog.h>
+
+#include <CLI/CLI.hpp>
 
 #include <gtest/gtest.h>

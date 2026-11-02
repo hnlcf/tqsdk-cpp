@@ -4,9 +4,10 @@
     "boost-beast",
     "fmt",
     "gtest",
+    "magic-enum",
     "nlohmann-json",
     "openssl",
     "spdlog",
-    "magic-enum"
+    "cli11"
   ]
 }

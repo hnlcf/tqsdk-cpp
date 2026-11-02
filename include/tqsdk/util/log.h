@@ -4,6 +4,8 @@
 
 namespace tqsdk {
 
+constexpr const char* kLogLevelEnv = "TQSDK_LOG_LEVEL";
+
 /// 日志初始化选项。
 struct LogOptions {
     /// 日志级别名（trace/debug/info/warn/error/critical/off）。
@@ -11,7 +13,7 @@ struct LogOptions {
     std::string level;
 
     /// 日志模式。默认带时间戳、级别、线程号、来源与正文。
-    std::string pattern = "%Y-%m-%d %H:%M:%S.%e [%^%l%$] [t:%t] %s:%# %v";
+    std::string pattern = "%Y-%m-%d %H:%M:%S.%e [%^%l%$] [%s:%#] [t:%t] : %v";
 
     /// 控制台输出是否着色（默认开启；重定向到文件时应关闭）。
     bool colored = true;
@@ -21,7 +23,7 @@ struct LogOptions {
 };
 
 /// 从字符串解析 spdlog 级别；无法识别时回退到 info 并返回 false。
-bool parse_log_level(std::string_view name, spdlog::level::level_enum& out) noexcept;
+std::optional<spdlog::level::level_enum> parse_log_level(std::string_view name) noexcept;
 
 /// 初始化全局默认 spdlog logger。
 ///

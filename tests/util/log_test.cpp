@@ -8,23 +8,17 @@ using namespace tqsdk;
 
 // parse_log_level：已知名称映射正确，未知回退 info 且返回 false。
 TEST(LogUtil, ParseKnownLevels) {
-    spdlog::level::level_enum lv = spdlog::level::off;
-    EXPECT_TRUE(parse_log_level("debug", lv));
-    EXPECT_EQ(lv, spdlog::level::debug);
-    EXPECT_TRUE(parse_log_level("warn", lv));
-    EXPECT_EQ(lv, spdlog::level::warn);
-    EXPECT_TRUE(parse_log_level("warning", lv)); // 别名
-    EXPECT_EQ(lv, spdlog::level::warn);
-    EXPECT_TRUE(parse_log_level("error", lv));
-    EXPECT_EQ(lv, spdlog::level::err);
-    EXPECT_TRUE(parse_log_level("off", lv));
-    EXPECT_EQ(lv, spdlog::level::off);
+    EXPECT_EQ(parse_log_level("debug").value(), spdlog::level::debug);
+    EXPECT_EQ(parse_log_level("warn").value(), spdlog::level::warn);
+    EXPECT_EQ(parse_log_level("warning").value(), spdlog::level::warn);
+    EXPECT_EQ(parse_log_level("error").value(), spdlog::level::err);
+    EXPECT_EQ(parse_log_level("critical").value(), spdlog::level::critical);
+    EXPECT_EQ(parse_log_level("off").value(), spdlog::level::off);
 }
 
 TEST(LogUtil, ParseUnknownFallsBackToInfo) {
-    spdlog::level::level_enum lv = spdlog::level::trace;
-    EXPECT_FALSE(parse_log_level("bogus", lv));
-    EXPECT_EQ(lv, spdlog::level::info);
+    EXPECT_FALSE(parse_log_level("bogus"));
+    EXPECT_EQ(parse_log_level("info").value(), spdlog::level::info);
 }
 
 // setup_logging 应把默认 logger 级别设成请求的级别。

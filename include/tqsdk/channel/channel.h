@@ -89,7 +89,7 @@ void Channel<T>::wake_one(std::list<Waiter*>& list) noexcept {
 template <typename T>
 asio::awaitable<void> Channel<T>::async_send(T item) {
     if (closed_) {
-        spdlog::warn("Channel::async_send: closed");
+        SPDLOG_WARN("Channel::async_send: closed");
         throw boost::system::system_error(asio::error::operation_aborted,
                                           "Channel::async_send: closed");
     }
@@ -108,7 +108,7 @@ asio::awaitable<void> Channel<T>::async_send(T item) {
             // 若正常返回（无异常），说明被主动唤醒；继续 loop 检查空间
         } catch (const boost::system::system_error& e) {
             if (e.code() != asio::error::operation_aborted) {
-                spdlog::error("Channel::async_send: unexpected error: {}", e.what());
+                SPDLOG_ERROR("Channel::async_send: unexpected error: {}", e.what());
                 throw;
             }
 
@@ -116,12 +116,12 @@ asio::awaitable<void> Channel<T>::async_send(T item) {
         }
 
         if (closed_) {
-            spdlog::warn("Channel::async_send: closed");
+            SPDLOG_WARN("Channel::async_send: closed");
             throw boost::system::system_error(asio::error::operation_aborted,
                                               "Channel::async_send: closed");
         }
     }
-    spdlog::trace("Channel::async_send: enqueue item, size: {}", queue_.size() + 1);
+    SPDLOG_TRACE("Channel::async_send: enqueue item, size: {}", queue_.size() + 1);
     queue_.push_back(std::move(item));
 
     wake_one(recv_waiters_);
@@ -132,7 +132,7 @@ asio::awaitable<void> Channel<T>::async_send(T item) {
 // ---------- receive ----------
 template <typename T>
 asio::awaitable<std::optional<T>> Channel<T>::async_receive() {
-    spdlog::trace("Channel::async_receive: size: {}, closed: {}", queue_.size(), closed_);
+    SPDLOG_TRACE("Channel::async_receive: size: {}, closed: {}", queue_.size(), closed_);
     while (queue_.empty() && !closed_) {
         Waiter w(co_await asio::this_coro::executor);
         recv_waiters_.push_back(&w);
@@ -144,17 +144,17 @@ asio::awaitable<std::optional<T>> Channel<T>::async_receive() {
             co_await w.timer.async_wait(asio::use_awaitable);
         } catch (const boost::system::system_error& e) {
             if (e.code() != asio::error::operation_aborted) {
-                spdlog::error("Channel::async_receive: unexpected error: {}", e.what());
+                SPDLOG_ERROR("Channel::async_receive: unexpected error: {}", e.what());
                 throw;
             }
-            spdlog::debug(
+            SPDLOG_DEBUG(
                 "Channel::async_receive: woken up, size: {}, closed: {}", queue_.size(), closed_);
         }
     }
 
     if (queue_.empty()) {
         // closed 且空
-        spdlog::warn("Channel::async_receive: empty, closed: {}", closed_);
+        SPDLOG_WARN("Channel::async_receive: empty, closed: {}", closed_);
         co_return std::nullopt;
     }
 
@@ -170,7 +170,7 @@ asio::awaitable<std::optional<T>> Channel<T>::async_receive() {
 // ---------- close ----------
 template <typename T>
 void Channel<T>::close() noexcept {
-    spdlog::debug("Channel::close: closed: {}", closed_);
+    SPDLOG_DEBUG("Channel::close: closed: {}", closed_);
     if (closed_) {
         return;
     }

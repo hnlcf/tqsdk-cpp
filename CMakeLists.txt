@@ -18,6 +18,7 @@ find_package(OpenSSL CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+find_package(CLI11 CONFIG REQUIRED)
 
 # GoogleTest (仅在启用测试时)
 option(TQSDK_BUILD_TESTS "Build tests" OFF)
@@ -29,6 +30,8 @@ endif()
 add_library(tqsdk_core
     src/api/tq_api.cpp
     src/ipc/uds_channel.cpp
+    src/ipc/tcp_channel.cpp
+    src/ipc/ipc_session.cpp
     src/data/diff_merge_engine.cpp
     src/gateway/sim/sim_td_gateway.cpp
     src/gateway/tq/tq_md_protocol.cpp
@@ -57,6 +60,7 @@ target_link_libraries(tqsdk_core PUBLIC
     magic_enum::magic_enum
     nlohmann_json::nlohmann_json
     spdlog::spdlog
+    CLI11::CLI11
 )
 
 # ---------- CTP 网关 (可选，仅当找到 CTP SDK 时编译) ----------
@@ -114,7 +118,7 @@ endif()
 option(TQSDK_BUILD_EXAMPLES "Build example executables" OFF)
 
 if (TQSDK_BUILD_EXAMPLES)
-    add_executable(tqsdk_demo examples/demo_strategy.cpp)
+    add_executable(tqsdk_demo examples/demo.cpp)
     target_link_libraries(tqsdk_demo PRIVATE tqsdk_core)
 
     if(TQSDK_ENABLE_CTP)
@@ -138,6 +142,10 @@ if(TQSDK_BUILD_TESTS)
         tests/data/diff_merge_test.cpp
         tests/data/entity_store_test.cpp
         tests/ipc/uds_channel_test.cpp
+        tests/ipc/tcp_channel_test.cpp
+        tests/ipc/protocol_test.cpp
+        tests/ipc/protocol_e2e_test.cpp
+        tests/ipc/ipc_session_test.cpp
         tests/util/serde_test.cpp
         tests/util/spawn_logged_test.cpp
         tests/util/log_test.cpp

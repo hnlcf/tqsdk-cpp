@@ -23,9 +23,13 @@ public:
         return k;
     }
 
-    KlineStream& get_or_create(std::string_view sym, int64_t dur, int cap) {
+    KlineStream&
+    get_or_create(std::string_view sym, int64_t dur, int cap, bool* created = nullptr) {
         auto key            = make_key(sym, dur);
         auto [it, inserted] = streams_.try_emplace(key);
+        if (created) {
+            *created = inserted;
+        }
         if (inserted) {
             it->second.instrumnet_id = std::string(sym);
             it->second.duration_ns   = dur;

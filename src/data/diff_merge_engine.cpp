@@ -10,6 +10,7 @@ void DiffMergeEngine::apply(const nlohmann::json& push) {
         return;
     for (auto it = push.begin(); it != push.end(); ++it) {
         std::string_view k = it.key();
+        SPDLOG_DEBUG("[diff] Merge {} event", k);
         if (k == "quotes") {
             merge_quotes(it.value());
         } else if (k == "trade") {
@@ -18,7 +19,7 @@ void DiffMergeEngine::apply(const nlohmann::json& push) {
             merge_klines(it.value());
         } else {
             // 未知顶层路由忽略
-            spdlog::error("Unimplemented route for merging: {}", k);
+            SPDLOG_ERROR("Unimplemented route for merging: {}", k);
             continue;
         }
     }

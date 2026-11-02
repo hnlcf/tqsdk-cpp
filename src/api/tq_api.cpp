@@ -78,14 +78,14 @@ asio::awaitable<void> TqApi::md_loop() {
             update_signal_.notify();
             break;
         case MarketDataEvent::Kind::Disconnected:
-            spdlog::warn("[TqApi.md_loop] market data disconnected");
+            SPDLOG_WARN("[TqApi.md_loop] market data disconnected");
             break;
         case MarketDataEvent::Kind::Error:
-            spdlog::error("[TqApi.md_loop] md error: {}", ev->error_msg);
+            SPDLOG_ERROR("[TqApi.md_loop] md error: {}", ev->error_msg);
             break;
         }
     }
-    spdlog::debug("[TqApi.md_loop] exited");
+    SPDLOG_DEBUG("[TqApi.md_loop] exited");
     co_return;
 }
 
@@ -109,14 +109,14 @@ asio::awaitable<void> TqApi::td_loop() {
             // 真正的状态推进由后续 Diff 驱动。
             break;
         case TradeEvent::Kind::Disconnected:
-            spdlog::warn("[TqApi.td_loop] trading disconnected");
+            SPDLOG_WARN("[TqApi.td_loop] trading disconnected");
             break;
         case TradeEvent::Kind::Error:
-            spdlog::error("[TqApi.td_loop] td error: {}", ev->error_msg);
+            SPDLOG_ERROR("[TqApi.td_loop] td error: {}", ev->error_msg);
             break;
         }
     }
-    spdlog::debug("[TqApi.td_loop] exited");
+    SPDLOG_DEBUG("[TqApi.td_loop] exited");
     co_return;
 }
 
@@ -148,12 +148,13 @@ asio::awaitable<bool> TqApi::wait_update() {
 
 // ---------- 本地读 ----------
 Quote& TqApi::get_quote(std::string_view symbol) {
-    auto& q = data_.quotes.get_or_create(std::string(symbol));
-    if (q.instrument_id.empty()) {
+    bool  created = false;
+    auto& q       = data_.quotes.get_or_create(std::string(symbol), &created);
+    if (created) {
         q.instrument_id = std::string(symbol);
     }
-    // 阶段 2：订阅为空操作（mock 无需订阅）。
-    if (md_) {
+    // 仅在本地首次创建该 Quote 时发起订阅（幂等）：重复 get_quote 只读不重复订阅。
+    if (created && md_) {
         std::vector<std::string> syms{std::string(symbol)};
         co_spawn_logged(
             ex_,
@@ -182,10 +183,12 @@ KlineStream* TqApi::get_kline_serial(std::string_view symbol, int64_t duration_n
         view_width = 200;
     }
     // 按需创建本地空流（已存在则复用），capacity 取 view_width。
-    KlineStream& k = data_.klines.get_or_create(std::string(symbol), duration_ns, view_width);
+    bool         created = false;
+    KlineStream& k =
+        data_.klines.get_or_create(std::string(symbol), duration_ns, view_width, &created);
 
-    // 发起订阅（异步，不等数据到达）。
-    if (md_) {
+    // 仅首次创建该序列时发起订阅（幂等）；重复调用只读不重复订阅。
+    if (created && md_) {
         std::string sym = std::string(symbol);
         co_spawn_logged(
             ex_,

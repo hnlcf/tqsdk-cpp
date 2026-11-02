@@ -7,9 +7,13 @@ namespace tqsdk {
 template <typename Entity, typename Key = std::string>
 class EntityStore {
 public:
-    // 不存在则默认构造;存在则返回已有引用
-    Entity& get_or_create(const Key& key) {
-        auto [it, _] = data_.try_emplace(key);
+    // 不存在则默认构造;存在则返回已有引用。
+    // created 非空时回写"本次是否新建"，供调用方决定是否触发一次性的订阅等副作用。
+    Entity& get_or_create(const Key& key, bool* created = nullptr) {
+        auto [it, inserted] = data_.try_emplace(key);
+        if (created) {
+            *created = inserted;
+        }
         return it->second;
     }
 
