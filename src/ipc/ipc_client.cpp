@@ -39,20 +39,32 @@ asio::awaitable<CommandAck> IpcClient::send_command_and_wait(const CommandBody& 
         throw IpcError("IpcClient::send_command_and_wait: session closed");
     }
 
-    auto bytes = encode_body(body, encoding_);
-    co_await send_bytes(FrameType::Command, bytes);
-
     // 以 body.rid 作为关联键（调用方必须填写；撤单通常用 order_id）。
     OrderId rid = body.rid;
 
-    AckWaiter w(co_await asio::this_coro::executor);
-    pending_acks_[rid] = &w;
+    AckWaiter w(ex_);
+
+    // 关键：必须**先登记等待者、再发送**。发送是 co_await，会在本协程挂起期间
+    // 让出 io 线程；若对端处理极快，CommandAck 可能在登记之前就被 read_loop
+    // 收下并派发，此时若无等待者则会被丢弃，导致本协程永远等不到 ack。
+    {
+        std::lock_guard<std::mutex> lk(ack_mutex_);
+        pending_acks_[rid] = &w;
+    }
+
+    auto bytes = encode_body(body, encoding_);
+    co_await send_bytes(FrameType::Command, bytes);
+
     // RAII：退出时一定从表里摘除。
     struct EraseGuard {
         std::unordered_map<OrderId, AckWaiter*>& m;
+        std::mutex&                              mu;
         OrderId                                  rid;
-        ~EraseGuard() { m.erase(rid); }
-    } guard{pending_acks_, rid};
+        ~EraseGuard() {
+            std::lock_guard<std::mutex> lk(mu);
+            m.erase(rid);
+        }
+    } guard{pending_acks_, ack_mutex_, rid};
 
     // 超时 timer：同时充当"被 ack 唤醒"的信号（complete_ack 会 cancel 它）。
     w.timer.expires_after(timeout);
@@ -71,7 +83,8 @@ asio::awaitable<CommandAck> IpcClient::send_command_and_wait(const CommandBody& 
 }
 
 void IpcClient::complete_ack(const OrderId& rid, const CommandAck& ack) noexcept {
-    auto it = pending_acks_.find(rid);
+    std::lock_guard<std::mutex> lk(ack_mutex_);
+    auto                        it = pending_acks_.find(rid);
     if (it == pending_acks_.end() || it->second == nullptr) {
         return; // 无匹配等待者（可能已超时/重复 ack），忽略
     }

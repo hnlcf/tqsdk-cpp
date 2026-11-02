@@ -13,7 +13,8 @@ IpcSession::IpcSession(std::unique_ptr<IIpcChannel> channel, asio::any_io_execut
       incoming_(ex_, opts_.incoming_capacity),
       ready_timer_(ex_),
       rx_watchdog_(ex_),
-      heartbeat_timer_(ex_) {}
+      heartbeat_timer_(ex_),
+      write_mutex_(ex_) {}
 
 IpcSession::~IpcSession() {
     // 不在此 join 协程；但必须已 close，避免挂起的 waiter 触发 Channel 析构断言。
@@ -60,6 +61,11 @@ asio::awaitable<void> IpcSession::start() {
 }
 
 asio::awaitable<void> IpcSession::send(FrameType type, ConstSlice payload) {
+    if (closed_) {
+        throw IpcError("IpcSession::send on closed session");
+    }
+    // 串行化写：socket 不允许并发 async_write。锁内重新检查 closed_（可能在排队期间关闭）。
+    auto guard = co_await AsyncMutex::acquire(write_mutex_);
     if (closed_) {
         throw IpcError("IpcSession::send on closed session");
     }

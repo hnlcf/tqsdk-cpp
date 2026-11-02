@@ -98,6 +98,33 @@ TEST(ProtocolCodec, CommandInsertRoundtrip) {
     EXPECT_EQ(out.insert.volume, 2u);
 }
 
+// 市价单/未知价：limit_price = NaN(kUnknownDouble) 经 JSON 往返必须保持 NaN，
+// 不得因为 NaN 被序列化为 null 而在解码时抛 "type must be number"。
+TEST(ProtocolCodec, CommandInsertUnknownPriceRoundtrip) {
+    CommandBody in;
+    in.op                   = CommandOp::InsertOrder;
+    in.rid                  = "rid_mkt";
+    in.insert.instrument_id = "SHFE.rb2610";
+    in.insert.direction     = Direction::BUY;
+    in.insert.offset        = Offset::OPEN;
+    in.insert.price_type    = PriceType::ANY; // 市价单
+    in.insert.limit_price   = kUnknownDouble; // NaN
+    in.insert.volume        = 1;
+
+    auto out = roundtrip_json(in);
+    EXPECT_EQ(out.op, CommandOp::InsertOrder);
+    EXPECT_EQ(out.insert.price_type, PriceType::ANY);
+    EXPECT_FALSE(std::isfinite(out.insert.limit_price)); // 往返后仍为"未知价"
+    EXPECT_EQ(out.insert.volume, 1u);
+
+    // 同样验证 MessagePack 路径。
+    ReceivedFrame fm{FrameType::Command,
+                     FrameEncoding::MessagePack,
+                     encode_body(in, FrameEncoding::MessagePack)};
+    auto          om = decode_as<FrameType::Command>(fm);
+    EXPECT_FALSE(std::isfinite(om.insert.limit_price));
+}
+
 TEST(ProtocolCodec, CommandCancelRoundtrip) {
     CommandBody in;
     in.op                       = CommandOp::CancelOrder;

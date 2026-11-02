@@ -11,6 +11,28 @@ namespace ipc {
 
 using json = ::nlohmann::json;
 
+// ---------------------------------------------------------------------------
+// 非有限 double 的兼容序列化
+// ---------------------------------------------------------------------------
+// JSON 无法表示 NaN/Inf：nlohmann 会把它们序列化为 null。语义上"未知价格"
+// （kUnknownDouble = NaN）等价于"无值"，故约定：
+//   编码：非有限 -> null；有限 -> 数值
+//   解码：null / 缺省 -> NaN(kUnknownDouble)；数值 -> 该值
+// 用于 limit_price 等"可能未知"的价格字段，避免 null -> double 抛异常。
+inline json to_json_opt_double(double v, double unknown = kUnknownDouble) {
+    if (!std::isfinite(v)) {
+        return json(nullptr);
+    }
+    return json(v);
+}
+inline double
+from_json_opt_double(const json& j, const char* key, double unknown = kUnknownDouble) {
+    if (!j.contains(key) || j.at(key).is_null()) {
+        return unknown;
+    }
+    return j.at(key).get<double>();
+}
+
 // ============================================================================
 // IPC 协议消息体（body）定义
 // ----------------------------------------------------------------------------
@@ -224,7 +246,7 @@ inline void to_json(json& j, const CommandBody& m) {
                            {"direction", m.insert.direction},
                            {"offset", m.insert.offset},
                            {"price_type", m.insert.price_type},
-                           {"limit_price", m.insert.limit_price},
+                           {"limit_price", to_json_opt_double(m.insert.limit_price)},
                            {"time_cond", m.insert.time_cond},
                            {"volume_cond", m.insert.volume_cond},
                            {"volume", m.insert.volume},
@@ -247,7 +269,7 @@ inline void from_json(const json& j, CommandBody& m) {
         m.insert.direction     = ins.at("direction").get<Direction>();
         m.insert.offset        = ins.at("offset").get<Offset>();
         m.insert.price_type    = ins.at("price_type").get<PriceType>();
-        m.insert.limit_price   = ins.at("limit_price").get<double>();
+        m.insert.limit_price   = from_json_opt_double(ins, "limit_price");
         m.insert.time_cond     = ins.at("time_cond").get<TimeCondition>();
         m.insert.volume_cond   = ins.at("volume_cond").get<VolumeCondition>();
         m.insert.volume        = ins.at("volume").get<uint64_t>();

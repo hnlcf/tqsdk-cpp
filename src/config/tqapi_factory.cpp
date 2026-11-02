@@ -58,6 +58,14 @@ ipc::FrameEncoding parse_encoding(std::string_view s) {
     throw std::runtime_error("config: unknown [ipc].encoding = '" + std::string(s) + "'");
 }
 
+ipc::IpcRole parse_role(std::string_view s) {
+    if (s.empty() || s == "gateway")
+        return ipc::IpcRole::Gateway;
+    if (s == "node")
+        return ipc::IpcRole::Node;
+    throw std::runtime_error("config: unknown [ipc].role = '" + std::string(s) + "'");
+}
+
 // 读取指定 table 的某键为 string（缺省返回 def）。
 std::string get_str(const toml::table& tbl, std::string_view key, std::string def = {}) {
     if (auto* v = tbl.get(key)) {
@@ -109,6 +117,8 @@ TqApiConfig build_from_toml(const toml::table& root) {
             std::chrono::milliseconds(get_int(ipc_t, "heartbeat_interval_ms", 5000));
         cfg.ipc.heartbeat_timeout =
             std::chrono::milliseconds(get_int(ipc_t, "heartbeat_timeout_ms", 15000));
+        cfg.ipc.role       = parse_role(get_str(ipc_t, "role", "gateway"));
+        cfg.ipc.local_name = get_str(ipc_t, "local_name", cfg.ipc.local_name);
     }
 
     if (const auto& md_t = require_table(root, "md"); !md_t.empty()) {
@@ -209,8 +219,8 @@ asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context& ctx, const 
         auto channel = connect_channel(ctx, cfg.ipc, ep);
 
         ipc::IpcSession::Options opts;
-        opts.local_role         = ipc::IpcRole::Gateway;
-        opts.local_name         = need_md_remote ? cfg.md.name : cfg.td.name;
+        opts.local_role         = cfg.ipc.role;
+        opts.local_name         = cfg.ipc.local_name;
         opts.handshake_timeout  = cfg.ipc.handshake_timeout;
         opts.heartbeat_interval = cfg.ipc.heartbeat_interval;
         opts.heartbeat_timeout  = cfg.ipc.heartbeat_timeout;
@@ -268,6 +278,155 @@ asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context& ctx, const 
     }
     api->start();
     co_return api;
+}
+
+// ============================================================================
+// 两进程配置解析
+// ============================================================================
+
+namespace {
+
+// 从 [md]/[td] 表里读出 real gateway 种类与参数（gw 进程用，只允许直连种类）。
+TqApiConfig::Md parse_gw_md(const toml::table& root) {
+    TqApiConfig::Md md;
+    if (const auto& t = require_table(root, "md"); !t.empty()) {
+        md.kind = parse_md_kind(get_str(t, "kind", "none"));
+        md.host = get_str(t, "host", md.host);
+        md.port = get_str(t, "port", md.port);
+        md.path = get_str(t, "path", md.path);
+    }
+    return md;
+}
+
+TqApiConfig::Td parse_gw_td(const toml::table& root) {
+    TqApiConfig::Td td;
+    if (const auto& t = require_table(root, "td"); !t.empty()) {
+        td.kind            = parse_td_kind(get_str(t, "kind", "none"));
+        td.initial_balance = get_double(t, "initial_balance", td.initial_balance);
+    }
+    return td;
+}
+
+GwConfig build_gw_from_toml(const toml::table& root) {
+    GwConfig cfg;
+    if (const auto& l = require_table(root, "listen"); !l.empty()) {
+        cfg.listen.transport = parse_transport(get_str(l, "transport", "uds"));
+        cfg.listen.socket    = get_str(l, "socket", cfg.listen.socket);
+        cfg.listen.tcp_host  = get_str(l, "tcp_host", cfg.listen.tcp_host);
+        cfg.listen.tcp_port  = static_cast<uint16_t>(get_int(l, "tcp_port", 0));
+    }
+    if (const auto& i = require_table(root, "ipc"); !i.empty()) {
+        cfg.encoding          = parse_encoding(get_str(i, "encoding", "json"));
+        cfg.handshake_timeout = std::chrono::milliseconds(get_int(i, "handshake_timeout_ms", 5000));
+        cfg.heartbeat_interval =
+            std::chrono::milliseconds(get_int(i, "heartbeat_interval_ms", 5000));
+        cfg.heartbeat_timeout =
+            std::chrono::milliseconds(get_int(i, "heartbeat_timeout_ms", 15000));
+        cfg.local_name = get_str(i, "local_name", cfg.local_name);
+    }
+    cfg.md = parse_gw_md(root);
+    cfg.td = parse_gw_td(root);
+
+    // [td.specs."SYMBOL"] -> SpecSeed（仅 sim 用）
+    if (const auto& td_t = require_table(root, "td"); !td_t.empty()) {
+        if (auto* specs_tv = td_t.get("specs"); specs_tv && specs_tv->is_table()) {
+            const auto& specs_t = *specs_tv->as_table();
+            for (auto&& [k, v] : specs_t) {
+                const auto* sub = v.as_table();
+                if (!sub) {
+                    continue;
+                }
+                GwConfig::SpecSeed s;
+                s.symbol             = std::string(k.str());
+                s.volume_multiple    = get_double(*sub, "volume_multiple", s.volume_multiple);
+                s.price_tick         = get_double(*sub, "price_tick", s.price_tick);
+                s.margin_rate        = get_double(*sub, "margin_rate", s.margin_rate);
+                s.commission_rate    = get_double(*sub, "commission_rate", s.commission_rate);
+                s.commission_per_lot = get_double(*sub, "commission_per_lot", s.commission_per_lot);
+                cfg.specs.push_back(std::move(s));
+            }
+        }
+        // [td.last_prices] SYMBOL = price
+        if (auto* lp_tv = td_t.get("last_prices"); lp_tv && lp_tv->is_table()) {
+            const auto& lp_t = *lp_tv->as_table();
+            for (auto&& [k, v] : lp_t) {
+                if (auto d = v.value<double>()) {
+                    cfg.last_prices[std::string(k.str())] = *d;
+                } else if (auto i = v.value<int64_t>()) {
+                    cfg.last_prices[std::string(k.str())] = static_cast<double>(*i);
+                }
+            }
+        }
+    }
+    return cfg;
+}
+
+NodeConfig build_node_from_toml(const toml::table& root) {
+    NodeConfig cfg;
+    cfg.upstream = build_from_toml(root); // 复用客户端解析（[ipc]/[md]/[td]）
+    // node 一律以 Node 角色连接 gw（gw 侧声明 Gateway，两端角色必须不同）。
+    cfg.upstream.ipc.role = ipc::IpcRole::Node;
+
+    if (const auto& s = require_table(root, "serve"); !s.empty()) {
+        cfg.serve_bind = get_str(s, "bind", cfg.serve_bind);
+        cfg.serve_port = static_cast<uint16_t>(get_int(s, "port", cfg.serve_port));
+        if (auto* arr = s.get("symbols")) {
+            if (auto* a = arr->as_array()) {
+                for (auto&& v : *a) {
+                    if (auto sv = v.value<std::string>()) {
+                        cfg.symbols.push_back(*sv);
+                    }
+                }
+            }
+        }
+    }
+    return cfg;
+}
+
+} // namespace
+
+GwConfig parse_gw_config(std::string_view toml_text) {
+    toml::table root;
+    try {
+        root = toml::parse(toml_text);
+    } catch (const toml::parse_error& e) {
+        throw std::runtime_error(std::string("gw config: toml parse error: ") +
+                                 e.description().data());
+    }
+    return build_gw_from_toml(root);
+}
+
+NodeConfig parse_node_config(std::string_view toml_text) {
+    toml::table root;
+    try {
+        root = toml::parse(toml_text);
+    } catch (const toml::parse_error& e) {
+        throw std::runtime_error(std::string("node config: toml parse error: ") +
+                                 e.description().data());
+    }
+    return build_node_from_toml(root);
+}
+
+GwConfig load_gw_config(const std::string& path) {
+    toml::table root;
+    try {
+        root = toml::parse_file(path);
+    } catch (const toml::parse_error& e) {
+        throw std::runtime_error(std::string("gw config: parse '") + path +
+                                 "': " + e.description().data());
+    }
+    return build_gw_from_toml(root);
+}
+
+NodeConfig load_node_config(const std::string& path) {
+    toml::table root;
+    try {
+        root = toml::parse_file(path);
+    } catch (const toml::parse_error& e) {
+        throw std::runtime_error(std::string("node config: parse '") + path +
+                                 "': " + e.description().data());
+    }
+    return build_node_from_toml(root);
 }
 
 } // namespace tqsdk

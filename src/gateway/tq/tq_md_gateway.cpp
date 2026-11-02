@@ -17,14 +17,17 @@ TqMdGateway::TqMdGateway(asio::any_io_executor ex,
                          std::string           port,
                          std::string           path)
     : ex_(ex),
-      ch_(ex),
+      ch_(ex, kOutputCapacity),
       host_(std::move(host)),
       port_(std::move(port)),
       path_(std::move(path)),
       ssl_ctx_(ssl::context::tls_client),
-      write_mutex_(ex_) {
+      write_mutex_(ex_),
+      peek_wakeup_(ex) {
     ssl_ctx_.set_default_verify_paths();
     ssl_ctx_.set_verify_mode(ssl::verify_peer);
+    // 默认挂起（无订阅）；订阅到来时 cancel 唤醒 read_loop。
+    peek_wakeup_.expires_at(std::chrono::steady_clock::time_point::max());
 }
 
 TqMdGateway::~TqMdGateway() {
@@ -41,12 +44,21 @@ asio::awaitable<void> TqMdGateway::start() {
 
 asio::awaitable<void> TqMdGateway::stop() {
     stopped_ = true;
-    // 关闭 websocket（若已连接），中断挂起的读写。
+    // 直接关闭最底层 socket：立即中断挂起的 async_read / async_write，使其以
+    // operation_aborted 返回。相比有序的 ws_->async_close()，这不会因为对端无响应
+    // 或读侧未排空而卡住——这对优雅退出（io_context 必须能排空）至关重要。
     if (ws_) {
         boost::system::error_code ec;
-        co_await ws_->async_close(beast::websocket::close_code::normal,
-                                  asio::redirect_error(use_awaitable, ec));
+        beast::get_lowest_layer(*ws_).shutdown(tcp_t::socket::shutdown_both, ec);
+        beast::get_lowest_layer(*ws_).close(ec);
     }
+    // 若仍在解析阶段，取消解析，令 async_resolve 以 operation_aborted 返回。
+    if (resolver_) {
+        boost::system::error_code ec;
+        resolver_->cancel();
+    }
+    // 唤醒可能因"无订阅"而挂起的 peek 闸门，使 read_loop 能察觉到 stopped_ 并退出。
+    peek_wakeup_.cancel();
     // 关闭输出通道，使 TqApi 的 md_loop 以 nullopt 退出。
     ch_.close();
     co_return;
@@ -55,19 +67,81 @@ asio::awaitable<void> TqMdGateway::stop() {
 asio::awaitable<void> TqMdGateway::subscribe(const std::vector<std::string>& symbols) {
     bool added = false;
     for (const auto& s : symbols) {
-        if (pending_subs_.insert(s).second) {
-            added = true;
+        // 引用计数：首次（0->1）才真正加入 pending 并发 subscribe_quote。
+        if (++quote_ref_[s] == 1) {
+            if (pending_subs_.insert(s).second) {
+                added = true;
+            }
         }
     }
+    // 新订阅到来：唤醒可能因"无订阅"而挂起的 peek 循环。
+    wake_peek();
     // 若已连接，立即发送订阅；否则等连接建立时统一发送。
     if (added && ws_ && ws_->is_open()) {
-        std::string ins_list;
-        for (const auto& s : pending_subs_) {
-            if (!ins_list.empty())
-                ins_list.push_back(',');
-            ins_list += s;
+        co_await send_subscribe_quote();
+    }
+    co_return;
+}
+
+std::string TqMdGateway::kline_key(const std::string& symbol, int64_t duration_ns) {
+    return symbol + "|" + std::to_string(duration_ns);
+}
+
+bool TqMdGateway::has_any_subscription() const noexcept {
+    return !quote_ref_.empty() || !chart_ref_.empty();
+}
+
+void TqMdGateway::wake_peek() noexcept {
+    // 令 read_loop 上挂起的 async_wait 立即返回（overwrites 极远到期点）。
+    peek_wakeup_.expires_at(std::chrono::steady_clock::time_point::min());
+}
+
+asio::awaitable<void> TqMdGateway::send_subscribe_quote() {
+    std::string ins_list;
+    for (const auto& s : pending_subs_) {
+        if (!ins_list.empty())
+            ins_list.push_back(',');
+        ins_list += s;
+    }
+    co_await send_cmd(nlohmann::json{{"aid", "subscribe_quote"}, {"ins_list", ins_list}});
+}
+
+asio::awaitable<void>
+TqMdGateway::release(const std::vector<std::string>&                     symbols,
+                     const std::vector<std::pair<std::string, int64_t>>& klines) {
+    bool quote_changed = false;
+    for (const auto& s : symbols) {
+        auto it = quote_ref_.find(s);
+        if (it == quote_ref_.end()) {
+            continue;
         }
-        co_await send_cmd(nlohmann::json{{"aid", "subscribe_quote"}, {"ins_list", ins_list}});
+        if (--it->second <= 0) {
+            quote_ref_.erase(it);
+            if (pending_subs_.erase(s) > 0) {
+                quote_changed = true;
+            }
+        }
+    }
+    for (const auto& [sym, dur] : klines) {
+        auto kit = kline_key_to_chart_.find(kline_key(sym, dur));
+        if (kit == kline_key_to_chart_.end()) {
+            continue;
+        }
+        const std::string& cid = kit->second;
+        auto               it  = chart_ref_.find(cid);
+        if (it == chart_ref_.end()) {
+            continue;
+        }
+        if (--it->second <= 0) {
+            chart_ref_.erase(it);
+            pending_klines_.erase(cid);
+        }
+    }
+    // 天勤无软退订：仅当仍有订阅时，用剩余的 pending_subs_ 重发一次全量
+    // subscribe_quote（覆盖语义，等效于缩小订阅集合）；若已无任何订阅则不再发送，
+    // 交给 read_loop 的 peek 闸门自然停推。
+    if (quote_changed && ws_ && ws_->is_open() && !pending_subs_.empty()) {
+        co_await send_subscribe_quote();
     }
     co_return;
 }
@@ -116,7 +190,7 @@ TqMdGateway::subscribe_kline(const std::string& symbol, int64_t duration_ns, int
         view_width = 200;
     }
     // 同一 (symbol, duration) 序列复用稳定 chart_id；新序列才生成 UUID。
-    std::string key = std::string(symbol) + "|" + std::to_string(duration_ns);
+    std::string key = kline_key(symbol, duration_ns);
     auto        it  = kline_key_to_chart_.find(key);
     std::string chart_id;
     if (it != kline_key_to_chart_.end()) {
@@ -129,21 +203,29 @@ TqMdGateway::subscribe_kline(const std::string& symbol, int64_t duration_ns, int
     KlineSub sub{chart_id, symbol, duration_ns, view_width};
     pending_klines_[chart_id] = sub;
 
-    // K 线依赖合约已加载，先确保该合约的行情订阅存在。
-    bool need_quote = pending_subs_.insert(symbol).second;
+    // chart 引用计数：首次（0->1）才真正需要向服务器 set_chart。
+    bool chart_added = (++chart_ref_[chart_id] == 1);
+
+    // 新订阅：唤醒可能挂起的 peek 循环。
+    wake_peek();
+
+    // 注意：K 线依赖其合约行情，但此处【不】再自行增加 quote_ref_。合约的行情订阅
+    // 由调用方（GatewayIpcServer::handle_subscribe）以显式 subscribe() 统一驱动，
+    // 保证网关引用计数与连接的 release() 严格对称（避免 subscribe_kline 额外 +1
+    // 导致 release 永远减不到 0 的泄漏）。
+    bool need_quote = (pending_subs_.count(symbol) == 0);
+    if (need_quote) {
+        pending_subs_.insert(symbol);
+    }
 
     if (ws_ && ws_->is_open()) {
         if (need_quote) {
-            std::string ins_list;
-            for (const auto& s : pending_subs_) {
-                if (!ins_list.empty())
-                    ins_list.push_back(',');
-                ins_list += s;
-            }
-            co_await send_cmd(nlohmann::json{{"aid", "subscribe_quote"}, {"ins_list", ins_list}});
+            co_await send_subscribe_quote();
         }
         // 发 set_chart（首次新增或刷新 view_width）。
-        co_await do_set_chart(sub);
+        if (chart_added) {
+            co_await do_set_chart(sub);
+        }
     }
     co_return;
 }
@@ -237,6 +319,16 @@ asio::awaitable<void> TqMdGateway::do_connect_and_run() {
 
 asio::awaitable<void> TqMdGateway::read_loop() {
     while (!stopped_) {
+        // peek 闸门：无任何订阅时不发 peek（否则服务器会持续推流，堆积到无人消费的通道）。
+        // 挂起在 peek_wakeup_ 上，订阅到来时 cancel 唤醒。
+        if (!has_any_subscription()) {
+            // 复位为"极远"（可能被上一次 wake 设为 min）。
+            peek_wakeup_.expires_at(std::chrono::steady_clock::time_point::max());
+            boost::system::error_code wec;
+            co_await peek_wakeup_.async_wait(asio::redirect_error(use_awaitable, wec));
+            continue; // 醒来后重新判断（有订阅则 peek，否则再挂起）
+        }
+
         // 请求一帧：先 peek，再读。
         co_await send_cmd(nlohmann::json{{"aid", "peek_message"}});
 
@@ -267,13 +359,101 @@ asio::awaitable<void> TqMdGateway::read_loop() {
 }
 
 asio::awaitable<void> TqMdGateway::deliver_rtn_data(const nlohmann::json& data_array) {
+    // 先用帧内的 charts.<id>.state 校正本地 (symbol,duration)->chart_id 映射。
+    // 该 state 只在 chart 建立/变更时下发，不能假设每帧都有；但一旦出现即最权威。
+    for (const auto& patch : data_array) {
+        if (!patch.contains("charts") || !patch["charts"].is_object()) {
+            continue;
+        }
+        for (auto it = patch["charts"].begin(); it != patch["charts"].end(); ++it) {
+            const std::string& cid = it.key();
+            if (!it.value().contains("state") || !it.value()["state"].is_object()) {
+                continue;
+            }
+            const auto& st = it.value()["state"];
+            if (st.contains("ins_list") && st["ins_list"].is_string() && st.contains("duration") &&
+                st["duration"].is_number_integer()) {
+                std::string ins = st["ins_list"].get<std::string>();
+                if (!ins.empty() && ins != "*") {
+                    kline_key_to_chart_[kline_key(ins, st["duration"].get<int64_t>())] = cid;
+                }
+            }
+        }
+    }
+
     nlohmann::json merged = normalize_rtn_data(data_array);
     if (merged.empty()) {
         co_return; // 本帧无行情数据面内容
     }
+
+    // 投递前过滤：丢弃已无连接需要的 quotes / klines（天勤不支持软退订，
+    // 靠这里"入队前丢弃"避免无人消费的 diff 堆积）。
+    if (!filter_merged(merged)) {
+        co_return;
+    }
+
     MarketDataEvent ev{MarketDataEvent::Kind::Diff, std::move(merged), {}};
     co_await ch_.async_send(std::move(ev));
     co_return;
+}
+
+bool TqMdGateway::filter_merged(nlohmann::json& merged) const {
+    bool any = false;
+
+    if (merged.contains("quotes") && merged["quotes"].is_object()) {
+        auto& q = merged["quotes"];
+        for (auto it = q.begin(); it != q.end();) {
+            if (quote_ref_.count(it.key()) != 0) {
+                any = true;
+                ++it;
+            } else {
+                it = q.erase(it);
+            }
+        }
+        if (q.empty()) {
+            merged.erase("quotes");
+        }
+    }
+
+    if (merged.contains("klines") && merged["klines"].is_object()) {
+        auto& k = merged["klines"];
+        for (auto it = k.begin(); it != k.end();) {
+            const std::string symbol = it.key();
+            if (!it.value().is_object()) {
+                it = k.erase(it);
+                continue;
+            }
+            // 对每个 duration 依据 (symbol,duration)->chart_id 反查 chart_ref_。
+            for (auto dit = it.value().begin(); dit != it.value().end();) {
+                int64_t dur = 0;
+                try {
+                    dur = std::stoll(dit.key());
+                } catch (...) {
+                    dit = it.value().erase(dit);
+                    continue;
+                }
+                auto kit = kline_key_to_chart_.find(kline_key(symbol, dur));
+                bool needed =
+                    (kit != kline_key_to_chart_.end() && chart_ref_.count(kit->second) != 0);
+                if (needed) {
+                    any = true;
+                    ++dit;
+                } else {
+                    dit = it.value().erase(dit);
+                }
+            }
+            if (it.value().empty()) {
+                it = k.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        if (k.empty()) {
+            merged.erase("klines");
+        }
+    }
+
+    return any;
 }
 
 } // namespace tqsdk

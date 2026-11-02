@@ -48,6 +48,21 @@ public:
         co_return;
     }
 
+    // 释放某条 IPC 连接（node）持有的订阅。与 subscribe 对称：
+    //   - symbols : 该连接订阅过的合约；
+    //   - klines  : 该连接订阅过的 K 线序列 (symbol, duration_ns)。
+    // 网关按引用计数处理：仅当某 symbol / K 线不再被任何连接需要时才真正停止推送。
+    // 注意：天勤行情协议不支持"软退订"，本网关收到 release 后只是"本地不再认为需要"，
+    //      从而在投递前丢弃对应 diff 并可能停止 peek；不会向服务器发退订指令。
+    // 默认空实现：无状态/多路独立订阅的网关无需覆写。
+    virtual asio::awaitable<void>
+    release(const std::vector<std::string>&                     symbols,
+            const std::vector<std::pair<std::string, int64_t>>& klines) {
+        (void)symbols;
+        (void)klines;
+        co_return;
+    }
+
     // 网关内部将收到的行情 diff 推入此通道；TqApi 的后台 md_loop 从此消费。
     virtual Channel<MarketDataEvent>& output() = 0;
 };

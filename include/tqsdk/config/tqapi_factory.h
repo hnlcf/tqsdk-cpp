@@ -20,11 +20,14 @@ enum class TdKind {
     None,   ///< 不接交易
     Sim,    ///< 本地撮合模拟器
     Remote, ///< 通过 IPC 代理到 gw 进程
-    Mock,    ///< 脚本化 mock（测试用）
+    Mock,   ///< 脚本化 mock（测试用）
 };
 
 /// IPC 传输方式。
-enum class IpcTransport { Uds, Tcp };
+enum class IpcTransport {
+    Uds,
+    Tcp
+};
 
 /// TqApi 配置（对应一份 TOML 文件）。
 ///
@@ -38,6 +41,11 @@ struct TqApiConfig {
         std::chrono::milliseconds handshake_timeout{std::chrono::seconds(5)};
         std::chrono::milliseconds heartbeat_interval{std::chrono::seconds(5)};
         std::chrono::milliseconds heartbeat_timeout{std::chrono::seconds(15)};
+        /// 本端在握手 Hello 中声明的角色。连接 gw（作为数据消费端）时用 Node；
+        /// 策略端连接 node.serve 时用 Gateway。两端角色必须不同（否则握手被拒）。
+        ipc::IpcRole role = ipc::IpcRole::Gateway;
+        /// 本端实例名（Hello.name，仅日志/辨识）。
+        std::string local_name = "tqsdk";
     } ipc;
 
     struct Md {
@@ -87,7 +95,71 @@ TqApiConfig parse_tqapi_config(std::string_view toml_text);
 /// 由 RemoteMdGateway / RemoteTdGateway 通过 shared_ptr<IpcClient> 共享持有。
 ///
 /// 失败（建连/握手超时、文件缺失等）抛异常。
-asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context& ctx,
-                                                   const TqApiConfig& cfg);
+asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context& ctx, const TqApiConfig& cfg);
+
+// ============================================================================
+// 两进程（tqsdk-gw / tqsdk-node）的配置
+// ============================================================================
+
+/// tqsdk-gw（接入进程）配置。
+///
+/// gw 进程监听一个 UDS/TCP 端点，等待 node 连接；连接上来后，用**真实网关**
+/// （md/td）为其提供数据与交易能力。真正接哪个网关由 [md].kind/[td].kind 决定。
+struct GwConfig {
+    struct Listen {
+        IpcTransport transport = IpcTransport::Uds;
+        std::string  socket    = "/tmp/tqsdk-gw.sock"; // transport==Uds
+        std::string  tcp_host  = "127.0.0.1";
+        uint16_t     tcp_port  = 0;
+    } listen;
+
+    ipc::FrameEncoding        encoding = ipc::FrameEncoding::Json;
+    std::chrono::milliseconds handshake_timeout{std::chrono::seconds(5)};
+    std::chrono::milliseconds heartbeat_interval{std::chrono::seconds(5)};
+    std::chrono::milliseconds heartbeat_timeout{std::chrono::seconds(15)};
+    std::string               local_name = "tqsdk-gw";
+
+    // 真实网关选择（复用 TqApiConfig 的 Md/Td 段语义，但只允许直连种类）。
+    TqApiConfig::Md md;
+    TqApiConfig::Td td;
+
+    /// SimTdGateway 的合约规格种子（[td.specs."SYMBOL"]）。仅在 td.kind == Sim 时使用。
+    /// 每个条目对应一次 set_contract_spec。
+    struct SpecSeed {
+        std::string symbol;
+        double      volume_multiple    = 1.0;
+        double      price_tick         = 0.0;
+        double      margin_rate        = 0.1;
+        double      commission_rate    = 0.0;
+        double      commission_per_lot = 0.0;
+    };
+    std::vector<SpecSeed> specs;
+
+    /// SimTdGateway 的初始撮合价（[td.last_prices]）。用于让市价单/限价单在启动即有
+    /// 可撮合价格；对应 on_tick(symbol, price)。
+    std::map<std::string, double> last_prices;
+};
+
+/// tqsdk-node（数据服务进程）配置。
+///
+/// node 从 gw 拉数据（作为 IpcRole::Node 连接 gw 端点），在进程内合并为权威截面，
+/// 再通过 HTTP serve 层对外暴露。gw 连接参数复用 TqApiConfig（md/td kind 应设为
+/// Remote，指向 gw 的监听端点）。
+struct NodeConfig {
+    TqApiConfig               upstream; ///< 到 gw 的连接（md/td.kind = Remote）
+    std::string               serve_bind = "127.0.0.1";
+    uint16_t                  serve_port = 8080;
+    std::vector<InstrumentId> symbols; ///< 启动即预订阅的合约（便于直接 curl 到数据）
+};
+
+/// 解析 gw 配置（TOML 文本）。
+GwConfig parse_gw_config(std::string_view toml_text);
+
+/// 解析 node 配置（TOML 文本）。
+NodeConfig parse_node_config(std::string_view toml_text);
+
+/// 从文件加载。
+GwConfig   load_gw_config(const std::string& path);
+NodeConfig load_node_config(const std::string& path);
 
 } // namespace tqsdk

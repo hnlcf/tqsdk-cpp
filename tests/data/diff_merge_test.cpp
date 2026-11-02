@@ -204,13 +204,13 @@ TEST(DiffMerge, KlineUpdateAppend) {
     DiffMergeEngine eng(dm);
 
     auto one = [](int64_t dt, double c, double h) {
-        return json::parse(std::string(R"({"klines":{"X":{"60000000000":[{"datetime":)") +
+        return json::parse(std::string(R"({"klines":{"X":{"180000000000":[{"datetime":)") +
                            std::to_string(dt) + R"(,"open":3800,"high":)" + std::to_string(h) +
                            R"(,"low":3790,"close":)" + std::to_string(c) + R"(}]}}})");
     };
 
     eng.apply(one(192837300000000, 3805, 3810));
-    auto* k = dm.klines.find("X", 60000000000LL);
+    auto* k = dm.klines.find("X", 180000000000LL);
     ASSERT_NE(k, nullptr);
     EXPECT_EQ(k->bars.size(), 1u);
     EXPECT_EQ(k->bars[0].close, 3805);

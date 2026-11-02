@@ -110,16 +110,16 @@ TEST(TqMdProtocol, NonArrayInputYieldsEmpty) {
 // 天勤 K 线形态 {sym:{dur:{data:{id:bar}}}} -> 引擎数组形态 {sym:{dur:[bar...]}}
 TEST(TqMdProtocol, KlineDataDictToArray) {
     json data = json::parse(R"([
-      {"klines": {"SHFE.rb2610": {"60000000000": {"data": {
+      {"klines": {"SHFE.rb2610": {"180000000000": {"data": {
           "82630": {"datetime": 1792046400000000000, "open": 3005.0, "high": 3005.0,
                     "low": 3005.0, "close": 3005.0, "volume": 0, "open_oi": 4050, "close_oi": 4050},
-          "82631": {"datetime": 1792046460000000000, "open": 3006.0, "high": 3007.0,
+          "82631": {"datetime": 17920464180000000000, "open": 3006.0, "high": 3007.0,
                     "low": 3005.0, "close": 3006.5, "volume": 10, "open_oi": 4050, "close_oi": 4055}
       }}}}}
     ])");
     json out  = normalize_rtn_data(data);
     ASSERT_TRUE(out.contains("klines"));
-    const auto& arr = out["klines"]["SHFE.rb2610"]["60000000000"];
+    const auto& arr = out["klines"]["SHFE.rb2610"]["180000000000"];
     ASSERT_TRUE(arr.is_array());
     ASSERT_EQ(arr.size(), 2u);
     // 按 id 数值升序
@@ -130,14 +130,14 @@ TEST(TqMdProtocol, KlineDataDictToArray) {
 // bar_id 字典序陷阱： "100" 数值上大于 "99"，必须按数值排序而非字典序
 TEST(TqMdProtocol, KlineBarIdNumericOrder) {
     json        data = json::parse(R"([
-      {"klines": {"X": {"60000000000": {"data": {
+      {"klines": {"X": {"180000000000": {"data": {
           "100": {"datetime": 3, "close": 3.0},
           "99":  {"datetime": 2, "close": 2.0},
           "101": {"datetime": 4, "close": 4.0}
       }}}}}
     ])");
     json        out  = normalize_rtn_data(data);
-    const auto& arr  = out["klines"]["X"]["60000000000"];
+    const auto& arr  = out["klines"]["X"]["180000000000"];
     ASSERT_EQ(arr.size(), 3u);
     EXPECT_EQ(arr[0]["datetime"].get<int>(), 2); // 99
     EXPECT_EQ(arr[1]["datetime"].get<int>(), 3); // 100
@@ -147,7 +147,7 @@ TEST(TqMdProtocol, KlineBarIdNumericOrder) {
 // 纯元信息帧（无 "data"）被忽略，不产生 klines
 TEST(TqMdProtocol, KlineMetaOnlyIgnored) {
     json data = json::parse(R"([
-      {"klines": {"X": {"60000000000": {"last_id": 82649, "market_time_length": 1922}}}}
+      {"klines": {"X": {"180000000000": {"last_id": 82649, "market_time_length": 1922}}}}
     ])");
     json out  = normalize_rtn_data(data);
     EXPECT_FALSE(out.contains("klines"));
@@ -158,11 +158,11 @@ TEST(TqMdProtocol, KlineMetaOnlyIgnored) {
 TEST(TqMdProtocol, QuotesAndKlinesCoexist) {
     json data = json::parse(R"([
       {"quotes": {"X": {"last_price": 100.0, "amount": 9.0}}},
-      {"klines": {"X": {"60000000000": {"data": {"1": {"datetime": 100, "close": 99.0}}}}}}
+      {"klines": {"X": {"180000000000": {"data": {"1": {"datetime": 100, "close": 99.0}}}}}}
     ])");
     json out  = normalize_rtn_data(data);
     ASSERT_TRUE(out.contains("quotes"));
     ASSERT_TRUE(out.contains("klines"));
     EXPECT_EQ(out["quotes"]["X"]["turnover"].get<double>(), 9.0);
-    EXPECT_EQ(out["klines"]["X"]["60000000000"][0]["close"].get<double>(), 99.0);
+    EXPECT_EQ(out["klines"]["X"]["180000000000"][0]["close"].get<double>(), 99.0);
 }

@@ -112,7 +112,7 @@ TEST(MockE2EEdges, KlineUpdate) {
 
     f.spawn([&]() -> asio::awaitable<void> {
         got_ok  = co_await f.api->wait_update();
-        auto* k = f.api->get_kline("SHFE.rb2610", 60000000000LL);
+        auto* k = f.api->get_kline("SHFE.rb2610", 180000000000LL);
         if (k) {
             nbars    = k->bars.size();
             close    = k->bars.empty() ? -1 : k->bars.back().close;
@@ -122,7 +122,7 @@ TEST(MockE2EEdges, KlineUpdate) {
     });
 
     f.pump(20);
-    f.md->inject(json::parse(R"({"klines":{"SHFE.rb2610":{"60000000000":
+    f.md->inject(json::parse(R"({"klines":{"SHFE.rb2610":{"180000000000":
         [{"datetime":192837300000000,"open":3800,"high":3810,"low":3790,"close":3805}]}}})"));
     f.finish_and_check();
 
@@ -271,14 +271,14 @@ TEST(MockE2EEdges, GetKlineSerialCreatesAndReuses) {
 
     f.spawn([&]() -> asio::awaitable<void> {
         // 创建即返回非空流，重复调用复用同一流。
-        first  = f.api->get_kline_serial("SHFE.rb2610", 60000000000LL, 20);
-        second = f.api->get_kline_serial("SHFE.rb2610", 60000000000LL, 20);
+        first  = f.api->get_kline_serial("SHFE.rb2610", 180000000000LL, 20);
+        second = f.api->get_kline_serial("SHFE.rb2610", 180000000000LL, 20);
         if (first) {
             cap = first->capacity;
         }
         // 等注入的 klines 合并后读到 bars。
         co_await f.api->wait_update();
-        auto* k = f.api->get_kline("SHFE.rb2610", 60000000000LL);
+        auto* k = f.api->get_kline("SHFE.rb2610", 180000000000LL);
         if (k) {
             nbars = k->bars.size();
         }
@@ -286,7 +286,7 @@ TEST(MockE2EEdges, GetKlineSerialCreatesAndReuses) {
     });
 
     f.pump(20);
-    f.md->inject(json::parse(R"({"klines":{"SHFE.rb2610":{"60000000000":
+    f.md->inject(json::parse(R"({"klines":{"SHFE.rb2610":{"180000000000":
         [{"datetime":192837300000000,"open":3800,"high":3810,"low":3790,"close":3805}]}}})"));
     f.finish_and_check();
 

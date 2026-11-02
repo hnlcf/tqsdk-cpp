@@ -48,7 +48,14 @@ public:
     asio::awaitable<void>
     subscribe_kline(const std::string& symbol, int64_t duration_ns, int view_width) override;
 
+    asio::awaitable<void>
+    release(const std::vector<std::string>&                     symbols,
+            const std::vector<std::pair<std::string, int64_t>>& klines) override;
+
     Channel<MarketDataEvent>& output() override { return ch_; }
+
+    /// output() 通道容量上界（事件条数）。超过后 async_send 阻塞，形成背压。
+    static constexpr std::size_t kOutputCapacity = 8192;
 
 private:
     // 一条 K 线订阅（用于连接就绪 / 重连后补发 set_chart）。
@@ -73,6 +80,27 @@ private:
 
     // 把一条 rtn_data 的 data[] 翻译并作为 Diff 投递；返回投递是否成功（未关闭）。
     asio::awaitable<void> deliver_rtn_data(const nlohmann::json& data_array);
+
+    // ---- 订阅引用计数 / 投递前过滤 / peek 闸门 ----
+    // 说明：天勤不支持软退订，多 node 共享同一 gateway。用引用计数记录每个
+    // symbol / chart 尚被多少连接需要；投递前按 ref 过滤丢弃无人需要的 diff；
+    // 当无任何订阅时停止 peek（不再向服务器拉取），从而避免"无消费者仍持续入队"。
+
+    // (symbol, duration_ns) 组合键，与 subscribe_kline 使用的 key 一致。
+    static std::string kline_key(const std::string& symbol, int64_t duration_ns);
+
+    // 是否有任何连接订阅了行情（quote 或 kline）。
+    bool has_any_subscription() const noexcept;
+
+    // 唤醒因"无订阅"而挂起的 peek 循环（订阅新增时调用）。
+    void wake_peek() noexcept;
+
+    // 以当前 pending_subs_（= ref>0 的合约集合）重发一次全量 subscribe_quote。
+    asio::awaitable<void> send_subscribe_quote();
+
+    // 过滤一条已 normalize 的 diff：丢弃无 ref 的 quotes 与 klines。
+    // 返回过滤后是否仍有内容。
+    bool filter_merged(nlohmann::json& merged) const;
 
     asio::any_io_executor    ex_;
     Channel<MarketDataEvent> ch_;
@@ -110,6 +138,15 @@ private:
 
     // 串行化所有 ws 写操作（Beast 不允许并发 async_write）。
     AsyncMutex write_mutex_;
+
+    // 订阅引用计数：symbol -> 需要它的连接数；chart_id -> 需要它的连接数。
+    // 仅当某 symbol/chart ref 归零时才从 pending_* 移除（本地"退订"）。
+    std::map<std::string, int> quote_ref_;
+    std::map<std::string, int> chart_ref_;
+
+    // peek 闸门：无任何订阅时 read_loop 在此定时器上挂起（expires_at(max)），
+    // 订阅新增时 cancel() 唤醒，避免"空转 peek"。仅在 read_loop 所在 io 线程访问。
+    asio::steady_timer peek_wakeup_;
 };
 
 } // namespace tqsdk

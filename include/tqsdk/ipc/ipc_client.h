@@ -92,6 +92,10 @@ private:
 
     // rid -> 挂起中的命令等待者
     std::unordered_map<OrderId, AckWaiter*> pending_acks_;
+    // 保护 pending_acks_：命令在 send 前登记、读循环/stop 在外部派发，均加锁。
+    // 单 io 线程下并非数据竞争必需，但 "先登记后发送" 的时序正确性依赖它，
+    // 且能避免将来多线程执行器下出错。
+    std::mutex ack_mutex_;
 
     bool started_{false};
     bool stopped_{false};

@@ -202,7 +202,7 @@ tqsdk::setup_logging(opts);
 
 ```bash
 ./build/tqsdk_demo                          # 默认 SHFE.rb2610，60s K 线
-./build/tqsdk_demo SHFE.cu2611 600000000000 # 自定义合约 + 周期(纳秒)
+./build/tqsdk_demo SHFE.cu2611 180000000000 # 自定义合约 + 周期(纳秒)
 ```
 
 核心 API 语义（对齐 TqSdk）：
@@ -245,3 +245,94 @@ TQSDK_RUN_NETWORK=1 ./build/tqsdk_tests --gtest_filter='TqMdNetwork.*'
 - `TqMdNetwork.KlineSerialReceivesBars`：`get_kline_serial` 订阅，校验收到 bars。
 
 建议在交易日运行，非交易时段服务器仅回历史 K 线、盘口可能不刷新。
+
+## 两进程模式（tqsdk-gw + tqsdk-node）与 IPC / 服务层
+
+除"进程内直连"外，项目支持把**接入**与**数据服务**拆成两个进程，用 IPC 连接：
+
+```text
+tqsdk-gw（接入进程）                         tqsdk-node（数据服务进程）
+  真实网关(TqMd/SimTd)                         IpcClient -> Remote{Md,Td}Gateway
+  GatewayIpcServer（桥接上/下行）              TqApi -> DiffMergeEngine -> DataManager
+  IpcSession(Gateway 角色)  <=== UDS/TCP ===>  IpcSession(Node 角色)
+                                               HttpServer（REST serve 层）
+```
+
+- **单一权威数据源**：只有 node 合并并持有内存截面；gw 只做接入与协议翻译。
+- **同一接口两种实现**：`RemoteMdGateway`/`RemoteTdGateway` 与 `TqMdGateway`/`SimTdGateway`
+  实现同一套网关接口，`TqApi` 无感知。
+- **多 node 共享一个 gw 网关**：行情网关用**引用计数退订 + 投递前过滤 + peek 闸门**，保证 node 断联后
+  不再产生无人消费的行情入队（详见 `docs/MODULES.md` §3.5）。
+
+### 运行
+
+```bash
+# 终端 1：接入进程（监听 /tmp/tqsdk-gw.sock，内置 SimTd + 天勤行情，按 config/gw.toml）
+./build/tqsdk-gw -c config/gw.toml
+# 终端 2：数据服务进程（连 gw，合并截面，暴露 HTTP :8080）
+./build/tqsdk-node -c config/node.toml
+# 拉数据 / 下单
+curl -s localhost:8080/quote/SHFE.rb2610 | jq
+curl -s localhost:8080/kline/SHFE.rb2610/60000000000 | jq
+curl -s -XPOST localhost:8080/order -d '{"instrument_id":"SHFE.rb2610","direction":0,"offset":0,"volume":1,"price_type":1}'
+```
+
+- 两个进程均响应 SIGINT/SIGTERM 优雅退出（关闭网关/连接、排空 io、释放订阅）。
+- `scripts/smoke_two_process.sh` 提供一键冒烟。
+
+### IPC 帧协议（跨语言契约，勿改）
+
+```text
+[4B 大端 length][1B type][1B encoding][payload]
+length = 2 + payload.size()          # 含 type+encoding
+```
+
+- 消息体先序列化为 `nlohmann::json` DOM，再由 `codec`（JSON / MessagePack）转字节，
+  帧头 `encoding` 字节选择编解码器 —— 消息体不耦合具体线格式。
+- 帧类型：Hello/HelloAck/Heartbeat/HeartbeatAck/Goodbye/Subscribe/SubscribeAck/
+  MarketDataPush/TradePush/Command/CommandAck/GatewayEvent。
+
+## 模块文档
+
+逐模块的**目标 / 边界 / 关键约定 / 生命周期**见 [`docs/MODULES.md`](./MODULES.md)；
+两进程拆分、阶段路线、性能与风险见 [`docs/ROADMAP.md`](./ROADMAP.md)。
+
+### 源码地图
+
+```text
+include/tqsdk/
+  tqapi.h                   门面：启动网关 / 驱动 loop / 合并 / 查询下单
+  types.h msg.h             公共类型 / 天勤 aid 驱动消息
+  channel/channel.h         进程内异步通道（有界/无界/close）
+  data/                      DiffMergeEngine / DataManager / EntityStore / field_table
+  domain/                    Quote/Order/Trade/Position/Account/Kline/Sentinel + 枚举
+  gateway/
+    market_data_gateway.h    行情网关抽象（subscribe/subscribe_kline/release/output）
+    trading_gateway.h        交易网关抽象（insert_order/cancel_order/event_output）
+    tq/tq_md_gateway.h       天勤行情（WebSocket/TLS，订阅引用计数 + peek 闸门）
+    sim/sim_td_gateway.h     本地撮合模拟器
+    mock/*                   脚本化测试网关
+  ipc/
+    frame.h                 帧格式 + FrameType（跨语言契约）
+    ipc_channle.h           IIpcChannel 抽象 / ReceivedFrame
+    stream_channel.h        CRTP 帧编解码基类（UDS/TCP 共用）
+    uds_channel.h tcp_channel.h
+    codec.h                 ICodec：JSON/MessagePack 抽象
+    protocol.h              各 FrameType 消息体 schema + encode/decode 辅助
+    ipc_session.h           会话：握手 / 心跳 / 看门狗 / 帧路由
+    ipc_client.h            帧分发 + 命令 rid 关联（node 侧）
+    gateway_server.h        gw 侧桥接（真实网关 <-> IPC）
+    remote_md_gateway.h     远端行情代理（node 侧）
+    remote_td_gateway.h     远端交易代理（node 侧）
+  serve/
+    router.h                类型化路由（axum 风格）
+    http_server.h           REST 服务（node serve 层）
+  config/tqapi_factory.h    配置解析 + make_tqapi + 两进程配置
+  util/                     spawn_logged / async_mutex / serde / log
+src/                        对应实现
+apps/                       gw_main.cpp / node_main.cpp
+config/                     gw.toml / node.toml
+tests/                      ~190 用例（channel/data/gateway/ipc/serve/e2e/config）
+examples/demo.cpp           实时行情示例
+scripts/                    两进程冒烟 / 协议探测
+```

@@ -133,6 +133,13 @@ asio::awaitable<void> Channel<T>::async_send(T item) {
 template <typename T>
 asio::awaitable<std::optional<T>> Channel<T>::async_receive() {
     SPDLOG_TRACE("Channel::async_receive: size: {}, closed: {}", queue_.size(), closed_);
+
+    // 捕获当前协程的取消状态：当本操作被外部（如 awaitable_operators 的 race、
+    // 或上游取消）取消时，timer 的 async_wait 会以 operation_aborted 返回。
+    // 我们据 cancellation_state 区分"被主动唤醒(wake_one)"与"被取消"，前者继续
+    // 重试，后者必须向上抛出以终止本协程——否则取消永远无法让接收方退出。
+    auto cs = co_await asio::this_coro::cancellation_state;
+
     while (queue_.empty() && !closed_) {
         Waiter w(co_await asio::this_coro::executor);
         recv_waiters_.push_back(&w);
@@ -145,6 +152,11 @@ asio::awaitable<std::optional<T>> Channel<T>::async_receive() {
         } catch (const boost::system::system_error& e) {
             if (e.code() != asio::error::operation_aborted) {
                 SPDLOG_ERROR("Channel::async_receive: unexpected error: {}", e.what());
+                throw;
+            }
+            // 区分取消 vs 普通唤醒
+            if (cs.cancelled() != asio::cancellation_type::none) {
+                SPDLOG_DEBUG("Channel::async_receive: cancelled");
                 throw;
             }
             SPDLOG_DEBUG(

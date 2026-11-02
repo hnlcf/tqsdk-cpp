@@ -42,9 +42,9 @@ nlohmann::json normalize_rtn_data(const nlohmann::json& patches);
 void merge_quote_patch(nlohmann::json& out_quotes, const nlohmann::json& quote_patch);
 
 /// 单条 patch 的 K 线翻译：把天勤协议形态
-///   {"SHFE.rb2610": {"60000000000": {"data": {"<bar_id>": {bar}, ...}}}}
+///   {"SHFE.rb2610": {"180000000000": {"data": {"<bar_id>": {bar}, ...}}}}
 /// 翻译成引擎形态
-///   {"SHFE.rb2610": {"60000000000": [bar, bar, ...]}}   (数组，按 bar_id 升序)
+///   {"SHFE.rb2610": {"180000000000": [bar, bar, ...]}}   (数组，按 bar_id 升序)
 /// 结果合并进 out_klines（累积对象）。含 "data" 的 duration 覆盖写入（同 id 后写并集）；
 /// 纯元信息（last_id / market_time_length / ... 无 "data"）的 duration 忽略。
 void merge_kline_patch(nlohmann::json& out_klines, const nlohmann::json& kline_patch);

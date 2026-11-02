@@ -4,7 +4,7 @@
 // 构建：cmake -DTQSDK_BUILD_EXAMPLES=ON ...
 // 运行：
 //   ./tqsdk_demo                      # 默认 SHFE.rb2610 60s K 线
-//   ./tqsdk_demo SHFE.cu2611 600000000000   # 自定义合约与周期(ns)
+//   ./tqsdk_demo SHFE.cu2611 180000000000   # 自定义合约与周期(ns)
 //
 // 说明：
 //   - 免费行情无需登录，服务器会下发匿名 rsp_login。

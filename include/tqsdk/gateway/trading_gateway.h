@@ -27,6 +27,39 @@ struct InsertOrderReq {
     uint64_t min_volume = 0; // volume_cond == MIN 时有效
 };
 
+// JSON 序列化（供 HTTP 层 / IPC 复用）。limit_price 用"未知价=NaN"语义：
+// 编码为非有限时写 null，解码时 null/缺省 -> kUnknownDouble，避免 null->double 抛错。
+inline void to_json(nlohmann::json& j, const InsertOrderReq& r) {
+    j = nlohmann::json{
+        {"instrument_id", r.instrument_id},
+        {"exchange_id", r.exchange_id},
+        {"direction", r.direction},
+        {"offset", r.offset},
+        {"price_type", r.price_type},
+        {"limit_price",
+         std::isfinite(r.limit_price) ? nlohmann::json(r.limit_price) : nlohmann::json(nullptr)},
+        {"time_cond", r.time_cond},
+        {"volume_cond", r.volume_cond},
+        {"volume", r.volume},
+        {"min_volume", r.min_volume}};
+}
+inline void from_json(const nlohmann::json& j, InsertOrderReq& r) {
+    r.instrument_id = j.at("instrument_id").get<InstrumentId>();
+    r.exchange_id   = j.value("exchange_id", ExchangeId{});
+    r.direction     = j.value("direction", Direction::BUY);
+    r.offset        = j.value("offset", Offset::OPEN);
+    r.price_type    = j.value("price_type", PriceType::LIMIT);
+    if (auto it = j.find("limit_price"); it != j.end() && !it->is_null()) {
+        r.limit_price = it->get<double>();
+    } else {
+        r.limit_price = kUnknownDouble;
+    }
+    r.time_cond   = j.value("time_cond", TimeCondition::GFD);
+    r.volume_cond = j.value("volume_cond", VolumeCondition::ANY);
+    r.volume      = j.value("volume", uint64_t{0});
+    r.min_volume  = j.value("min_volume", uint64_t{0});
+}
+
 /// 撤单请求。
 struct CancelOrderReq {
     OrderId     order_id;          // TqApi 本地 rid

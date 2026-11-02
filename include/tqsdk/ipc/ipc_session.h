@@ -6,6 +6,7 @@
 #include "tqsdk/ipc/frame.h"
 #include "tqsdk/ipc/ipc_channle.h"
 #include "tqsdk/ipc/protocol.h"
+#include "tqsdk/util/async_mutex.h"
 
 namespace tqsdk {
 namespace ipc {
@@ -103,6 +104,10 @@ private:
 
     // 后台协程的存活计数（用于析构前判断是否还在跑；这里仅记录，不 join）。
     std::atomic<bool> loops_running_{false};
+
+    // 串行化所有出站写：底层 socket 不允许并发 async_write（会破坏帧序列）。
+    // 心跳循环、业务 send、控制帧应答可能并发，必须经过本互斥。
+    AsyncMutex write_mutex_;
 };
 
 } // namespace ipc

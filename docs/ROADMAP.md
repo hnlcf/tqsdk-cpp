@@ -1,8 +1,29 @@
 # TqSdk-Cpp 项目规划与路线图
 
 > 目的：梳理当前进度、测试缺口、下一阶段目标、两进程拆分（接入 / 数据+服务）架构重设计、抽象调整、配置项与性能优化，形成清晰可执行路线。供评审。
+>
+> **模块级参考（目标/边界/约定）见 [`docs/MODULES.md`](./MODULES.md)。**
 
 ---
+
+## 进度更新（相对下方原始规划）
+
+下方各章节是最初的规划文本，部分内容**已经落地**。截至当前，阶段 5（IPC 协议端到端）与阶段 6 的
+相当一部分、阶段 7 的基础 REST 服务已完成：
+
+- ✅ **阶段 5 IPC 协议端到端**：`ipc/stream_channel`（UDS/TCP 共用帧编解码）、`ipc/codec`（JSON/MessagePack 抽象）、
+  `ipc/protocol`（各 FrameType body schema）、`ipc/ipc_session`（握手/心跳/看门狗）、`ipc/ipc_client`（帧分发 +
+  rid 关联）、`ipc/gateway_server`（gw 侧桥接）、`ipc/remote_{md,td}_gateway`（node 侧代理）。含完整单测与 e2e。
+- ✅ **阶段 6 两进程骨架**：`apps/gw_main.cpp`(tqsdk-gw) / `apps/node_main.cpp`(tqsdk-node)；`config/tqapi_factory`
+  统一配置与 `make_tqapi`。多 node 共享 gw 网关 + 引用计数退订 + peek 闸门（见 MODULES §3.5）。
+- ✅ **阶段 7 基础 REST**：`serve/router`（类型化路由）、`serve/http_server`（quote/kline/account/orders/trades/
+  positions/下单/撤单）。
+- ⬜ 未完成：CTP（阶段4）、seq/gap 检测与断线补发（4.6）、共享内存快通道、多线程/strand、WS 推送、soak。
+
+> 下方 4~10 章保留为**设计意图与原始规划**，与已实现代码若有出入，以 `docs/MODULES.md` 为准。
+
+---
+
 
 ## 目录
 

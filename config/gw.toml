@@ -1,0 +1,48 @@
+# tqsdk-gw 接入进程示例配置
+#
+# gw 监听一个 IPC 端点等待 node 连接；连上后以真实网关为其提供行情/交易。
+# 本示例使用 sim 交易网关（无需外部网络/账号），并灌入 SHFE.rb2610 的规格与
+# 初始撮合价，便于 node 侧直接下单并成交（curl 演示）。
+
+[listen]
+# transport = "uds"
+# socket = "/tmp/tqsdk-gw.sock"
+
+transport = "tcp"
+tcp_host = "127.0.0.1"
+tcp_port = 4321
+
+[ipc]
+encoding = "json"
+handshake_timeout_ms = 5000
+heartbeat_interval_ms = 5000
+heartbeat_timeout_ms = 15000
+local_name = "tqsdk-gw"
+
+# ---- 行情网关 ----
+# kind = "tq"   -> 天勤免费行情 WebSocket（需要外网）
+# kind = "none" -> 不接行情
+[md]
+# kind = "none"
+# 如需真实行情，取消下面注释：
+kind = "tq"
+host = "free-openmd.shinnytech.com"
+port = "443"
+path = "/t/md/front/mobile"
+
+# ---- 交易网关 ----
+[td]
+kind = "sim"
+initial_balance = 1000000.0
+
+# SimTdGateway 合约规格种子
+[td.specs."SHFE.rb2610"]
+volume_multiple = 10.0   # 每点 10 元
+price_tick = 1.0
+margin_rate = 0.1        # 10% 保证金
+commission_rate = 0.0
+commission_per_lot = 2.0 # 每手 2 元
+
+# SimTdGateway 初始撮合价（市价单/限价单据此撮合）
+[td.last_prices]
+"SHFE.rb2610" = 3800.0

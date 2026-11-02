@@ -36,6 +36,8 @@ add_library(tqsdk_core
     src/ipc/ipc_client.cpp
     src/ipc/remote_md_gateway.cpp
     src/ipc/remote_td_gateway.cpp
+    src/ipc/gateway_server.cpp
+    src/serve/http_server.cpp
     src/config/tqapi_factory.cpp
     src/data/diff_merge_engine.cpp
     src/gateway/sim/sim_td_gateway.cpp
@@ -124,6 +126,17 @@ if(TQSDK_ENABLE_CTP)
     )
 endif()
 
+# ---------- 两进程：tqsdk-gw / tqsdk-node ----------
+option(TQSDK_BUILD_APPS "Build tqsdk-gw and tqsdk-node executables" ON)
+
+if(TQSDK_BUILD_APPS)
+    add_executable(tqsdk-gw apps/gw_main.cpp)
+    target_link_libraries(tqsdk-gw PRIVATE tqsdk_core)
+
+    add_executable(tqsdk-node apps/node_main.cpp)
+    target_link_libraries(tqsdk-node PRIVATE tqsdk_core)
+endif()
+
 # ---------- 示例可执行文件 ----------
 option(TQSDK_BUILD_EXAMPLES "Build example executables" OFF)
 
@@ -157,6 +170,7 @@ if(TQSDK_BUILD_TESTS)
         tests/ipc/protocol_e2e_test.cpp
         tests/ipc/ipc_session_test.cpp
         tests/ipc/ipc_proxy_test.cpp
+        tests/ipc/gateway_server_test.cpp
         tests/config/tqapi_factory_test.cpp
         tests/util/serde_test.cpp
         tests/util/spawn_logged_test.cpp

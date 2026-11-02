@@ -1,0 +1,87 @@
+#pragma once
+
+#include "tqsdk/pch.h"
+
+#include "tqsdk/serve/router.h"
+#include "tqsdk/tqapi.h"
+
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/version.hpp>
+
+namespace tqsdk {
+namespace serve {
+
+namespace beast = boost::beast;
+namespace http  = boost::beast::http;
+namespace net   = boost::asio;
+using tcp       = boost::asio::ip::tcp;
+
+/// HttpServer —— 对外暴露的只读 + 下单 REST 接口（node 进程 serve 层）。
+///
+/// 这是"两进程架构"里 node 进程对外的服务边界：策略/前端通过 HTTP 拉取
+/// node 内存截面（core 层 DataManager），或提交下单/撤单。serve 层直接读
+/// core（同一进程内、同一 io_context 线程），**不引入额外 IPC**。
+///
+/// 路由（全部返回 JSON，UTF-8）：
+///   GET    /healthz                       -> {"ok":true}
+///   GET    /quote/{symbol}                -> Quote 快照（不存在则空占位并触发订阅）
+///   GET    /kline/{symbol}/{duration_ns}  -> {"symbol","duration_ns","bars":[...]}
+///   GET    /account                       -> Account 快照
+///   GET    /orders                        -> {"orders":{oid: Order,...}}
+///   GET    /trades                        -> {"trades":{tid: Trade,...}}
+///   GET    /positions                     -> {"positions":{symbol: Position,...}}
+///   POST   /order   (body: InsertOrderReq JSON)  -> {"success","order_id","error"}
+///   DELETE /order/{id}                    -> {"success","order_id","error"}
+///
+/// 关键约定与易忽视细节：
+///   - **单 io_context 线程**：处理协程与 TqApi 的 md_loop/td_loop 同线程。
+///     处理函数在构造响应 JSON 时对 data() 做**同步**读取并立即拷贝成 JSON，
+///     不在 co_await 之间持有 data() 内部引用（下单会 co_await，故读与写分离）。
+///   - TqApi::insert_order 会 co_await 网关 ack；这期间 io_context 继续处理
+///     其它请求与行情，安全。
+///   - 订阅语义：GET /quote 首次访问会触发一次订阅（get_quote 内部保证）。
+///     要"curl 即有数据"，建议 node 启动时按配置预订阅（见 node 配置 symbols）。
+///   - 请求体上限 kMaxBody（默认 1MB），防止恶意大包。
+///   - 所有错误以 4xx/5xx + {"error": "..."} 返回，不抛到顶层。
+class HttpServer {
+public:
+    /// api 与 executor 均由调用方持有，生命周期需覆盖本对象。
+    HttpServer(TqApi* api, asio::any_io_executor ex);
+
+    /// 绑定并监听 addr:port；开始 accept 循环（后台协程）。失败抛 system_error。
+    /// 需在 io_context.run() 之前调用。
+    void listen(const std::string& address, uint16_t port);
+
+    /// 停止监听并关闭 acceptor（幂等）。
+    void stop() noexcept;
+
+    /// 实际监听的端口（port=0 时由系统分配，可通过此值读取）。listen 后有效。
+    uint16_t port() const noexcept { return port_; }
+
+private:
+    asio::awaitable<void> accept_loop();
+    asio::awaitable<void> session(tcp::socket sock);
+
+    /// 处理单个已解析请求，返回响应。内部委托给 router_ 做路由分发。
+    asio::awaitable<http::response<http::string_body>> handle(http::request<http::string_body> req);
+
+    /// 便捷：构造 JSON 响应。
+    http::response<http::string_body>
+    make_json_response(http::status code, const nlohmann::json& body, unsigned version);
+
+    /// 注册全部路由（构造时调用一次）。
+    void setup_routes();
+
+    TqApi*                api_;
+    asio::any_io_executor ex_;
+    tcp::acceptor         acceptor_;
+    uint16_t              port_{0};
+    bool                  stopped_{false};
+    Router                router_;
+
+    static constexpr std::size_t kMaxBody = 1u << 20; // 1MB
+};
+
+} // namespace serve
+} // namespace tqsdk
