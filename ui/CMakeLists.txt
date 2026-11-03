@@ -15,6 +15,12 @@ set(TQSDK_UI_SOURCES
     src/main.cpp
     src/app/MainWindow.cpp
     src/app/MainWindow.h
+    src/net/NodeClient.cpp
+    src/net/NodeClient.h
+    src/net/Protocol.cpp
+    src/net/Protocol.h
+    src/net/HttpWsNodeClient.cpp
+    src/net/HttpWsNodeClient.h
 )
 
 qt_add_executable(tqsdk-ui ${TQSDK_UI_SOURCES})

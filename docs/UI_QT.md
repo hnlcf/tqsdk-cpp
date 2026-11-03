@@ -333,9 +333,11 @@ Qt6::WebSockets
 ### Phase 0：骨架（当前）
 
 - `ui/` 目录和最小 `QMainWindow`；
+- `NodeClient` 传输无关接口；
+- `HttpWsNodeClient` 的 HTTP/WS 基础实现；
 - CMake 子目录和 preset；
 - 文档、目录约定；
-- 不连接 node，先确认 Qt 可编译启动。
+- 页面暂不绑定数据，先确认 Qt 可编译启动。
 
 ### Phase 1：只读行情
 

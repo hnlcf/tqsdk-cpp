@@ -1,10 +1,12 @@
 #include "app/MainWindow.h"
 
+#include "net/NodeClient.h"
+
 #include <QAbstractItemView>
 #include <QDockWidget>
-#include <QHeaderView>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -28,7 +30,7 @@ QLabel* placeholder(const QString& text, QWidget* parent = nullptr) {
 }
 
 QWidget* panel(const QString& title, QWidget* content, QWidget* parent = nullptr) {
-    auto* box = new QWidget(parent);
+    auto* box    = new QWidget(parent);
     auto* layout = new QVBoxLayout(box);
     layout->setContentsMargins(8, 8, 8, 8);
     auto* heading = new QLabel(title, box);
@@ -50,10 +52,56 @@ QTableWidget* emptyTable(const QStringList& headers, QWidget* parent = nullptr) 
 
 } // namespace
 
-MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
+MainWindow::MainWindow(tqsdk::ui::NodeClient* nodeClient, QWidget* parent)
+    : QMainWindow(parent),
+      nodeClient_(nodeClient) {
     setWindowTitle(tr("TQSDK Terminal (Qt)"));
     resize(1440, 900);
     buildUi();
+
+    if (nodeClient_ != nullptr) {
+        connect(nodeClient_,
+                &tqsdk::ui::NodeClient::stateChanged,
+                this,
+                [this](tqsdk::ui::NodeClient::State state, const QString& message) {
+                    QString text;
+                    QString color;
+                    switch (state) {
+                    case tqsdk::ui::NodeClient::State::Disconnected:
+                        text  = tr("● 未连接");
+                        color = "#e7b35a";
+                        break;
+                    case tqsdk::ui::NodeClient::State::Connecting:
+                        text  = tr("● 连接中");
+                        color = "#e7b35a";
+                        break;
+                    case tqsdk::ui::NodeClient::State::Connected:
+                        text  = tr("● 已连接");
+                        color = "#43d17c";
+                        break;
+                    case tqsdk::ui::NodeClient::State::Ready:
+                        text  = tr("● 行情就绪");
+                        color = "#43d17c";
+                        break;
+                    case tqsdk::ui::NodeClient::State::Reconnecting:
+                        text  = tr("● 重连中");
+                        color = "#e7b35a";
+                        break;
+                    }
+                    if (!message.isEmpty()) {
+                        statusBar()->showMessage(message);
+                    }
+                    if (connectionLabel_ != nullptr) {
+                        connectionLabel_->setText(text);
+                        connectionLabel_->setStyleSheet(
+                            QStringLiteral("color: %1; padding: 0 10px;").arg(color));
+                    }
+                });
+        connect(nodeClient_,
+                &tqsdk::ui::NodeClient::errorOccurred,
+                this,
+                [this](const QString& error) { statusBar()->showMessage(error, 5000); });
+    }
 }
 
 void MainWindow::buildUi() {
@@ -112,11 +160,12 @@ void MainWindow::buildWorkspace() {
 
     centerTabs_ = new QTabWidget(splitter);
     centerTabs_->addTab(placeholder(tr("K 线图\nPhase 1: QPainter 自绘 K 线")), tr("交易终端"));
-    centerTabs_->addTab(placeholder(tr("期货列表\nPhase 1: QTableView + 合约目录")), tr("期货列表"));
+    centerTabs_->addTab(placeholder(tr("期货列表\nPhase 1: QTableView + 合约目录")),
+                        tr("期货列表"));
     centerTabs_->addTab(placeholder(tr("期权链 / T 型报价\nPhase 2")), tr("期权链"));
     splitter->addWidget(centerTabs_);
 
-    auto* ticket = new QWidget(splitter);
+    auto* ticket       = new QWidget(splitter);
     auto* ticketLayout = new QFormLayout(ticket);
     ticketLayout->setContentsMargins(14, 14, 14, 14);
     ticketLayout->addRow(tr("合约"), new QLabel(tr("—"), ticket));

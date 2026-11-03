@@ -41,5 +41,15 @@ cmake --build build-ui --target tqsdk-ui -j
 
 ## 当前阶段
 
-Phase 0：窗口壳和布局占位；网络、K 线自绘、期货列表、期权链和交易面板在
-Phase 1/2 接入。
+Phase 0.5：
+
+- 窗口壳和布局占位；
+- `NodeClient` 传输无关接口；
+- `HttpWsNodeClient`：HTTP 快照/下单 + WebSocket 订阅/diff；
+- 页面尚未绑定数据，K 线自绘、期货列表、期权链和交易面板在 Phase 1/2 接入。
+
+启动时指定 node：
+
+```bash
+./build-ui/bin/tqsdk-ui --node-url http://127.0.0.1:18081
+```

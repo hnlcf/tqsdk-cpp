@@ -5,6 +5,10 @@
 class QLabel;
 class QTabWidget;
 
+namespace tqsdk::ui {
+class NodeClient;
+} // namespace tqsdk::ui
+
 /// Phase 0 Qt shell.
 ///
 /// The window intentionally only owns layout/placeholders. Network, models and
@@ -14,7 +18,7 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(tqsdk::ui::NodeClient* nodeClient, QWidget* parent = nullptr);
     ~MainWindow() override = default;
 
 private:
@@ -23,6 +27,7 @@ private:
     void buildWorkspace();
     void buildBottomDock();
 
-    QLabel*     connectionLabel_ = nullptr;
-    QTabWidget* centerTabs_      = nullptr;
+    tqsdk::ui::NodeClient* nodeClient_      = nullptr;
+    QLabel*                connectionLabel_ = nullptr;
+    QTabWidget*            centerTabs_      = nullptr;
 };
