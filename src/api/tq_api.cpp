@@ -8,7 +8,7 @@ TqApi::TqApi(asio::any_io_executor              ex,
              std::unique_ptr<MarketDataGateway> md,
              std::unique_ptr<TradingGateway>    td,
              std::shared_ptr<KlineStore>        kline_store)
-    : ex_(ex),
+    : ex_(std::move(ex)),
       md_(std::move(md)),
       td_(std::move(td)),
       kline_store_(std::move(kline_store)),
@@ -19,7 +19,13 @@ TqApi::TqApi(asio::any_io_executor              ex,
                                            .count())) {}
 
 TqApi::~TqApi() {
-    close();
+    try {
+        close();
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("[TqApi] destructor close failed: {}", e.what());
+    } catch (...) {
+        SPDLOG_ERROR("[TqApi] destructor close failed: unknown exception");
+    }
 }
 
 void TqApi::start() {
@@ -179,9 +185,9 @@ void TqApi::hydrate_kline_cache(std::string_view symbol,
                              incoming.datetime,
                              [](const KlineBar& item, TimeStamp dt) { return item.datetime < dt; });
         if (pos != stream.bars.end() && pos->datetime == incoming.datetime) {
-            *pos = std::move(incoming);
+            *pos = incoming;
         } else {
-            stream.bars.insert(pos, std::move(incoming));
+            stream.bars.insert(pos, incoming);
         }
     }
     while (static_cast<int>(stream.bars.size()) > stream.capacity) {

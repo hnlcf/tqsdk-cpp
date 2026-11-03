@@ -72,12 +72,16 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
         }
         if (queue_.size() >= options_.max_queue) {
             queue_.pop_front();
-            if (++dropped_ == 1 || dropped_ % 100 == 0) {
-                SPDLOG_WARN("[WsHub] client {} slow consumer, dropped={} messages", id_, dropped_);
+            const auto dropped = ++dropped_;
+            if (dropped == 1 || dropped % 100 == 0) {
+                SPDLOG_WARN("[WsHub] client {} slow consumer, dropped={} messages", id_, dropped);
             }
         }
         queue_.push_back(std::move(msg));
-        wakeup_.cancel();
+        try {
+            wakeup_.cancel();
+        } catch (...) {
+        }
     }
 
     /// 可从任意线程调用：置 closed 并把真正的 socket close post 到客户端 strand。
@@ -85,8 +89,12 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
         if (closed_.exchange(true, std::memory_order_acq_rel)) {
             return;
         }
-        auto self = shared_from_this();
-        asio::post(client_ex_, [self]() { self->close_local(); });
+        try {
+            auto self = shared_from_this();
+            asio::post(client_ex_, [self]() { self->close_local(); });
+        } catch (...) {
+            // executor 已销毁/无效时不能再 post；socket 归属连接对象，析构时关闭。
+        }
     }
 
     /// 仅允许在 client_ex_ 上调用；幂等。
@@ -95,9 +103,15 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
         if (socket_closed_.exchange(true, std::memory_order_acq_rel)) {
             return;
         }
-        wakeup_.cancel();
+        try {
+            wakeup_.cancel();
+        } catch (...) {
+        }
         // basic_stream::close() 取消所有挂起读写，read/write 协程会以 operation_aborted 退出。
-        ws_.next_layer().close();
+        try {
+            ws_.next_layer().close();
+        } catch (...) {
+        }
     }
 
     bool closed() const noexcept { return closed_.load(std::memory_order_acquire); }
@@ -260,10 +274,12 @@ WebSocketHub::~WebSocketHub() {
 }
 
 void WebSocketHub::start() {
-    if (started_ || stopped_.load()) {
+    if (stopped_.load(std::memory_order_acquire)) {
         return;
     }
-    started_  = true;
+    if (started_.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
     auto self = shared_from_this();
     co_spawn_logged(
         ex_, [self]() -> asio::awaitable<void> { co_await self->push_loop(); }, "WsHub.push");
@@ -273,13 +289,34 @@ void WebSocketHub::stop() noexcept {
     if (stopped_.exchange(true, std::memory_order_acq_rel)) {
         return;
     }
-    stop_timer_.cancel();
-    for (auto& [id, client] : clients_) {
-        (void)id;
+    try {
+        stop_timer_.cancel();
+    } catch (...) {
+    }
+    std::vector<std::shared_ptr<Client>> clients;
+    {
+        std::lock_guard lock(clients_mu_);
+        clients.reserve(clients_.size());
+        for (auto& [id, client] : clients_) {
+            (void)id;
+            clients.push_back(client);
+        }
+    }
+    for (auto& client : clients) {
         if (client) {
             client->shutdown();
         }
     }
+}
+
+bool WebSocketHub::full() const {
+    std::lock_guard lock(clients_mu_);
+    return clients_.size() >= options_.max_clients;
+}
+
+std::size_t WebSocketHub::client_count() const {
+    std::lock_guard lock(clients_mu_);
+    return clients_.size();
 }
 
 asio::awaitable<void> WebSocketHub::accept(asio::ip::tcp::socket            socket,
@@ -307,14 +344,28 @@ asio::awaitable<void> WebSocketHub::accept(asio::ip::tcp::socket            sock
     auto client_ex = asio::make_strand(io_ex_);
     auto client =
         std::make_shared<Client>(id, std::move(ws), shared_from_this(), client_ex, ex_, options_);
-    clients_.emplace(id, client);
+    std::size_t total    = 0;
+    bool        stopping = false;
+    {
+        std::lock_guard lock(clients_mu_);
+        if (stopped_.load(std::memory_order_acquire)) {
+            stopping = true;
+        } else {
+            clients_.emplace(id, client);
+            total = clients_.size();
+        }
+    }
+    if (stopping) {
+        client->shutdown();
+        co_return;
+    }
 
     WsWelcome welcome;
     welcome.protocol              = kWsProtocolVersion;
     welcome.heartbeat_interval_ms = options_.heartbeat_interval.count();
     client->send(std::move(welcome));
     client->start();
-    SPDLOG_INFO("[WsHub] client {} connected (total={})", id, clients_.size());
+    SPDLOG_INFO("[WsHub] client {} connected (total={})", id, total);
     co_return;
 }
 
@@ -463,12 +514,18 @@ asio::awaitable<void> WebSocketHub::remove_subscriptions(std::shared_ptr<Client>
 }
 
 asio::awaitable<void> WebSocketHub::remove_client(uint64_t id) {
-    auto it = clients_.find(id);
-    if (it == clients_.end()) {
-        co_return;
+    std::shared_ptr<Client> client;
+    std::size_t             total = 0;
+    {
+        std::lock_guard lock(clients_mu_);
+        auto            it = clients_.find(id);
+        if (it == clients_.end()) {
+            co_return;
+        }
+        client = std::move(it->second);
+        clients_.erase(it);
+        total = clients_.size();
     }
-    auto client = std::move(it->second);
-    clients_.erase(it);
 
     std::vector<std::string>                     release_symbols;
     std::vector<std::pair<std::string, int64_t>> release_klines;
@@ -489,7 +546,7 @@ asio::awaitable<void> WebSocketHub::remove_client(uint64_t id) {
         }
     }
 
-    SPDLOG_INFO("[WsHub] client {} disconnected (total={})", id, clients_.size());
+    SPDLOG_INFO("[WsHub] client {} disconnected (total={})", id, total);
     if (!release_symbols.empty() || !release_klines.empty()) {
         co_await api_->release(std::move(release_symbols), std::move(release_klines));
     }
@@ -623,16 +680,26 @@ nlohmann::json WebSocketHub::filter_diff(const Client& client, const nlohmann::j
 }
 
 void WebSocketHub::broadcast(const nlohmann::json& diff) {
-    if (clients_.empty()) {
+    std::vector<std::shared_ptr<Client>> clients;
+    {
+        std::lock_guard lock(clients_mu_);
+        clients.reserve(clients_.size());
+        for (auto& [id, client] : clients_) {
+            (void)id;
+            if (client) {
+                clients.push_back(client);
+            }
+        }
+    }
+    if (clients.empty()) {
         return;
     }
     const auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                             std::chrono::system_clock::now().time_since_epoch())
                             .count();
 
-    for (auto& [id, client] : clients_) {
-        (void)id;
-        if (!client || client->closed()) {
+    for (auto& client : clients) {
+        if (client->closed()) {
             continue;
         }
         json data = filter_diff(*client, diff);

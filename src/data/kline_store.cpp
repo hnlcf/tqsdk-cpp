@@ -78,7 +78,13 @@ KlineStore::KlineStore(Config cfg)
 }
 
 KlineStore::~KlineStore() {
-    stop();
+    try {
+        stop();
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("[KlineStore] destructor stop failed: {}", e.what());
+    } catch (...) {
+        SPDLOG_ERROR("[KlineStore] destructor stop failed: unknown exception");
+    }
 }
 
 bool KlineStore::is_fresh(const SeriesMeta& meta, int64_t duration_ns) const noexcept {
@@ -139,7 +145,7 @@ KlineStore::load_recent(const std::string& symbol, int64_t duration_ns, int limi
             result.meta.last_write_ns = meta.getColumn(1).getInt64();
             result.meta.bar_count     = static_cast<uint64_t>(meta.getColumn(2).getInt64());
         } else if (!result.bars.empty()) {
-            result.meta.last_bar_ns = result.bars.back().datetime;
+            result.meta.last_bar_ns = static_cast<int64_t>(result.bars.back().datetime);
             result.meta.bar_count   = result.bars.size();
         }
     } catch (const std::exception& e) {

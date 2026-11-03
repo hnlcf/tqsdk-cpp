@@ -1,5 +1,7 @@
 #include "tqsdk/instrument/instrument_catalog.h"
 
+#include "tqsdk/util/json_value.h"
+
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/ssl.hpp>
 
@@ -14,45 +16,6 @@ namespace asio  = boost::asio;
 namespace {
 
 constexpr std::size_t kMaxListLimit = 20'000;
-
-double json_number(const nlohmann::json& j, const char* key, double fallback = 0.0) {
-    auto it = j.find(key);
-    if (it == j.end() || it->is_null()) {
-        return fallback;
-    }
-    if (it->is_number()) {
-        return it->get<double>();
-    }
-    if (it->is_string()) {
-        try {
-            return std::stod(it->get<std::string>());
-        } catch (...) {
-            return fallback;
-        }
-    }
-    return fallback;
-}
-
-int json_int(const nlohmann::json& j, const char* key, int fallback = 0) {
-    auto it = j.find(key);
-    if (it == j.end() || it->is_null()) {
-        return fallback;
-    }
-    if (it->is_number_integer()) {
-        return it->get<int>();
-    }
-    if (it->is_number()) {
-        return static_cast<int>(it->get<double>());
-    }
-    if (it->is_string()) {
-        try {
-            return std::stoi(it->get<std::string>());
-        } catch (...) {
-            return fallback;
-        }
-    }
-    return fallback;
-}
 
 std::string lower_ascii(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
@@ -81,9 +44,9 @@ UrlParts parse_url(std::string_view url) {
     } else {
         throw std::runtime_error("unsupported instrument URL: " + std::string{url});
     }
-    const auto slash = url.find('/');
+    const auto slash     = url.find('/');
     auto       host_port = url.substr(0, slash);
-    out.target = slash == std::string_view::npos ? "/" : std::string{url.substr(slash)};
+    out.target           = slash == std::string_view::npos ? "/" : std::string{url.substr(slash)};
     if (const auto colon = host_port.rfind(':'); colon != std::string_view::npos) {
         out.host = std::string{host_port.substr(0, colon)};
         out.port = std::string{host_port.substr(colon + 1)};
@@ -97,16 +60,16 @@ UrlParts parse_url(std::string_view url) {
 }
 
 std::string fetch_url(std::string_view url) {
-    const auto parsed = parse_url(url);
-    asio::io_context io;
-    asio::ip::tcp::resolver resolver(io);
-    const auto endpoints = resolver.resolve(parsed.host, parsed.port);
+    const auto                      parsed = parse_url(url);
+    asio::io_context                io;
+    asio::ip::tcp::resolver         resolver(io);
+    const auto                      endpoints = resolver.resolve(parsed.host, parsed.port);
     http::request<http::empty_body> req{http::verb::get, parsed.target, 11};
     req.set(http::field::host, parsed.host);
     req.set(http::field::user_agent, "tqsdk-node/0.1 instrument-catalog");
     req.set(http::field::accept, "application/json");
 
-    beast::flat_buffer buffer;
+    beast::flat_buffer                buffer;
     http::response<http::string_body> res;
 
     if (parsed.tls) {
@@ -146,7 +109,13 @@ InstrumentCatalog::InstrumentCatalog(Config cfg)
     : cfg_(std::move(cfg)) {}
 
 InstrumentCatalog::~InstrumentCatalog() {
-    stop();
+    try {
+        stop();
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("[Catalog] destructor stop failed: {}", e.what());
+    } catch (...) {
+        SPDLOG_ERROR("[Catalog] destructor stop failed: unknown exception");
+    }
 }
 
 std::string InstrumentCatalog::product_of(std::string_view underlying) {
@@ -224,30 +193,32 @@ bool InstrumentCatalog::load_from_file(const std::string& path) {
             continue;
         }
         Instrument i;
-        i.instrument_id = value.value("instrument_id", it.key());
+        i.instrument_id = json_value::string_or(value, "instrument_id", it.key());
         if (i.instrument_id.empty()) {
             i.instrument_id = it.key();
         }
-        i.exchange_id   = value.value("exchange_id", std::string{});
-        i.ins_id        = value.value("ins_id", std::string{});
-        i.name          = value.value("ins_name", std::string{});
-        i.class_name    = value.value("class", std::string{});
-        i.product_id    = value.value("product_id", std::string{});
-        i.product_short_name = value.value("product_short_name", i.name);
-        i.underlying_product = value.value("underlying_product", std::string{});
-        i.underlying_symbol  = value.value("underlying_symbol", std::string{});
-        i.option_class       = value.value("option_class", std::string{});
-        i.strike_price       = json_number(value, "strike_price");
-        i.last_price         = json_number(value, "last_price");
-        i.pre_volume         = json_number(value, "pre_volume");
-        i.open_interest      = json_number(value, "open_interest");
-        i.volume_multiple    = json_number(value, "volume_multiple");
-        i.price_tick         = json_number(value, "price_tick");
-        i.price_decs         = json_int(value, "price_decs");
-        i.delivery_year      = json_int(value, "delivery_year");
-        i.delivery_month     = json_int(value, "delivery_month");
-        i.expire_datetime    = json_number(value, "expire_datetime");
-        i.expired            = value.value("expired", false);
+        i.exchange_id        = json_value::string_or(value, "exchange_id", std::string{});
+        i.ins_id             = json_value::string_or(value, "ins_id", std::string{});
+        i.name               = json_value::string_or(value, "ins_name", std::string{});
+        i.class_name         = json_value::string_or(value, "class", std::string{});
+        i.product_id         = json_value::string_or(value, "product_id", std::string{});
+        i.product_short_name = json_value::string_or(value, "product_short_name", i.name);
+        i.underlying_product = json_value::string_or(value, "underlying_product", std::string{});
+        i.underlying_symbol  = json_value::string_or(value, "underlying_symbol", std::string{});
+        i.option_class       = json_value::string_or(value, "option_class", std::string{});
+        i.strike_price       = json_value::number_or(value, "strike_price");
+        i.last_price         = json_value::number_or(value, "last_price");
+        i.pre_volume         = json_value::number_or(value, "pre_volume");
+        i.open_interest      = json_value::number_or(value, "open_interest");
+        i.volume_multiple    = json_value::number_or(value, "volume_multiple");
+        i.price_tick         = json_value::number_or(value, "price_tick");
+        i.price_decs = static_cast<int>(json_value::integer_or(value, "price_decs", i.price_decs));
+        i.delivery_year =
+            static_cast<int>(json_value::integer_or(value, "delivery_year", i.delivery_year));
+        i.delivery_month =
+            static_cast<int>(json_value::integer_or(value, "delivery_month", i.delivery_month));
+        i.expire_datetime = json_value::number_or(value, "expire_datetime");
+        i.expired         = json_value::boolean_or(value, "expired", false);
         if (i.option_class.empty() && i.is_option()) {
             // 兼容部分历史 symbol 只写了 option_class；若缺失，从 ins_id 末段推断。
             if (i.ins_id.find("-P-") != std::string::npos ||
@@ -271,8 +242,8 @@ bool InstrumentCatalog::load_from_file(const std::string& path) {
 void InstrumentCatalog::swap_items(std::vector<Instrument> items, const std::string& source) {
     std::unordered_map<std::string, std::size_t> index;
     index.reserve(items.size());
-    const std::size_t total = items.size();
-    std::size_t active = 0, futures = 0, options = 0;
+    const std::size_t total  = items.size();
+    std::size_t       active = 0, futures = 0, options = 0;
     for (std::size_t i = 0; i < items.size(); ++i) {
         index[items[i].instrument_id] = i;
         if (!items[i].expired) {
@@ -306,21 +277,22 @@ void InstrumentCatalog::swap_items(std::vector<Instrument> items, const std::str
 }
 
 bool InstrumentCatalog::load_local() {
-    std::vector<std::string> candidates;
+    // 显式配置的文件存在但损坏时，不回退到 symbol/latest：避免把另一个
+    // 未知版本的目录当成当前配置，也避免覆盖仍可用的旧快照。
     if (!cfg_.file.empty()) {
-        candidates.push_back(cfg_.file);
-    }
-    candidates.push_back("symbol.json");
-    candidates.push_back("latest.json");
-    for (const auto& path : candidates) {
         std::error_code ec;
-        if (std::filesystem::exists(path, ec) && !ec) {
-            if (load_from_file(path)) {
-                return true;
-            }
+        if (std::filesystem::exists(cfg_.file, ec) && !ec) {
+            return load_from_file(cfg_.file);
         }
     }
-    SPDLOG_WARN("[Catalog] no local instrument file found (tried symbol.json/latest.json)");
+
+    for (const char* fallback : {"symbol.json", "latest.json"}) {
+        std::error_code ec;
+        if (std::filesystem::exists(fallback, ec) && !ec && load_from_file(fallback)) {
+            return true;
+        }
+    }
+    SPDLOG_WARN("[Catalog] no local instrument file found (tried {})", cfg_.file);
     return false;
 }
 
@@ -430,8 +402,7 @@ InstrumentCatalog::find(std::string_view instrument_id) const {
     return items_[it->second];
 }
 
-std::vector<InstrumentCatalog::Instrument>
-InstrumentCatalog::list(const ListFilter& filter) const {
+std::vector<InstrumentCatalog::Instrument> InstrumentCatalog::list(const ListFilter& filter) const {
     std::set<std::string> classes;
     {
         std::stringstream ss(filter.classes);
@@ -442,7 +413,7 @@ InstrumentCatalog::list(const ListFilter& filter) const {
             }
         }
     }
-    const auto query = lower_ascii(filter.query);
+    const auto              query = lower_ascii(filter.query);
     std::vector<Instrument> out;
     {
         std::shared_lock lock(mutex_);
@@ -460,7 +431,8 @@ InstrumentCatalog::list(const ListFilter& filter) const {
             if (!filter.product.empty()) {
                 const auto product =
                     i.underlying_product.empty()
-                        ? product_of(i.underlying_symbol.empty() ? i.instrument_id : i.underlying_symbol)
+                        ? product_of(i.underlying_symbol.empty() ? i.instrument_id
+                                                                 : i.underlying_symbol)
                         : i.underlying_product;
                 if (product != filter.product && i.product_id != filter.product) {
                     continue;
@@ -471,7 +443,7 @@ InstrumentCatalog::list(const ListFilter& filter) const {
             }
             if (!query.empty()) {
                 const auto haystack = lower_ascii(i.instrument_id + " " + i.name + " " +
-                                                   i.product_short_name + " " + i.ins_id);
+                                                  i.product_short_name + " " + i.ins_id);
                 if (haystack.find(query) == std::string::npos) {
                     continue;
                 }
@@ -492,7 +464,7 @@ InstrumentCatalog::list(const ListFilter& filter) const {
 
 std::vector<InstrumentCatalog::OptionProduct> InstrumentCatalog::option_products() const {
     std::map<std::string, OptionProduct> grouped;
-    std::shared_lock                    lock(mutex_);
+    std::shared_lock                     lock(mutex_);
     for (const auto& i : items_) {
         if (i.expired || !i.is_option() || i.underlying_symbol.empty()) {
             continue;
@@ -506,7 +478,8 @@ std::vector<InstrumentCatalog::OptionProduct> InstrumentCatalog::option_products
             p.product_name = i.product_short_name;
         }
         p.underlying_symbol = i.underlying_symbol;
-        if (p.expire_datetime == 0.0 || (i.expire_datetime > 0.0 && i.expire_datetime < p.expire_datetime)) {
+        if (p.expire_datetime == 0.0 ||
+            (i.expire_datetime > 0.0 && i.expire_datetime < p.expire_datetime)) {
             p.expire_datetime = i.expire_datetime;
         }
         if (i.option_class == "CALL") {
@@ -563,8 +536,7 @@ nlohmann::json InstrumentCatalog::status_json() const {
         {"loaded_at",
          loaded_at_ == std::chrono::system_clock::time_point{}
              ? 0
-             : std::chrono::duration_cast<std::chrono::seconds>(
-                   loaded_at_.time_since_epoch())
+             : std::chrono::duration_cast<std::chrono::seconds>(loaded_at_.time_since_epoch())
                    .count()},
         {"refresh_interval_sec", cfg_.refresh_interval.count()},
     };

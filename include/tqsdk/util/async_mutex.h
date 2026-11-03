@@ -4,7 +4,7 @@
 
 namespace tqsdk {
 
-using namespace boost;
+namespace asio = boost::asio;
 
 /// 极简异步互斥：单线程 io_context 下串行化对同一资源的协程访问。
 ///

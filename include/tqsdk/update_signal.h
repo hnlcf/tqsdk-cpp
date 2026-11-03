@@ -5,7 +5,7 @@
 
 namespace tqsdk {
 
-using namespace boost;
+namespace asio = boost::asio;
 
 // 单线程 io_context 下的"事件"原语：多次 notify 等价于一次（类似 condition_variable 的 notify_all）
 class UpdateSignal {
@@ -13,10 +13,13 @@ public:
     explicit UpdateSignal(asio::any_io_executor ex)
         : ex_(std::move(ex)) {}
 
-    void notify() {
+    void notify() noexcept {
         has_signal_ = true;
         if (waiter_) {
-            waiter_->cancel();
+            try {
+                waiter_->cancel();
+            } catch (...) {
+            }
             waiter_ = nullptr;
         }
     }

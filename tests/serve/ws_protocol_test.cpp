@@ -128,3 +128,10 @@ TEST(WsProtocol, RejectBadServerMessages) {
     EXPECT_THROW(parse_ws_server_message(R"({})"), WsProtocolError);
     EXPECT_THROW(parse_ws_server_message(R"({"type":"diff","seq":"x"})"), WsProtocolError);
 }
+
+TEST(WsProtocol, NumericDiscriminatorIsProtocolError) {
+    EXPECT_THROW(parse_ws_client_message(R"({"op":1})"), WsProtocolError);
+    EXPECT_THROW(parse_ws_client_message(R"({"op":true})"), WsProtocolError);
+    EXPECT_THROW(parse_ws_server_message(R"({"type":1})"), WsProtocolError);
+    EXPECT_THROW(parse_ws_server_message(R"({"type":true})"), WsProtocolError);
+}

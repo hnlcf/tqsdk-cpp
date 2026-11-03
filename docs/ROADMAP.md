@@ -116,7 +116,7 @@
 - Channel 家族：basic/bounded/multiplex/close 全覆盖测试。
 - UDS IPC 通道：帧编解码、大 payload(1MB)、对端关闭、非法帧、幂等 close、双向并发。
 - 日志分级与文件轮转；测试 `main()` 统一初始化。
-- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 237 项（CTP 构建 250 项）
+- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 252 项（CTP 构建 265 项）
   （其中 2 个联网行情测试默认跳过），TSan 并发用例全绿。
 
 ### 2.5 测试规模快照（阶段 3 历史快照；当前总数见上）
@@ -509,7 +509,7 @@ include/tqsdk/
     uds_channel.h         UDS 实现
   util/                   log / serde / async_mutex / spawn_logged / runtime
 src/                      对应实现
-tests/                    ~237 用例（CTP 构建 250）
+tests/                    ~252 用例（CTP 构建 265）
 examples/demo.cpp
 scripts/probe_*.py        协议探测
 third_party/ctp/          CTP SDK（有头与 so，网关已接入）

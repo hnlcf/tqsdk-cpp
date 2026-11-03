@@ -12,7 +12,7 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-using namespace boost;
+namespace asio = boost::asio;
 
 /// 统一的异步 IPC 通道接口
 ///

@@ -400,6 +400,7 @@ CTP 接入见 [`docs/CTP.md`](./CTP.md)；
 高可用/多网关见 [`docs/HA.md`](./HA.md)；
 标准合约目录/期权元数据见 [`docs/INSTRUMENTS.md`](./INSTRUMENTS.md)；
 K 线 SQLite 历史缓存见 [`docs/KLINE_CACHE.md`](./KLINE_CACHE.md)；
+架构与代码质量审查见 [`docs/ARCHITECTURE_REVIEW.md`](./ARCHITECTURE_REVIEW.md)；
 Web/Tauri 前端路线见 [`docs/WEB_FRONTEND.md`](./WEB_FRONTEND.md)。
 
 ### 源码地图
@@ -445,7 +446,7 @@ include/tqsdk/
 src/                        对应实现
 apps/                       gw_main.cpp / node_main.cpp
 config/                     gw.toml / node.toml
-tests/                      237 用例（CTP 构建 250；channel/data/gateway/ipc/serve/e2e/config）
+tests/                      252 用例（CTP 构建 265；channel/data/gateway/ipc/serve/e2e/config）
 examples/demo.cpp           实时行情示例
 scripts/                    两进程冒烟 / 协议探测 / soak / perf baseline
 web/apps/web                SolidJS + Lightweight Charts 实盘终端

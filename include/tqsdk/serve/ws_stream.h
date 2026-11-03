@@ -91,8 +91,8 @@ public:
     /// 停止接收/关闭所有客户端，并唤醒后台 push_loop 退出（可独立于 TqApi::close 调用）。
     void stop() noexcept;
 
-    bool             full() const noexcept { return clients_.size() >= options_.max_clients; }
-    std::size_t      client_count() const noexcept { return clients_.size(); }
+    bool             full() const;
+    std::size_t      client_count() const;
     const WsOptions& options() const noexcept { return options_; }
 
 private:
@@ -125,10 +125,11 @@ private:
     asio::any_io_executor                                 io_ex_; // 客户端 I/O 基础 executor
     asio::steady_timer                                    stop_timer_;
     WsOptions                                             options_;
-    bool                                                  started_ = false;
+    std::atomic<bool>                                     started_{false};
     std::atomic<bool>                                     stopped_{false};
     uint64_t                                              next_client_id_ = 1;
     std::atomic<uint64_t>                                 seq_{0};
+    mutable std::mutex                                    clients_mu_;
     std::unordered_map<uint64_t, std::shared_ptr<Client>> clients_;
     std::unordered_map<std::string, int>                  quote_refs_;
     struct KlineRef {

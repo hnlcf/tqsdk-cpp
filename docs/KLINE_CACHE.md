@@ -186,9 +186,14 @@ GET /kline-cache/status
 ```text
 KlineStore.PersistsAndReloads
 KlineStore.PrunesToNewestBars
+KlineStore.SkipsIncompleteBars
 KlineStore.DisabledIsNoop
+KlineStore.CorruptDatabaseDegrades
+KlineStore.ConcurrentProducersAndFlush
+KlineStore.FreshnessAdaptsToBarInterval
 KlineCache.HydratesBeforeRemoteTailAndMerges
 KlineCache.NoCacheRequestsFullWidth
+KlineCache.StaleCacheRequestsFullWidth
 ```
 
 集成测试验证了：

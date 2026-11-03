@@ -82,8 +82,10 @@ target_link_libraries(tqsdk_core PUBLIC
     tomlplusplus::tomlplusplus
     spdlog::spdlog
     CLI11::CLI11
-    SQLiteCpp
 )
+
+# SQLiteCpp 只服务于 node 的 K 线缓存实现，不进入公共头文件/安装依赖。
+target_link_libraries(tqsdk_core PRIVATE SQLiteCpp)
 
 # ---------- CTP 网关 (可选，仅当找到 CTP SDK 时编译) ----------
 # 将 CTP 的 .so/.dll 和头文件放在 third_party/ctp/ 下：
@@ -223,6 +225,7 @@ if(TQSDK_BUILD_TESTS)
         tests/ipc/ipc_proxy_test.cpp
         tests/ipc/gateway_server_test.cpp
         tests/config/tqapi_factory_test.cpp
+        tests/util/json_value_test.cpp
         tests/util/serde_test.cpp
         tests/util/spawn_logged_test.cpp
         tests/util/log_test.cpp
@@ -233,6 +236,7 @@ if(TQSDK_BUILD_TESTS)
         tests/instrument/instrument_catalog_test.cpp
         tests/serve/ws_protocol_test.cpp
         tests/serve/ws_stream_test.cpp
+        tests/serve/catalog_http_test.cpp
         tests/serve/threading_test.cpp
         tests/serve/readiness_test.cpp
         tests/e2e/tq_md_network_test.cpp
@@ -240,6 +244,7 @@ if(TQSDK_BUILD_TESTS)
     target_include_directories(tqsdk_tests PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>
     )
+    target_precompile_headers(tqsdk_tests PRIVATE tests/test_pch.h)
     target_link_libraries(tqsdk_tests PRIVATE tqsdk_core GTest::gtest)
 
     if(TQSDK_ENABLE_CTP)
@@ -323,7 +328,7 @@ endif()
 install(FILES config/gw.toml config/node.toml
         DESTINATION share/tqsdk/config)
 install(FILES README.md docs/CTP.md docs/SOAK_PERF.md docs/THREADING.md
-              docs/IPC_RECOVERY.md docs/HA.md docs/WEB_FRONTEND.md docs/INSTRUMENTS.md docs/KLINE_CACHE.md
+              docs/IPC_RECOVERY.md docs/HA.md docs/WEB_FRONTEND.md docs/INSTRUMENTS.md docs/KLINE_CACHE.md docs/ARCHITECTURE_REVIEW.md
         DESTINATION share/doc/tqsdk)
 
 # ==========================================================

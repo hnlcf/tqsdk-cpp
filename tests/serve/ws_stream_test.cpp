@@ -8,7 +8,8 @@
 #include "support/test_helpers.h"
 
 using namespace tqsdk;
-using json = nlohmann::json;
+using json      = nlohmann::json;
+namespace beast = boost::beast;
 
 namespace {
 

@@ -142,3 +142,41 @@ TEST(KlineCache, NoCacheRequestsFullWidth) {
     test::pump(ctx, 20);
     store->stop();
 }
+
+TEST(KlineCache, StaleCacheRequestsFullWidth) {
+    TempDb             db;
+    KlineStore::Config cfg;
+    cfg.enabled           = true;
+    cfg.file              = db.path();
+    cfg.flush_interval_ms = 10;
+    cfg.fresh_after_sec   = 0;
+
+    auto store = std::make_shared<KlineStore>(cfg);
+    ASSERT_TRUE(store->ready());
+    store->put_bars("SHFE.rb2701",
+                    60'000'000'000LL,
+                    {cached_bar(1, 100),
+                     cached_bar(2, 101),
+                     cached_bar(3, 102),
+                     cached_bar(4, 103),
+                     cached_bar(5, 104)});
+    store->flush();
+
+    asio::io_context ctx;
+    auto             md_owner = std::make_unique<MockMdGateway>(ctx.get_executor());
+    auto*            md       = md_owner.get();
+    auto api = std::make_unique<TqApi>(ctx.get_executor(), std::move(md_owner), nullptr, store);
+    api->start();
+
+    auto* stream = api->get_kline_serial("SHFE.rb2701", 60'000'000'000LL, 5);
+    ASSERT_NE(stream, nullptr);
+    EXPECT_TRUE(stream->cached_history);
+    ASSERT_TRUE(test::drive_until(
+        ctx,
+        [&] { return md->kline_view_width("SHFE.rb2701", 60'000'000'000LL) == 5; },
+        std::chrono::seconds(2)));
+
+    api->close();
+    test::pump(ctx, 20);
+    store->stop();
+}

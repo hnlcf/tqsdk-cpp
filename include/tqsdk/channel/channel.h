@@ -2,9 +2,9 @@
 
 #include "tqsdk/pch.h"
 
-using namespace boost;
-
 namespace tqsdk {
+
+namespace asio = boost::asio;
 
 template <typename T>
 class Channel {
@@ -53,8 +53,8 @@ private:
         asio::steady_timer           timer;
         std::list<Waiter*>::iterator self;
 
-        explicit Waiter(asio::any_io_executor ex)
-            : timer(std::move(ex)) {
+        explicit Waiter(const asio::any_io_executor& ex)
+            : timer(ex) {
             timer.expires_at(std::chrono::steady_clock::time_point::max());
         }
     };
@@ -95,7 +95,11 @@ void Channel<T>::wake_one(std::list<Waiter*>& list) noexcept {
     }
 
     Waiter* w = list.front();
-    w->timer.cancel(); // 触发 operation_aborted，挂起的协程被恢复
+    try {
+        w->timer.cancel(); // 触发 operation_aborted，挂起的协程被恢复
+    } catch (...) {
+        // cancel 失败不应传播到 Channel 的关闭路径。
+    }
 }
 
 // ---------- send ----------
@@ -233,10 +237,16 @@ void Channel<T>::close() noexcept {
 
     // 唤醒所有等待者；它们会分别在协程内自查 closed_ 并退出
     for (Waiter* w : recv_waiters_) {
-        w->timer.cancel();
+        try {
+            w->timer.cancel();
+        } catch (...) {
+        }
     }
     for (Waiter* w : send_waiters_) {
-        w->timer.cancel();
+        try {
+            w->timer.cancel();
+        } catch (...) {
+        }
     }
     // 注意：不 clear 列表；erase 由协程恢复后各自负责
 }

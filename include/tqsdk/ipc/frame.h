@@ -2,8 +2,6 @@
 
 #include "tqsdk/pch.h"
 
-using namespace boost;
-
 namespace tqsdk {
 namespace ipc {
 

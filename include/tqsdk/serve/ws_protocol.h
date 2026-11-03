@@ -2,6 +2,8 @@
 
 #include "tqsdk/pch.h"
 
+#include "tqsdk/util/json_value.h"
+
 #include <variant>
 
 namespace tqsdk {
@@ -303,7 +305,15 @@ inline WsClientMessage parse_ws_client_message(const Json& j) {
     if (!j.is_object()) {
         throw WsProtocolError("client message must be a JSON object");
     }
-    const std::string op = j.value("op", std::string{});
+    auto op_value = j.find("op");
+    if (op_value == j.end()) {
+        throw WsProtocolError("missing op");
+    }
+    const auto op_opt = json_value::string(*op_value);
+    if (!op_opt) {
+        throw WsProtocolError("op must be a string");
+    }
+    const std::string& op = *op_opt;
     if (op == "subscribe") {
         return detail::get_or_throw<WsSubscribe>(j, "subscribe");
     }
@@ -333,7 +343,15 @@ inline WsServerMessage parse_ws_server_message(const Json& j) {
     if (!j.is_object()) {
         throw WsProtocolError("server message must be a JSON object");
     }
-    const std::string type = j.value("type", std::string{});
+    auto type_value = j.find("type");
+    if (type_value == j.end()) {
+        throw WsProtocolError("missing type");
+    }
+    const auto type_opt = json_value::string(*type_value);
+    if (!type_opt) {
+        throw WsProtocolError("type must be a string");
+    }
+    const std::string& type = *type_opt;
     if (type == "welcome") {
         return detail::get_or_throw<WsWelcome>(j, "welcome");
     }

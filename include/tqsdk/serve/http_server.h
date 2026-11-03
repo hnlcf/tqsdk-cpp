@@ -78,9 +78,9 @@ public:
     /// ws_options 控制同一端口上的 WebSocket `/stream` 升级路由。
     /// 兼容构造：I/O 与数据处理使用同一 executor（单线程/测试）。
     HttpServer(TqApi*                api,
-               asio::any_io_executor  ex,
-               WsOptions              ws_options = {},
-               InstrumentCatalog*     catalog    = nullptr);
+               asio::any_io_executor ex,
+               WsOptions             ws_options = {},
+               InstrumentCatalog*    catalog    = nullptr);
 
     /// 双 executor 构造：
     ///   - io_ex      ：accept / socket 读写（可跨多线程、每连接一条 strand）
@@ -122,7 +122,7 @@ private:
     asio::any_io_executor         data_ex_;
     tcp::acceptor                 acceptor_;
     uint16_t                      port_{0};
-    bool                          stopped_{false};
+    std::atomic<bool>             stopped_{false};
     Router                        router_;
     std::shared_ptr<WebSocketHub> ws_;
 

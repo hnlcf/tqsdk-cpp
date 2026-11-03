@@ -2,6 +2,9 @@
 
 #include "tqsdk/channel/channel.h"
 
+namespace asio = boost::asio;
+using namespace tqsdk;
+
 TEST(Channel, SendReceive) {
     asio::io_context    ctx;
     tqsdk::Channel<int> ch(ctx.get_executor());

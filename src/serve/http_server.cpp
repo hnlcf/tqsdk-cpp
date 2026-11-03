@@ -2,6 +2,7 @@
 
 #include "tqsdk/domain/sentinel.h"
 #include "tqsdk/serve/json_convert.h"
+#include "tqsdk/util/json_value.h"
 #include "tqsdk/util/spawn_logged.h"
 
 namespace tqsdk {
@@ -18,18 +19,15 @@ std::size_t query_size(std::string_view value, std::size_t fallback, std::size_t
     if (value.empty()) {
         return fallback;
     }
-    try {
-        return std::min<std::size_t>(max_value, std::stoull(std::string{value}));
-    } catch (...) {
-        return fallback;
-    }
+    const auto parsed = json_value::parse_unsigned(value);
+    return parsed ? std::min<std::size_t>(max_value, static_cast<std::size_t>(*parsed)) : fallback;
 }
 
 bool query_bool(std::string_view value, bool fallback) {
     if (value.empty()) {
         return fallback;
     }
-    return value == "1" || value == "true" || value == "yes";
+    return json_value::parse_boolean(value).value_or(fallback);
 }
 
 json catalog_not_ready() {
@@ -39,9 +37,9 @@ json catalog_not_ready() {
 } // namespace
 
 HttpServer::HttpServer(TqApi*                api,
-                       asio::any_io_executor  ex,
-                       WsOptions              ws_options,
-                       InstrumentCatalog*     catalog)
+                       asio::any_io_executor ex,
+                       WsOptions             ws_options,
+                       InstrumentCatalog*    catalog)
     : HttpServer(api, ex, std::move(ws_options), ex, catalog) {}
 
 HttpServer::HttpServer(TqApi*                api,
@@ -79,9 +77,7 @@ void HttpServer::setup_routes() {
          })},
         {http::verb::get, "/catalog/status", make_entry([this]() -> asio::awaitable<Response> {
              if (catalog_ == nullptr) {
-                 co_return Response{http::status::service_unavailable,
-                                    catalog_not_ready(),
-                                    {}};
+                 co_return Response{http::status::service_unavailable, catalog_not_ready(), {}};
              }
              co_return Response{http::status::ok, catalog_->status_json(), {}};
          })},
@@ -117,8 +113,7 @@ void HttpServer::setup_routes() {
              }
              auto item = catalog_->find(instrument_id);
              if (!item) {
-                 throw HttpError{http::status::not_found,
-                                 json{{"error", "instrument not found"}}};
+                 throw HttpError{http::status::not_found, json{{"error", "instrument not found"}}};
              }
              co_return InstrumentCatalog::to_json(*item);
          })},
@@ -139,8 +134,7 @@ void HttpServer::setup_routes() {
                                     {"calls", p.calls},
                                     {"puts", p.puts}});
              }
-             co_return json{{"products", std::move(out)},
-                            {"catalog", catalog_->status_json()}};
+             co_return json{{"products", std::move(out)}, {"catalog", catalog_->status_json()}};
          })},
         {http::verb::get,
          "/catalog/option-chain/{underlying}",
@@ -157,8 +151,8 @@ void HttpServer::setup_routes() {
              json calls = json::array();
              json puts  = json::array();
              for (const auto& contract : contracts) {
-                 auto item          = InstrumentCatalog::to_json(contract);
-                 item["quote"]      = quote_to_json(api_->get_quote(contract.instrument_id));
+                 auto item     = InstrumentCatalog::to_json(contract);
+                 item["quote"] = quote_to_json(api_->get_quote(contract.instrument_id));
                  if (contract.option_class == "CALL") {
                      calls.push_back(std::move(item));
                  } else if (contract.option_class == "PUT") {
@@ -166,8 +160,8 @@ void HttpServer::setup_routes() {
                  }
              }
              auto underlying_item = catalog_->find(underlying);
-             auto underlying_json = underlying_item ? InstrumentCatalog::to_json(*underlying_item)
-                                                     : json::object();
+             auto underlying_json =
+                 underlying_item ? InstrumentCatalog::to_json(*underlying_item) : json::object();
              co_return json{
                  {"underlying", underlying},
                  {"underlying_contract", std::move(underlying_json)},
@@ -179,8 +173,7 @@ void HttpServer::setup_routes() {
                  {"puts", std::move(puts)},
              };
          })},
-        {http::verb::get,
-         "/kline-cache/status", make_entry([this]() -> asio::awaitable<json> {
+        {http::verb::get, "/kline-cache/status", make_entry([this]() -> asio::awaitable<json> {
              co_return api_->kline_cache_status();
          })},
         {http::verb::get,
@@ -272,10 +265,9 @@ void HttpServer::listen(const std::string& address, uint16_t port) {
 }
 
 void HttpServer::stop() noexcept {
-    if (stopped_) {
+    if (stopped_.exchange(true, std::memory_order_acq_rel)) {
         return;
     }
-    stopped_ = true;
     if (ws_) {
         ws_->stop();
     }

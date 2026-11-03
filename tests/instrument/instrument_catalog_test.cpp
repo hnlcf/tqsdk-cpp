@@ -2,8 +2,8 @@
 
 #include "tqsdk/instrument/instrument_catalog.h"
 
-#include <fstream>
 #include <unistd.h>
+#include <fstream>
 
 namespace {
 
@@ -64,4 +64,130 @@ TEST(InstrumentCatalog, LoadsFuturesOptionsAndProducts) {
     EXPECT_EQ(tqsdk::InstrumentCatalog::product_of("CSI.000300"), "CSI.000300");
 
     ::unlink(path.c_str());
+}
+
+TEST(InstrumentCatalog, MalformedJsonKeepsPreviousSnapshot) {
+    const auto path = fixture_path();
+    {
+        std::ofstream out(path);
+        out << R"({"SHFE.rb2701":{"class":"FUTURE","instrument_id":"SHFE.rb2701","expired":false}})";
+    }
+    tqsdk::InstrumentCatalog::Config cfg;
+    cfg.file = path;
+    tqsdk::InstrumentCatalog catalog(cfg);
+    ASSERT_TRUE(catalog.load_local());
+    ASSERT_NE(catalog.find("SHFE.rb2701"), std::nullopt);
+
+    {
+        std::ofstream out(path, std::ios::trunc);
+        out << R"({"truncated": [})";
+    }
+    EXPECT_FALSE(catalog.load_local());
+    EXPECT_NE(catalog.find("SHFE.rb2701"), std::nullopt) << "failed reload must keep old snapshot";
+
+    {
+        std::ofstream out(path, std::ios::trunc);
+        out << "[]";
+    }
+    EXPECT_FALSE(catalog.load_local());
+    EXPECT_NE(catalog.find("SHFE.rb2701"), std::nullopt);
+
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+
+TEST(InstrumentCatalog, MixedScalarTypesAndBadEntries) {
+    const auto path = fixture_path();
+    {
+        std::ofstream out(path);
+        out << R"({
+          "A": {"instrument_id":"A","class":"FUTURE","ins_name":"alpha",
+                "volume_multiple":"10","price_tick":"0.5","price_decs":"2",
+                "last_price":"3017.5","expired":"false"},
+          "B": 42,
+          "C": null,
+          "D": {"instrument_id":123,"class":"FUTURE","ins_name":"delta",
+                "expire_datetime":"1800000000","delivery_month":"12","expired":0},
+          "E": {"class":"FUTURE","ins_name":"epsilon","expired":"true"}
+        })";
+    }
+    tqsdk::InstrumentCatalog::Config cfg;
+    cfg.file = path;
+    tqsdk::InstrumentCatalog catalog(cfg);
+    ASSERT_TRUE(catalog.load_local());
+
+    auto a = catalog.find("A");
+    ASSERT_TRUE(a.has_value());
+    EXPECT_DOUBLE_EQ(a->volume_multiple, 10.0);
+    EXPECT_DOUBLE_EQ(a->price_tick, 0.5);
+    EXPECT_EQ(a->price_decs, 2);
+    EXPECT_DOUBLE_EQ(a->last_price, 3017.5);
+    EXPECT_FALSE(a->expired);
+
+    auto d = catalog.find("D");
+    ASSERT_TRUE(d.has_value());
+    EXPECT_EQ(d->instrument_id, "D");
+    EXPECT_DOUBLE_EQ(d->expire_datetime, 1800000000.0);
+    EXPECT_EQ(d->delivery_month, 12);
+    EXPECT_FALSE(d->expired);
+
+    auto e = catalog.find("E");
+    ASSERT_TRUE(e.has_value());
+    EXPECT_TRUE(e->expired);
+
+    auto active = catalog.list([] {
+        tqsdk::InstrumentCatalog::ListFilter f;
+        f.classes = "FUTURE";
+        return f;
+    }());
+    EXPECT_EQ(active.size(), 2u) << "expired E must be filtered by default";
+
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+
+TEST(InstrumentCatalog, ConcurrentReadDuringReload) {
+    const auto path = fixture_path();
+    {
+        std::ofstream out(path);
+        out << R"({"SHFE.rb2701":{"class":"FUTURE","instrument_id":"SHFE.rb2701","expired":false}})";
+    }
+    tqsdk::InstrumentCatalog::Config cfg;
+    cfg.file = path;
+    tqsdk::InstrumentCatalog catalog(cfg);
+    ASSERT_TRUE(catalog.load_local());
+
+    std::atomic<bool> stop{false};
+    std::atomic<int>  errors{0};
+    auto              reader = [&] {
+        int n = 0;
+        while (!stop.load(std::memory_order_relaxed) && n++ < 2000) {
+            auto item = catalog.find("SHFE.rb2701");
+            if (!item) {
+                ++errors;
+            }
+            auto rows = catalog.list([] {
+                tqsdk::InstrumentCatalog::ListFilter f;
+                f.classes = "FUTURE";
+                return f;
+            }());
+            if (rows.size() != 1u) {
+                ++errors;
+            }
+        }
+    };
+    std::thread t1(reader);
+    std::thread t2(reader);
+    for (int i = 0; i < 50; ++i) {
+        if (!catalog.load_local()) {
+            ++errors;
+        }
+    }
+    stop = true;
+    t1.join();
+    t2.join();
+    EXPECT_EQ(errors.load(), 0);
+
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
 }

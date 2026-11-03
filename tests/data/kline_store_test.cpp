@@ -2,6 +2,8 @@
 
 #include "tqsdk/data/kline_store.h"
 
+#include <fstream>
+
 namespace {
 
 class TempDb {
@@ -119,4 +121,63 @@ TEST(KlineStore, DisabledIsNoop) {
     store.put_bars("SHFE.rb2701", 60'000'000'000LL, {bar(1, 100)});
     store.flush();
     EXPECT_FALSE(std::filesystem::exists(db.path()));
+}
+
+TEST(KlineStore, CorruptDatabaseDegrades) {
+    TempDb db;
+    {
+        std::ofstream out(db.path(), std::ios::binary | std::ios::trunc);
+        out << "this is not a sqlite database";
+    }
+    tqsdk::KlineStore store(config(db.path()));
+    EXPECT_FALSE(store.ready());
+    EXPECT_TRUE(store.load_recent("SHFE.rb2701", 60'000'000'000LL, 10).bars.empty());
+    store.put_bars("SHFE.rb2701", 60'000'000'000LL, {bar(1, 100)});
+    store.flush();
+    EXPECT_FALSE(store.status_json()["last_error"].get<std::string>().empty());
+}
+
+TEST(KlineStore, ConcurrentProducersAndFlush) {
+    TempDb db;
+    auto   cfg            = config(db.path(), 10'000);
+    cfg.flush_interval_ms = 1;
+    tqsdk::KlineStore store(cfg);
+    ASSERT_TRUE(store.ready());
+
+    constexpr int            kThreads   = 4;
+    constexpr int            kPerThread = 100;
+    std::vector<std::thread> threads;
+    for (int t = 0; t < kThreads; ++t) {
+        threads.emplace_back([&store, t] {
+            for (int i = 0; i < kPerThread; ++i) {
+                const int64_t dt = t * 10'000 + i + 1;
+                store.put_bars("SHFE.rb2701", 60'000'000'000LL, {bar(dt, 100 + t)});
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    store.flush();
+
+    auto loaded = store.load_recent("SHFE.rb2701", 60'000'000'000LL, 10'000);
+    EXPECT_EQ(loaded.bars.size(), kThreads * kPerThread);
+    EXPECT_EQ(store.status_json()["dropped"].get<uint64_t>(), 0u);
+}
+
+TEST(KlineStore, FreshnessAdaptsToBarInterval) {
+    TempDb                        db;
+    tqsdk::KlineStore             store(config(db.path()));
+    tqsdk::KlineStore::SeriesMeta meta;
+    meta.last_write_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                             std::chrono::system_clock::now().time_since_epoch())
+                             .count() -
+                         5 * 60 * 1'000'000'000LL;
+
+    // 1 分钟 K 线：5 分钟前的缓存不够新，必须全量重取。
+    EXPECT_FALSE(store.is_fresh(meta, 60LL * 1'000'000'000LL));
+    // 1 小时 K 线：5 分钟前仍在新窗口内。
+    EXPECT_TRUE(store.is_fresh(meta, 3600LL * 1'000'000'000LL));
+    // 无 duration 的调用仍按配置上限判断。
+    EXPECT_TRUE(store.is_fresh(meta));
 }
