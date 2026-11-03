@@ -55,7 +55,7 @@ Phase 1（已完成）：
 - 自选/最近行情表，绑定 node WS quote snapshot/diff；
 - 期货合约列表，绑定 REST `/catalog/instruments`，支持模糊搜索、回车加入自选和双击切换；
 - REST quote 快照 + WS quote 推送，无推送时也先显示已有截面/占位；
-- QPainter 自绘 K 线：蜡烛、成交量、价格/时间坐标、当前价、十字光标；
+- QPainter 自绘 K 线：蜡烛、成交量、价格/时间坐标、当前价、十字光标；支持滚轮缩放和左键拖动；头部显示最新价/涨跌/涨幅；
 - 1m/5m/15m/30m/1h/2h/4h/1d/3d/1w 周期切换，K 线 REST 历史 + WS diff；
 - 深色/浅色主题；
 - Wayland 原生运行，保留 XCB/XWayland fallback；

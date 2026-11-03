@@ -5,6 +5,7 @@
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPen>
+#include <QWheelEvent>
 
 #include <algorithm>
 #include <cmath>
@@ -43,10 +44,25 @@ KLineChartWidget::KLineChartWidget(QWidget* parent)
     setMinimumSize(420, 280);
     setMouseTracking(true);
     setAutoFillBackground(false);
+    setToolTip(tr("滚轮缩放，按住左键左右拖动"));
+    setCursor(Qt::OpenHandCursor);
 }
 
 void KLineChartWidget::setBars(const QVector<KlineBar>& bars) {
-    bars_ = bars;
+    const int oldSize = bars_.size();
+    bars_             = bars;
+    if (oldSize == 0 || followLatest_) {
+        visibleCount_ =
+            std::min(std::max(visibleCount_, 10), std::max(1, static_cast<int>(bars_.size())));
+        visibleStart_ = std::max(0, static_cast<int>(bars_.size()) - visibleCount_);
+        followLatest_ = true;
+    }
+    clampView();
+    update();
+}
+
+void KLineChartWidget::setQuote(const Quote& quote) {
+    quote_ = quote;
     update();
 }
 
@@ -65,34 +81,66 @@ QSize KLineChartWidget::sizeHint() const {
     return {900, 520};
 }
 
+QRectF KLineChartWidget::plotArea() const {
+    return QRectF(14.0,
+                  56.0,
+                  std::max(20.0, static_cast<double>(width()) - 92.0),
+                  std::max(20.0, static_cast<double>(height()) - 148.0));
+}
+
+int KLineChartWidget::visibleBarCount() const {
+    if (bars_.isEmpty()) {
+        return 0;
+    }
+    return std::clamp(visibleCount_, 1, std::min<int>(bars_.size(), 2000));
+}
+
+int KLineChartWidget::firstVisibleBar() const {
+    const int count = visibleBarCount();
+    if (count <= 0) {
+        return 0;
+    }
+    return std::clamp(visibleStart_, 0, std::max(0, static_cast<int>(bars_.size()) - count));
+}
+
+void KLineChartWidget::clampView() {
+    if (bars_.isEmpty()) {
+        visibleStart_ = 0;
+        followLatest_ = true;
+        return;
+    }
+    visibleCount_   = std::clamp(visibleCount_, 1, std::min<int>(bars_.size(), 2000));
+    const int count = visibleBarCount();
+    visibleStart_ =
+        std::clamp(visibleStart_, 0, std::max(0, static_cast<int>(bars_.size()) - count));
+    followLatest_ = visibleStart_ + count >= bars_.size();
+}
+
 void KLineChartWidget::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
     const QColor background = dark_ ? QColor("#0d1117") : QColor("#f7f9fc");
-    const QColor text       = dark_ ? QColor("#9aa4b2") : QColor("#5b6573");
     painter.fillRect(rect(), background);
-
-    QFont titleFont = font();
-    titleFont.setPointSizeF(titleFont.pointSizeF() + 2.0);
-    titleFont.setBold(true);
-    painter.setFont(titleFont);
-    painter.setPen(dark_ ? QColor("#e6edf3") : QColor("#202a36"));
-    painter.drawText(QRect(14, 8, width() - 28, 26), Qt::AlignLeft | Qt::AlignVCenter, symbol_);
-
-    painter.setFont(font());
-    painter.setPen(text);
-    painter.drawText(QRect(14, 30, width() - 28, 20), Qt::AlignLeft | Qt::AlignVCenter, interval_);
+    drawHeader(painter);
 
     if (bars_.isEmpty()) {
         drawEmpty(painter);
         return;
     }
 
-    double minPrice = bars_.front().low;
-    double maxPrice = bars_.front().high;
-    for (const auto& bar : bars_) {
+    const int first = firstVisibleBar();
+    const int count = visibleBarCount();
+    if (count <= 0) {
+        drawEmpty(painter);
+        return;
+    }
+
+    double minPrice = bars_.at(first).low;
+    double maxPrice = bars_.at(first).high;
+    for (int i = first; i < first + count; ++i) {
+        const auto& bar = bars_.at(i);
         if (finite(bar.low)) {
             minPrice = std::min(minPrice, bar.low);
         }
@@ -112,12 +160,59 @@ void KLineChartWidget::paintEvent(QPaintEvent* event) {
     minPrice -= padding;
     maxPrice += padding;
 
-    const QRectF plot(14.0, 56.0, width() - 92.0, height() - 56.0 - 92.0);
+    const QRectF plot = plotArea();
     const QRectF volumePlot(plot.left(), plot.bottom() + 8.0, plot.width(), 64.0);
     drawGrid(painter, plot, minPrice, maxPrice);
-    drawCandles(painter, plot, minPrice, maxPrice);
-    drawVolume(painter, volumePlot);
+    drawCandles(painter, plot, minPrice, maxPrice, first, count);
+    drawVolume(painter, volumePlot, first, count);
     drawCrosshair(painter, plot, minPrice, maxPrice);
+}
+
+void KLineChartWidget::drawHeader(QPainter& painter) {
+    QFont titleFont = font();
+    titleFont.setPointSizeF(titleFont.pointSizeF() + 2.0);
+    titleFont.setBold(true);
+    painter.setFont(titleFont);
+    painter.setPen(dark_ ? QColor("#e6edf3") : QColor("#202a36"));
+    painter.drawText(QRect(14, 7, width() - 320, 28), Qt::AlignLeft | Qt::AlignVCenter, symbol_);
+
+    painter.setFont(font());
+    painter.setPen(dark_ ? QColor("#8b93a3") : QColor("#657080"));
+    painter.drawText(QRect(14, 31, 150, 20), Qt::AlignLeft | Qt::AlignVCenter, interval_);
+
+    double last = quote_.lastPrice;
+    if (!finite(last) && !bars_.isEmpty()) {
+        last = bars_.last().close;
+    }
+    double reference = quote_.preSettlement;
+    if (!finite(reference) && bars_.size() >= 2) {
+        reference = bars_.at(bars_.size() - 2).close;
+    }
+    const double change     = finite(last) && finite(reference)
+                                  ? last - reference
+                                  : std::numeric_limits<double>::quiet_NaN();
+    const double percent    = finite(change) && reference != 0.0
+                                  ? change / reference * 100.0
+                                  : std::numeric_limits<double>::quiet_NaN();
+    const QColor valueColor = !finite(change) ? (dark_ ? QColor("#8b93a3") : QColor("#657080"))
+                                              : (change >= 0.0 ? upColor(dark_) : downColor(dark_));
+
+    QFont valueFont = font();
+    valueFont.setPointSizeF(valueFont.pointSizeF() + 7.0);
+    valueFont.setBold(true);
+    painter.setFont(valueFont);
+    painter.setPen(valueColor);
+    painter.drawText(
+        QRect(width() - 300, 3, 286, 34), Qt::AlignRight | Qt::AlignVCenter, priceText(last));
+
+    painter.setFont(font());
+    const QString delta = finite(change) ? QStringLiteral("%1%2  %3%4%")
+                                               .arg(change >= 0.0 ? "+" : "")
+                                               .arg(change, 0, 'f', 2)
+                                               .arg(finite(percent) && percent >= 0.0 ? "+" : "")
+                                               .arg(percent, 0, 'f', 2)
+                                         : QStringLiteral("涨跌 —  —%");
+    painter.drawText(QRect(width() - 360, 35, 346, 18), Qt::AlignRight | Qt::AlignVCenter, delta);
 }
 
 void KLineChartWidget::drawEmpty(QPainter& painter) {
@@ -152,70 +247,68 @@ void KLineChartWidget::drawGrid(QPainter&     painter,
 void KLineChartWidget::drawCandles(QPainter&     painter,
                                    const QRectF& plot,
                                    double        minPrice,
-                                   double        maxPrice) const {
-    if (bars_.isEmpty() || maxPrice <= minPrice) {
+                                   double        maxPrice,
+                                   int           first,
+                                   int           count) const {
+    if (count <= 0 || maxPrice <= minPrice) {
         return;
     }
-    const double step      = plot.width() / bars_.size();
+    const double step      = plot.width() / count;
     const double bodyWidth = std::max(1.0, step * 0.64);
     const double range     = maxPrice - minPrice;
 
     auto yFor = [&](double price) {
         return plot.bottom() - (price - minPrice) / range * plot.height();
     };
-
     const QColor text = dark_ ? QColor("#7f8b99") : QColor("#6b7584");
-    painter.setPen(text);
-    for (int i = 0; i < bars_.size(); ++i) {
-        const auto& bar = bars_.at(i);
+
+    for (int i = 0; i < count; ++i) {
+        const auto& bar = bars_.at(first + i);
         if (!finite(bar.open) || !finite(bar.close)) {
             continue;
         }
         const double x      = plot.left() + step * (i + 0.5);
         const double yOpen  = yFor(bar.open);
         const double yClose = yFor(bar.close);
-        const bool   up     = bar.close >= bar.open;
-        const QColor color  = up ? upColor(dark_) : downColor(dark_);
+        const QColor color  = bar.close >= bar.open ? upColor(dark_) : downColor(dark_);
 
         painter.setPen(QPen(color, 1.0));
         painter.drawLine(QPointF(x, yFor(bar.high)), QPointF(x, yFor(bar.low)));
-
         const double top    = std::min(yOpen, yClose);
         const double bottom = std::max(yOpen, yClose);
-        const QRectF body(x - bodyWidth / 2.0, top, bodyWidth, std::max(1.0, bottom - top));
-        painter.fillRect(body, color);
+        painter.fillRect(QRectF(x - bodyWidth / 2.0, top, bodyWidth, std::max(1.0, bottom - top)),
+                         color);
 
-        if (i == 0 || i == bars_.size() / 2 || i == bars_.size() - 1) {
+        if (i == 0 || i == count / 2 || i == count - 1) {
             painter.setPen(text);
-            const QString label      = timeText(bar.datetime);
-            const int     labelWidth = 100;
+            const int labelWidth = 100;
             painter.drawText(QRectF(x - labelWidth / 2.0, plot.bottom() + 4, labelWidth, 16),
                              Qt::AlignHCenter | Qt::AlignTop,
-                             label);
+                             timeText(bar.datetime));
         }
     }
 }
 
-void KLineChartWidget::drawVolume(QPainter& painter, const QRectF& plot) const {
-    if (bars_.isEmpty()) {
+void KLineChartWidget::drawVolume(QPainter&     painter,
+                                  const QRectF& plot,
+                                  int           first,
+                                  int           count) const {
+    if (count <= 0) {
         return;
     }
     quint64 maxVolume = 1;
-    for (const auto& bar : bars_) {
-        maxVolume = std::max(maxVolume, bar.volume);
+    for (int i = first; i < first + count; ++i) {
+        maxVolume = std::max(maxVolume, bars_.at(i).volume);
     }
-    const double step       = plot.width() / bars_.size();
-    const double barWidth   = std::max(1.0, step * 0.64);
-    const QColor volumeUp   = upColor(dark_);
-    const QColor volumeDown = downColor(dark_);
-
-    for (int i = 0; i < bars_.size(); ++i) {
-        const auto&  bar = bars_.at(i);
+    const double step     = plot.width() / count;
+    const double barWidth = std::max(1.0, step * 0.64);
+    for (int i = 0; i < count; ++i) {
+        const auto&  bar = bars_.at(first + i);
         const double h =
             plot.height() * static_cast<double>(bar.volume) / static_cast<double>(maxVolume);
         const double x = plot.left() + step * (i + 0.5);
-        const QRectF rect(x - barWidth / 2.0, plot.bottom() - h, barWidth, std::max(1.0, h));
-        painter.fillRect(rect, bar.close >= bar.open ? volumeUp : volumeDown);
+        painter.fillRect(QRectF(x - barWidth / 2.0, plot.bottom() - h, barWidth, std::max(1.0, h)),
+                         bar.close >= bar.open ? upColor(dark_) : downColor(dark_));
     }
 }
 
@@ -242,13 +335,80 @@ void KLineChartWidget::drawCrosshair(QPainter&     painter,
 }
 
 void KLineChartWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (dragging_) {
+        const QRectF plot = plotArea();
+        const int    step =
+            std::max(1, static_cast<int>(plot.width()) / std::max(1, visibleBarCount()));
+        const int dx  = event->position().toPoint().x() - dragLastX_;
+        visibleStart_ = dragStart_ - static_cast<int>(std::lround(static_cast<double>(dx) / step));
+        clampView();
+        followLatest_ = false;
+        update();
+        event->accept();
+        return;
+    }
     crosshair_ = event->position().toPoint();
     update();
     QWidget::mouseMoveEvent(event);
 }
 
+void KLineChartWidget::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton && plotArea().contains(event->position())) {
+        dragging_     = true;
+        dragLastX_    = event->position().toPoint().x();
+        dragStart_    = firstVisibleBar();
+        followLatest_ = false;
+        setCursor(Qt::ClosedHandCursor);
+        event->accept();
+        return;
+    }
+    QWidget::mousePressEvent(event);
+}
+
+void KLineChartWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton && dragging_) {
+        dragging_ = false;
+        clampView();
+        setCursor(Qt::OpenHandCursor);
+        event->accept();
+        return;
+    }
+    QWidget::mouseReleaseEvent(event);
+}
+
+void KLineChartWidget::wheelEvent(QWheelEvent* event) {
+    if (bars_.isEmpty() || event->angleDelta().y() == 0) {
+        event->ignore();
+        return;
+    }
+    const int    oldCount = visibleBarCount();
+    const int    oldFirst = firstVisibleBar();
+    const double factor   = std::pow(1.18, -event->angleDelta().y() / 120.0);
+    const int    maxCount = std::min<int>(bars_.size(), 2000);
+    const int    minCount = std::min(10, maxCount);
+    const int    newCount =
+        std::clamp(static_cast<int>(std::lround(oldCount * factor)), minCount, maxCount);
+    if (newCount == oldCount) {
+        event->accept();
+        return;
+    }
+
+    const QRectF plot  = plotArea();
+    const double ratio = std::clamp((event->position().x() - plot.left()) / plot.width(), 0.0, 1.0);
+    const int    anchor = oldFirst + static_cast<int>(std::lround(ratio * oldCount));
+    visibleCount_       = newCount;
+    visibleStart_       = anchor - static_cast<int>(std::lround(ratio * newCount));
+    followLatest_       = false;
+    clampView();
+    update();
+    event->accept();
+}
+
 void KLineChartWidget::leaveEvent(QEvent* event) {
     crosshair_ = QPoint(-1, -1);
+    if (!dragging_) {
+        setCursor(Qt::OpenHandCursor);
+    }
     update();
     QWidget::leaveEvent(event);
 }

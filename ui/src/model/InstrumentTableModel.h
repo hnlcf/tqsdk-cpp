@@ -3,6 +3,7 @@
 #include "net/Protocol.h"
 
 #include <QAbstractTableModel>
+#include <QHash>
 #include <QVector>
 
 namespace tqsdk::ui {
@@ -19,6 +20,11 @@ public:
         LastPrice,
         PriceTick,
         Multiplier,
+        ChangePercent,
+        Bid1,
+        Ask1,
+        Volume,
+        OpenInterest,
         ColumnCount,
     };
 
@@ -35,7 +41,8 @@ public:
     const QVector<Instrument>& instruments() const { return instruments_; }
 
 private:
-    QVector<Instrument> instruments_;
+    QVector<Instrument>   instruments_;
+    QHash<QString, Quote> quotes_;
 };
 
 } // namespace tqsdk::ui

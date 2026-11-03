@@ -31,8 +31,9 @@ QJsonObject objectFrom(const char* text) {
 void ProtocolTest::parsesMarketData() {
     const auto data = objectFrom(R"({
       "quotes": {
-        "SHFE.rb2701": {"last_price":"2991.5","bid_price1":2991,"ask_price1":2992,
-                         "volume":702802,"open_interest":1878506}
+        "SHFE.rb2701": {"last_price":"2991.5","pre_settlement":2980,"bid_price1":2991,"ask_price1":2992,
+                         "volume":702802,"open_interest":1878506,"pre_open_interest":1878000,
+                         "highest":2999,"lowest":2970}
       },
       "klines": {
         "SHFE.rb2701": {
@@ -58,6 +59,10 @@ void ProtocolTest::parsesMarketData() {
     const auto update = parseMarketData(data);
     QVERIFY(update.quotes.size() == 1);
     QVERIFY(qFuzzyCompare(update.quotes[0].lastPrice, 2991.5));
+    QVERIFY(qFuzzyCompare(update.quotes[0].preSettlement, 2980.0));
+    QVERIFY(qFuzzyCompare(update.quotes[0].preOpenInterest, 1'878'000.0));
+    QVERIFY(qFuzzyCompare(update.quotes[0].high, 2999.0));
+    QVERIFY(qFuzzyCompare(update.quotes[0].low, 2970.0));
     QVERIFY(update.quotes[0].volume == 702802);
     QVERIFY(update.klines.size() == 1);
     QVERIFY(update.klines["SHFE.rb2701"].size() == 1);

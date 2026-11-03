@@ -9,6 +9,7 @@
 
 #include <QAbstractItemModel>
 #include <QAbstractItemView>
+#include <QAction>
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -23,8 +24,10 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QSettings>
 #include <QSize>
 #include <QSortFilterProxyModel>
 #include <QSpinBox>
@@ -288,6 +291,7 @@ void MainWindow::buildWorkspace() {
     auto* splitter = new QSplitter(Qt::Horizontal, this);
 
     watchTable_ = makeTable(splitter, watchModel_);
+    installColumnMenu(watchTable_, QStringLiteral("watchlist"));
     watchTable_->setColumnWidth(QuoteTableModel::Symbol, 118);
     watchTable_->setMinimumWidth(290);
     connect(watchTable_->selectionModel(),
@@ -316,6 +320,7 @@ void MainWindow::buildWorkspace() {
     futuresStatus_->setStyleSheet("color: #8b93a3; padding: 4px;");
     futuresLayout->addWidget(futuresStatus_);
     futuresTable_ = makeTable(futuresContainer, futuresProxy_);
+    installColumnMenu(futuresTable_, QStringLiteral("futures"));
     connect(futuresTable_, &QTableView::doubleClicked, this, [this](const QModelIndex& index) {
         const auto    source = futuresProxy_->mapToSource(index);
         const QString symbol = futuresModel_->symbolAt(source.row());
@@ -331,7 +336,9 @@ void MainWindow::buildWorkspace() {
     auto* optionsLayout    = new QHBoxLayout(optionsContainer);
     optionsLayout->setContentsMargins(4, 4, 4, 4);
     callsTable_ = makeTable(optionsContainer, callsModel_);
-    putsTable_  = makeTable(optionsContainer, putsModel_);
+    installColumnMenu(callsTable_, QStringLiteral("option-calls"));
+    putsTable_ = makeTable(optionsContainer, putsModel_);
+    installColumnMenu(putsTable_, QStringLiteral("option-puts"));
     auto addOption =
         [this](QTableView* table, InstrumentTableModel* model, const QModelIndex& index) {
             const QString symbol = model->symbolAt(index.row());
@@ -358,27 +365,31 @@ void MainWindow::buildWorkspace() {
     });
     splitter->addWidget(centerTabs_);
 
-    auto* ticketContainer = new QWidget(splitter);
-    auto* ticketLayout    = new QVBoxLayout(ticketContainer);
-    ticketLayout->setContentsMargins(0, 0, 0, 0);
-    auto* quoteBox  = new QWidget(ticketContainer);
-    auto* quoteForm = new QFormLayout(quoteBox);
+    auto* quoteContainer = new QWidget(splitter);
+    auto* quoteForm      = new QFormLayout(quoteContainer);
     quoteForm->setContentsMargins(12, 12, 12, 12);
-    symbolLabel_ = new QLabel(selectedSymbol_, quoteBox);
-    lastLabel_   = new QLabel(tr("—"), quoteBox);
-    changeLabel_ = new QLabel(tr("—"), quoteBox);
-    bidAskLabel_ = new QLabel(tr("—"), quoteBox);
+    symbolLabel_       = new QLabel(selectedSymbol_, quoteContainer);
+    nameLabel_         = new QLabel(tr("—"), quoteContainer);
+    lastLabel_         = new QLabel(tr("—"), quoteContainer);
+    changeLabel_       = new QLabel(tr("—"), quoteContainer);
+    changePctLabel_    = new QLabel(tr("—"), quoteContainer);
+    bidAskLabel_       = new QLabel(tr("—"), quoteContainer);
+    volumeLabel_       = new QLabel(tr("—"), quoteContainer);
+    openInterestLabel_ = new QLabel(tr("—"), quoteContainer);
+    oiChangeLabel_     = new QLabel(tr("—"), quoteContainer);
+    highLowLabel_      = new QLabel(tr("—"), quoteContainer);
     lastLabel_->setStyleSheet("font-size: 22px; font-weight: 700;");
     quoteForm->addRow(tr("合约"), symbolLabel_);
+    quoteForm->addRow(tr("名称"), nameLabel_);
     quoteForm->addRow(tr("最新"), lastLabel_);
     quoteForm->addRow(tr("涨跌"), changeLabel_);
+    quoteForm->addRow(tr("涨幅"), changePctLabel_);
     quoteForm->addRow(tr("买卖"), bidAskLabel_);
-    ticketLayout->addWidget(panel(tr("行情快照"), quoteBox, ticketContainer));
-
-    auto* orderBox = new QWidget(ticketContainer);
-    buildOrderPanel(orderBox);
-    ticketLayout->addWidget(panel(tr("交易下单"), orderBox, ticketContainer), 1);
-    splitter->addWidget(panel(tr("交易"), ticketContainer, splitter));
+    quoteForm->addRow(tr("成交"), volumeLabel_);
+    quoteForm->addRow(tr("持仓"), openInterestLabel_);
+    quoteForm->addRow(tr("增仓"), oiChangeLabel_);
+    quoteForm->addRow(tr("高/低"), highLowLabel_);
+    splitter->addWidget(panel(tr("行情快照"), quoteContainer, splitter));
 
     splitter->setStretchFactor(0, 1);
     splitter->setStretchFactor(1, 6);
@@ -390,13 +401,6 @@ void MainWindow::buildOrderPanel(QWidget* parent) {
     auto* form = new QFormLayout(parent);
     form->setContentsMargins(12, 4, 12, 12);
 
-    directionBox_ = new QComboBox(parent);
-    directionBox_->addItem(tr("买入 BUY"), static_cast<int>(Direction::Buy));
-    directionBox_->addItem(tr("卖出 SELL"), static_cast<int>(Direction::Sell));
-    offsetBox_ = new QComboBox(parent);
-    offsetBox_->addItem(tr("开仓 OPEN"), static_cast<int>(Offset::Open));
-    offsetBox_->addItem(tr("平仓 CLOSE"), static_cast<int>(Offset::Close));
-    offsetBox_->addItem(tr("平今 CLOSETODAY"), static_cast<int>(Offset::CloseToday));
     priceBox_ = new QDoubleSpinBox(parent);
     priceBox_->setRange(0.0, 1.0e9);
     priceBox_->setDecimals(2);
@@ -405,35 +409,85 @@ void MainWindow::buildOrderPanel(QWidget* parent) {
     volumeBox_ = new QSpinBox(parent);
     volumeBox_->setRange(1, 1000);
     volumeBox_->setValue(1);
-    riskCheck_    = new QCheckBox(tr("我确认柜台与合约，允许下单"), parent);
-    submitButton_ = new QPushButton(tr("提交限价单"), parent);
-    submitButton_->setEnabled(false);
+    riskCheck_ = new QCheckBox(tr("我确认柜台与合约，允许下单"), parent);
+
+    auto* buttons      = new QWidget(parent);
+    auto* buttonLayout = new QHBoxLayout(buttons);
+    buttonLayout->setContentsMargins(0, 0, 0, 0);
+    buttonLayout->setSpacing(6);
+    buyButton_ = new QPushButton(tr("买开"), buttons);
+    buyButton_->setEnabled(false);
+    sellButton_ = new QPushButton(tr("卖开"), buttons);
+    sellButton_->setEnabled(false);
+    closeButton_ = new QPushButton(tr("平仓"), buttons);
+    closeButton_->setEnabled(false);
+    buyButton_->setStyleSheet("background:#c62828;color:white;font-weight:600;padding:9px;");
+    sellButton_->setStyleSheet("background:#1b8f5a;color:white;font-weight:600;padding:9px;");
+    closeButton_->setStyleSheet("background:#9a6b00;color:white;font-weight:600;padding:9px;");
+    buttonLayout->addWidget(buyButton_, 1);
+    buttonLayout->addWidget(sellButton_, 1);
+    buttonLayout->addWidget(closeButton_, 1);
+
     orderStatus_ = new QLabel(tr("未连接交易账户"), parent);
     orderStatus_->setWordWrap(true);
     orderStatus_->setStyleSheet("color: #8b93a3;");
 
-    form->addRow(tr("方向"), directionBox_);
-    form->addRow(tr("开平"), offsetBox_);
+    form->addRow(tr("三键"), buttons);
     form->addRow(tr("价格"), priceBox_);
     form->addRow(tr("数量"), volumeBox_);
     form->addRow(riskCheck_);
-    form->addRow(submitButton_);
     form->addRow(orderStatus_);
 
-    connect(directionBox_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this] {
-        updateOrderControls();
-        updateQuotePanel();
-    });
     connect(riskCheck_, &QCheckBox::toggled, this, [this] { updateOrderControls(); });
-    connect(submitButton_, &QPushButton::clicked, this, [this] { submitOrder(); });
+    connect(buyButton_, &QPushButton::clicked, this, [this] {
+        submitOrder(Direction::Buy, Offset::Open);
+    });
+    connect(sellButton_, &QPushButton::clicked, this, [this] {
+        submitOrder(Direction::Sell, Offset::Open);
+    });
+    connect(closeButton_, &QPushButton::clicked, this, [this] {
+        qint64 longVolume  = 0;
+        qint64 shortVolume = 0;
+        for (const auto& position : positionsModel_->positions()) {
+            if (position.instrumentId != selectedSymbol_) {
+                continue;
+            }
+            longVolume += position.volumeLong;
+            shortVolume += position.volumeShort;
+        }
+        if (longVolume > 0) {
+            submitOrder(Direction::Sell, Offset::Close);
+        } else if (shortVolume > 0) {
+            submitOrder(Direction::Buy, Offset::Close);
+        } else {
+            orderStatus_->setText(tr("当前合约无持仓"));
+        }
+    });
 }
 
 void MainWindow::buildBottomDock() {
     auto* dock = new QDockWidget(tr("交易与账户"), this);
     dock->setAllowedAreas(Qt::BottomDockWidgetArea);
-    auto* tabs = new QTabWidget(dock);
+
+    auto* content       = new QWidget(dock);
+    auto* contentLayout = new QHBoxLayout(content);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    auto* tabs = new QTabWidget(content);
 
     positionTable_ = makeTable(tabs, positionsModel_);
+    installColumnMenu(positionTable_, QStringLiteral("positions"));
+    connect(positionTable_->selectionModel(),
+            &QItemSelectionModel::currentRowChanged,
+            this,
+            [this](const QModelIndex& current) {
+                if (!current.isValid() || current.row() >= positionsModel_->positions().size()) {
+                    return;
+                }
+                const QString symbol = positionsModel_->positions().at(current.row()).instrumentId;
+                if (!symbol.isEmpty() && symbol != selectedSymbol_) {
+                    selectSymbol(symbol);
+                }
+            });
     tabs->addTab(positionTable_, tr("持仓"));
 
     auto* orderPage   = new QWidget(tabs);
@@ -446,6 +500,7 @@ void MainWindow::buildBottomDock() {
     orderBar->addStretch(1);
     orderLayout->addLayout(orderBar);
     orderTable_ = makeTable(orderPage, ordersModel_);
+    installColumnMenu(orderTable_, QStringLiteral("orders"));
     orderLayout->addWidget(orderTable_, 1);
     connect(cancelButton_, &QPushButton::clicked, this, [this] { cancelSelectedOrder(); });
     connect(orderTable_->selectionModel(), &QItemSelectionModel::currentRowChanged, this, [this] {
@@ -454,6 +509,7 @@ void MainWindow::buildBottomDock() {
     tabs->addTab(orderPage, tr("委托"));
 
     tradeTable_ = makeTable(tabs, tradesModel_);
+    installColumnMenu(tradeTable_, QStringLiteral("trades"));
     tabs->addTab(tradeTable_, tr("成交"));
 
     auto* accountPage = new QWidget(tabs);
@@ -468,9 +524,15 @@ void MainWindow::buildBottomDock() {
     accountForm->addRow(tr("风险度"), accountRisk_);
     tabs->addTab(accountPage, tr("账户"));
 
-    dock->setWidget(tabs);
+    auto* orderBox = new QWidget(content);
+    buildOrderPanel(orderBox);
+    contentLayout->addWidget(tabs, 1);
+    contentLayout->addWidget(panel(tr("三键下单"), orderBox, content), 0);
+
+    dock->setWidget(content);
     addDockWidget(Qt::BottomDockWidgetArea, dock);
-    dock->setMaximumHeight(260);
+    dock->setMinimumHeight(280);
+    dock->setMaximumHeight(360);
 }
 
 void MainWindow::connectNode() {
@@ -577,6 +639,7 @@ void MainWindow::connectNode() {
             this,
             [this](const QVector<Instrument>& instruments) {
                 futuresModel_->setInstruments(instruments);
+                updateQuotePanel();
                 if (futuresStatus_ != nullptr) {
                     futuresStatus_->setText(tr("合约目录 %1 条").arg(instruments.size()));
                 }
@@ -614,11 +677,13 @@ void MainWindow::connectNode() {
     connect(nodeClient_, &NodeClient::accountUpdated, this, [this](const Account& account) {
         updateAccountPanel(account);
     });
-    connect(
-        nodeClient_,
-        &NodeClient::positionsUpdated,
-        this,
-        [this](const QVector<Position>& positions) { positionsModel_->applyPositions(positions); });
+    connect(nodeClient_,
+            &NodeClient::positionsUpdated,
+            this,
+            [this](const QVector<Position>& positions) {
+                positionsModel_->applyPositions(positions);
+                updateOrderControls();
+            });
     connect(nodeClient_, &NodeClient::ordersUpdated, this, [this](const QVector<Order>& orders) {
         ordersModel_->applyOrders(orders);
         updateOrderControls();
@@ -629,7 +694,7 @@ void MainWindow::connectNode() {
     connect(nodeClient_, &NodeClient::orderAckReceived, this, [this](const OrderAck& ack) {
         orderStatus_->setText(ack.success ? tr("命令已接受: %1").arg(ack.orderId)
                                           : tr("下单失败: %1").arg(ack.error));
-        submitButton_->setEnabled(nodeReady_ && accountLoaded_ && riskCheck_->isChecked());
+        updateOrderControls();
         if (nodeClient_ != nullptr) {
             nodeClient_->requestOrders();
             nodeClient_->requestPositions();
@@ -840,32 +905,58 @@ void MainWindow::updateQuotePanel() {
     }
     const Quote* quote = marketStore_->quote(selectedSymbol_);
     symbolLabel_->setText(selectedSymbol_);
+    const Instrument* instrument = findInstrument(selectedSymbol_);
+    nameLabel_->setText(instrument != nullptr && !instrument->name.isEmpty() ? instrument->name
+                                                                             : QStringLiteral("—"));
     if (quote == nullptr) {
+        chart_->setQuote(Quote{});
         lastLabel_->setText(tr("—"));
         changeLabel_->setText(tr("—"));
+        changePctLabel_->setText(tr("—"));
         bidAskLabel_->setText(tr("—"));
+        volumeLabel_->setText(tr("—"));
+        openInterestLabel_->setText(tr("—"));
+        oiChangeLabel_->setText(tr("—"));
+        highLowLabel_->setText(tr("—"));
         updateOrderControls();
         return;
     }
 
+    chart_->setQuote(*quote);
     lastLabel_->setText(priceText(quote->lastPrice));
-    const double percent = changePercent(*quote);
-    changeLabel_->setText(changeText(percent));
-    changeLabel_->setStyleSheet(
-        QStringLiteral("font-weight: 600; color: %1;")
-            .arg(!std::isfinite(percent) ? "#8b93a3" : (percent >= 0.0 ? "#e43c4a" : "#2fbf71")));
+    const double  change  = std::isfinite(quote->lastPrice) && std::isfinite(quote->preSettlement)
+                                ? quote->lastPrice - quote->preSettlement
+                                : std::numeric_limits<double>::quiet_NaN();
+    const double  percent = changePercent(*quote);
+    const QString color =
+        !std::isfinite(change) ? "#8b93a3" : (change >= 0.0 ? "#e43c4a" : "#2fbf71");
+    changeLabel_->setText(
+        std::isfinite(change)
+            ? QStringLiteral("%1%2").arg(change >= 0.0 ? "+" : "").arg(change, 0, 'f', 2)
+            : QStringLiteral("—"));
+    changeLabel_->setStyleSheet(QStringLiteral("font-weight: 600; color: %1;").arg(color));
+    changePctLabel_->setText(changeText(percent));
+    changePctLabel_->setStyleSheet(QStringLiteral("font-weight: 600; color: %1;").arg(color));
     bidAskLabel_->setText(
         QStringLiteral("%1 / %2").arg(priceText(quote->bidPrice1), priceText(quote->askPrice1)));
-    if (priceBox_ != nullptr && priceBox_->value() <= 0.0) {
-        const double suggested = directionBox_ != nullptr && directionBox_->currentData().toInt() ==
-                                                                 static_cast<int>(Direction::Sell)
-                                     ? quote->bidPrice1
-                                     : quote->askPrice1;
-        if (std::isfinite(suggested)) {
-            priceBox_->setValue(suggested);
-        } else if (std::isfinite(quote->lastPrice)) {
-            priceBox_->setValue(quote->lastPrice);
-        }
+    volumeLabel_->setText(quote->volume > 0 ? QString::number(quote->volume) : QStringLiteral("—"));
+    openInterestLabel_->setText(std::isfinite(quote->openInterest)
+                                    ? QString::number(quote->openInterest, 'f', 0)
+                                    : QStringLiteral("—"));
+    if (std::isfinite(quote->openInterest) && std::isfinite(quote->preOpenInterest)) {
+        const double oiChange = quote->openInterest - quote->preOpenInterest;
+        oiChangeLabel_->setText(
+            QStringLiteral("%1%2").arg(oiChange >= 0.0 ? "+" : "").arg(oiChange, 0, 'f', 0));
+        oiChangeLabel_->setStyleSheet(QStringLiteral("font-weight: 600; color: %1;")
+                                          .arg(oiChange >= 0.0 ? "#e43c4a" : "#2fbf71"));
+    } else {
+        oiChangeLabel_->setText(QStringLiteral("—"));
+        oiChangeLabel_->setStyleSheet("color: #8b93a3;");
+    }
+    highLowLabel_->setText(
+        QStringLiteral("%1 / %2").arg(priceText(quote->high), priceText(quote->low)));
+    if (priceBox_ != nullptr && priceBox_->value() <= 0.0 && std::isfinite(quote->lastPrice)) {
+        priceBox_->setValue(quote->lastPrice);
     }
     updateOrderControls();
 }
@@ -885,18 +976,28 @@ void MainWindow::updateAccountPanel(const Account& account) {
 }
 
 void MainWindow::updateOrderControls() {
-    if (submitButton_ == nullptr) {
+    if (buyButton_ == nullptr) {
         return;
     }
     const bool canSubmit = nodeReady_ && accountLoaded_ && riskCheck_->isChecked();
-    submitButton_->setEnabled(canSubmit);
+    buyButton_->setEnabled(canSubmit);
+    sellButton_->setEnabled(canSubmit);
+    qint64 longVolume  = 0;
+    qint64 shortVolume = 0;
+    for (const auto& position : positionsModel_->positions()) {
+        if (position.instrumentId == selectedSymbol_) {
+            longVolume += position.volumeLong;
+            shortVolume += position.volumeShort;
+        }
+    }
+    closeButton_->setEnabled(canSubmit && (longVolume > 0 || shortVolume > 0));
     if (cancelButton_ != nullptr && orderTable_ != nullptr) {
         const auto current = orderTable_->currentIndex();
         cancelButton_->setEnabled(current.isValid() && ordersModel_->isOrderAlive(current.row()));
     }
 }
 
-void MainWindow::submitOrder() {
+void MainWindow::submitOrder(Direction direction, Offset offset) {
     if (nodeClient_ == nullptr || !nodeReady_ || !accountLoaded_ || !riskCheck_->isChecked()) {
         orderStatus_->setText(tr("交易未就绪或未确认风险"));
         return;
@@ -908,8 +1009,8 @@ void MainWindow::submitOrder() {
 
     OrderRequest request;
     request.instrumentId = selectedSymbol_;
-    request.direction    = static_cast<Direction>(directionBox_->currentData().toInt());
-    request.offset       = static_cast<Offset>(offsetBox_->currentData().toInt());
+    request.direction    = direction;
+    request.offset       = offset;
     request.priceType    = PriceType::Limit;
     request.limitPrice   = priceBox_->value();
     request.volume       = volumeBox_->value();
@@ -918,7 +1019,7 @@ void MainWindow::submitOrder() {
                               .arg(selectedSymbol_)
                               .arg(request.volume)
                               .arg(priceText(request.limitPrice)));
-    submitButton_->setEnabled(false);
+    updateOrderControls();
 }
 
 void MainWindow::cancelSelectedOrder() {
@@ -935,6 +1036,74 @@ void MainWindow::cancelSelectedOrder() {
     }
     nodeClient_->cancelOrder(orderId);
     orderStatus_->setText(tr("撤单请求: %1").arg(orderId));
+}
+
+const Instrument* MainWindow::findInstrument(const QString& symbol) const {
+    if (futuresModel_ == nullptr) {
+        return nullptr;
+    }
+    for (const auto& instrument : futuresModel_->instruments()) {
+        if (instrument.instrumentId == symbol) {
+            return &instrument;
+        }
+    }
+    for (const auto* model : {callsModel_, putsModel_}) {
+        if (model == nullptr) {
+            continue;
+        }
+        for (const auto& instrument : model->instruments()) {
+            if (instrument.instrumentId == symbol) {
+                return &instrument;
+            }
+        }
+    }
+    return nullptr;
+}
+
+void MainWindow::installColumnMenu(QTableView* view, const QString& key) {
+    if (view == nullptr || view->model() == nullptr || view->horizontalHeader() == nullptr) {
+        return;
+    }
+    auto* header = view->horizontalHeader();
+    header->setContextMenuPolicy(Qt::CustomContextMenu);
+    const auto loadSettings = [view, key] {
+        QSettings settings;
+        for (int i = 0; i < view->model()->columnCount(); ++i) {
+            const QString name = QStringLiteral("ui/columns/%1/%2").arg(key).arg(i);
+            if (settings.contains(name)) {
+                view->setColumnHidden(i, !settings.value(name, true).toBool());
+            }
+        }
+    };
+    loadSettings();
+
+    connect(header,
+            &QWidget::customContextMenuRequested,
+            this,
+            [this, view, key, header](const QPoint& pos) {
+                QMenu    menu(view);
+                QAction* reset = menu.addAction(tr("显示全部列"));
+                menu.addSeparator();
+                for (int i = 0; i < view->model()->columnCount(); ++i) {
+                    const QString title = view->model()->headerData(i, Qt::Horizontal).toString();
+                    QAction* action = menu.addAction(title.isEmpty() ? QString::number(i) : title);
+                    action->setCheckable(true);
+                    action->setChecked(!view->isColumnHidden(i));
+                    connect(action, &QAction::toggled, this, [view, i, key](bool checked) {
+                        view->setColumnHidden(i, !checked);
+                        QSettings settings;
+                        settings.setValue(QStringLiteral("ui/columns/%1/%2").arg(key).arg(i),
+                                          checked);
+                    });
+                }
+                if (menu.exec(header->viewport()->mapToGlobal(pos)) == reset) {
+                    QSettings settings;
+                    for (int i = 0; i < view->model()->columnCount(); ++i) {
+                        view->setColumnHidden(i, false);
+                        settings.setValue(QStringLiteral("ui/columns/%1/%2").arg(key).arg(i), true);
+                    }
+                }
+            });
 }
 
 void MainWindow::requestOptionChain() {

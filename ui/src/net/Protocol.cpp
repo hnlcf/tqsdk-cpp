@@ -71,14 +71,19 @@ std::optional<Quote> parseQuote(const QJsonObject& object) {
         return std::nullopt;
     }
     Quote q;
-    q.instrumentId  = stringValue(object.value("instrument_id"));
-    q.lastPrice     = numberValue(object.value("last_price"));
-    q.bidPrice1     = numberValue(object.value("bid_price1"));
-    q.askPrice1     = numberValue(object.value("ask_price1"));
-    q.preSettlement = numberValue(object.value("pre_settlement"));
-    q.openInterest  = numberValue(object.value("open_interest"));
-    q.volume        = integerValue(object.value("volume"));
-    q.datetime      = integerValue(object.value("datetime"));
+    q.instrumentId    = stringValue(object.value("instrument_id"));
+    q.lastPrice       = numberValue(object.value("last_price"));
+    q.bidPrice1       = numberValue(object.value("bid_price1"));
+    q.askPrice1       = numberValue(object.value("ask_price1"));
+    q.preSettlement   = numberValue(object.value("pre_settlement"));
+    q.preOpenInterest = numberValue(object.value("pre_open_interest"));
+    q.openInterest    = numberValue(object.value("open_interest"));
+    q.preClose        = numberValue(object.value("pre_close"));
+    q.open            = numberValue(object.value("open"));
+    q.high            = numberValue(object.value("highest"));
+    q.low             = numberValue(object.value("lowest"));
+    q.volume          = integerValue(object.value("volume"));
+    q.datetime        = integerValue(object.value("datetime"));
     return q;
 }
 

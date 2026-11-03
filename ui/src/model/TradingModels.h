@@ -17,8 +17,10 @@ public:
         Long,
         Short,
         OpenLong,
+        OpenShort,
         Last,
         FloatProfit,
+        Margin,
         ColumnCount
     };
 
@@ -28,8 +30,9 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
 
-    void setPositions(const QVector<Position>& positions);
-    void applyPositions(const QVector<Position>& positions);
+    void                     setPositions(const QVector<Position>& positions);
+    void                     applyPositions(const QVector<Position>& positions);
+    const QVector<Position>& positions() const { return positions_; }
 
 private:
     QVector<Position> positions_;

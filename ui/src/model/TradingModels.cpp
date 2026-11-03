@@ -24,10 +24,14 @@ QVariant displayText(int column, const Position& position) {
         return QString::number(position.volumeShort);
     case PositionTableModel::OpenLong:
         return number(position.openPriceLong);
+    case PositionTableModel::OpenShort:
+        return number(position.openPriceShort);
     case PositionTableModel::Last:
         return number(position.lastPrice);
     case PositionTableModel::FloatProfit:
         return number(position.floatProfit);
+    case PositionTableModel::Margin:
+        return number(position.margin);
     default:
         return {};
     }
@@ -150,11 +154,15 @@ QVariant PositionTableModel::headerData(int section, Qt::Orientation orientation
         case Short:
             return QStringLiteral("空");
         case OpenLong:
-            return QStringLiteral("开仓均价");
+            return QStringLiteral("多头均价");
+        case OpenShort:
+            return QStringLiteral("空头均价");
         case Last:
             return QStringLiteral("最新");
         case FloatProfit:
             return QStringLiteral("浮动盈亏");
+        case Margin:
+            return QStringLiteral("保证金");
         default:
             return {};
         }

@@ -151,11 +151,16 @@ void ModelTest::instrumentModelFormatsRows() {
              QString("10"));
 
     Quote quote;
-    quote.instrumentId = "SHFE.rb2701";
-    quote.lastPrice    = 3011.0;
+    quote.instrumentId  = "SHFE.rb2701";
+    quote.lastPrice     = 3011.0;
+    quote.preSettlement = 3000.0;
+    quote.volume        = 77;
     model.applyQuotes({quote});
     QCOMPARE(model.data(model.index(0, InstrumentTableModel::LastPrice)).toString(),
              QString("3011.00"));
+    QCOMPARE(model.data(model.index(0, InstrumentTableModel::ChangePercent)).toString(),
+             QString("+0.37%"));
+    QCOMPARE(model.data(model.index(0, InstrumentTableModel::Volume)).toString(), QString("77"));
 }
 
 QTEST_APPLESS_MAIN(ModelTest)

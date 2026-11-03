@@ -18,13 +18,18 @@ namespace tqsdk::ui {
 /// 页面/图表只看到这些类型，不直接接触 QJsonObject/QWebSocket。
 struct Quote {
     QString instrumentId;
-    double  lastPrice     = std::numeric_limits<double>::quiet_NaN();
-    double  bidPrice1     = std::numeric_limits<double>::quiet_NaN();
-    double  askPrice1     = std::numeric_limits<double>::quiet_NaN();
-    double  preSettlement = std::numeric_limits<double>::quiet_NaN();
-    double  openInterest  = std::numeric_limits<double>::quiet_NaN();
-    qint64  volume        = 0;
-    qint64  datetime      = 0;
+    double  lastPrice       = std::numeric_limits<double>::quiet_NaN();
+    double  bidPrice1       = std::numeric_limits<double>::quiet_NaN();
+    double  askPrice1       = std::numeric_limits<double>::quiet_NaN();
+    double  preSettlement   = std::numeric_limits<double>::quiet_NaN();
+    double  preOpenInterest = std::numeric_limits<double>::quiet_NaN();
+    double  openInterest    = std::numeric_limits<double>::quiet_NaN();
+    double  preClose        = std::numeric_limits<double>::quiet_NaN();
+    double  open            = std::numeric_limits<double>::quiet_NaN();
+    double  high            = std::numeric_limits<double>::quiet_NaN();
+    double  low             = std::numeric_limits<double>::quiet_NaN();
+    qint64  volume          = 0;
+    qint64  datetime        = 0;
 };
 
 struct KlineBar {

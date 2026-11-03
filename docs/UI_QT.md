@@ -358,7 +358,7 @@ Qt6::WebSockets
 - 自选/最近行情表和 `QuoteTableModel`；
 - `InstrumentTableModel` 合约目录表，支持搜索和双击切换；
 - `MarketStore` 合并 quote 和 K 线，支持 reset/append/update/裁剪；
-- `KLineChartWidget`：QPainter 蜡烛、成交量、坐标、当前价和十字光标；
+- `KLineChartWidget`：QPainter 蜡烛、成交量、坐标、当前价和十字光标；滚轮缩放、左键拖动，头部显示价格/涨跌/涨幅；
 - 周期切换（1m/5m/15m/30m/1h/2h/4h/1d/3d/1w）及 REST 历史 + WS 增量；
 - 深色/浅色主题；
 - Wayland 原生运行，XCB fallback；
@@ -367,9 +367,9 @@ Qt6::WebSockets
 ### Phase 2：期权与交易（基础版已完成，2026-11）
 
 - 期权链 CALL/PUT 表格，双击加入自选；
-- 限价单下单/撤单，风险确认复选框；
-- 账户、持仓、委托、成交表；
-- REST 快照与 WS diff 合并；
+- 底部独立的“三键下单”面板：买开、卖开、平仓；限价单、风险确认；
+- 账户、持仓、委托、成交表；REST 快照与 WS diff 合并；
+- 合约/持仓/委托/成交表右键显示/隐藏列，选择持久化到 QSettings；
 - node ready + 账户加载门禁；`/readyz` 仍由 node 侧负责。
 
 ### Phase 3：工程质量
