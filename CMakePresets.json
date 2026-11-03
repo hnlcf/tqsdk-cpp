@@ -46,7 +46,8 @@
                 "TQSDK_ENABLE_CTP": "ON",
                 "TQSDK_BUILD_EXAMPLES": "OFF",
                 "TQSDK_BUILD_TESTS": "ON",
-                "TQSDK_BUILD_UI": "ON"
+                "TQSDK_BUILD_UI": "ON",
+                "TQSDK_BUILD_UI_TESTS": "ON"
             },
             "generator": "Ninja"
         },
@@ -64,7 +65,9 @@
             "name": "ui-dev",
             "configurePreset": "ui-dev",
             "targets": [
-                "tqsdk-ui"
+                "tqsdk-ui",
+                "tqsdk-ui-tests",
+                "tqsdk_tests"
             ]
         }
     ],

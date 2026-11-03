@@ -28,7 +28,8 @@ UI 默认关闭，避免影响后端核心构建。先安装 Qt，再用 UI pres
 ```bash
 export VCPKG_ROOT=/path/to/vcpkg
 cmake --preset ui-dev
-cmake --build --preset ui-dev --target tqsdk-ui
+cmake --build --preset ui-dev
+ctest --test-dir build-ui -R tqsdk-ui-protocol --output-on-failure
 ./build-ui/bin/tqsdk-ui
 ```
 
@@ -40,6 +41,8 @@ cmake --build build-ui --target tqsdk-ui -j
 ```
 
 ## 当前阶段
+
+已在 Qt 6.11.2 + QtWebSockets 上验证过首次 configure/build。
 
 Phase 0.5：
 

@@ -11,6 +11,7 @@
     "spdlog",
     "sqlitecpp",
     "tomlplusplus",
-    "qt"
+    "qtbase",
+    "qtwebsockets"
   ]
 }

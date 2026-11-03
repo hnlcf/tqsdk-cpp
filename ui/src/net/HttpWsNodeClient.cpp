@@ -209,7 +209,7 @@ QUrl HttpWsNodeClient::apiUrl(const QString& path) const {
         relative.remove(0, 1);
     }
     url.setPath(base + relative);
-    url.setQuery({});
+    url.setQuery(QString{});
     return url;
 }
 
@@ -218,7 +218,7 @@ QUrl HttpWsNodeClient::streamUrl() const {
     url.setScheme(url.scheme().toLower() == QStringLiteral("https") ? QStringLiteral("wss")
                                                                     : QStringLiteral("ws"));
     url.setPath(QStringLiteral("/stream"));
-    url.setQuery({});
+    url.setQuery(QString{});
     return url;
 }
 

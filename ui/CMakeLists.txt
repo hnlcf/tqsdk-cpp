@@ -48,3 +48,23 @@ set_target_properties(tqsdk-ui PROPERTIES
 install(TARGETS tqsdk-ui
         BUNDLE  DESTINATION .
         RUNTIME DESTINATION bin)
+
+option(TQSDK_BUILD_UI_TESTS "Build Qt UI tests" OFF)
+if(TQSDK_BUILD_UI_TESTS)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    enable_testing()
+
+    qt_add_executable(tqsdk-ui-tests
+        tests/ProtocolTest.cpp
+        src/net/Protocol.cpp
+        src/net/Protocol.h
+    )
+    target_include_directories(tqsdk-ui-tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(tqsdk-ui-tests PRIVATE
+        Qt6::Core
+        Qt6::Test
+    )
+    add_test(NAME tqsdk-ui-protocol COMMAND tqsdk-ui-tests)
+endif()
