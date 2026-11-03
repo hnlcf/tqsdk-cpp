@@ -180,6 +180,10 @@ void HttpServer::setup_routes() {
              };
          })},
         {http::verb::get,
+         "/kline-cache/status", make_entry([this]() -> asio::awaitable<json> {
+             co_return api_->kline_cache_status();
+         })},
+        {http::verb::get,
          "/quote/{symbol}",
          make_entry([this](std::string symbol) -> asio::awaitable<json> {
              // get_quote 在不存在时创建空 Quote 并触发订阅（首次访问）。

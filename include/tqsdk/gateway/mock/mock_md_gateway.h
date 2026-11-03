@@ -53,7 +53,7 @@ public:
     asio::awaitable<void>
     subscribe_kline(const std::string& symbol, int64_t duration_ns, int view_width) override {
         subscribed_klines_.insert(std::make_pair(symbol, duration_ns));
-        (void)view_width;
+        kline_view_widths_[std::make_pair(symbol, duration_ns)] = view_width;
         co_return;
     }
 
@@ -83,6 +83,11 @@ public:
         return subscribed_klines_.count(std::make_pair(std::string(sym), duration_ns)) > 0;
     }
 
+    int kline_view_width(std::string_view sym, int64_t duration_ns) const {
+        auto it = kline_view_widths_.find(std::make_pair(std::string(sym), duration_ns));
+        return it == kline_view_widths_.end() ? 0 : it->second;
+    }
+
     bool was_released(std::string_view sym) const { return released_.count(std::string(sym)) > 0; }
 
     bool was_kline_released(std::string_view sym, int64_t duration_ns) const {
@@ -93,14 +98,15 @@ public:
     int release_events() const noexcept { return release_events_; }
 
 private:
-    asio::any_io_executor                     ex_;
-    Channel<MarketDataEvent>                  ch_;
-    std::unordered_set<std::string>           subscribed_;
-    std::set<std::pair<std::string, int64_t>> subscribed_klines_;
-    std::unordered_set<std::string>           released_;
-    std::set<std::pair<std::string, int64_t>> released_klines_;
-    int                                       subscribe_events_ = 0;
-    int                                       release_events_   = 0;
+    asio::any_io_executor                          ex_;
+    Channel<MarketDataEvent>                       ch_;
+    std::unordered_set<std::string>                subscribed_;
+    std::set<std::pair<std::string, int64_t>>      subscribed_klines_;
+    std::map<std::pair<std::string, int64_t>, int> kline_view_widths_;
+    std::unordered_set<std::string>                released_;
+    std::set<std::pair<std::string, int64_t>>      released_klines_;
+    int                                            subscribe_events_ = 0;
+    int                                            release_events_   = 0;
 };
 
 } // namespace tqsdk

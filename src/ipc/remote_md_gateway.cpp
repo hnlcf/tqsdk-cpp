@@ -83,7 +83,10 @@ asio::awaitable<void> RemoteMdGateway::resync() {
     body.symbols.assign(symbols_.begin(), symbols_.end());
     body.klines.reserve(klines_.size());
     for (const auto& [key, width] : klines_) {
-        body.klines.push_back(KlineSub{key.first, key.second, width});
+        // 首连时 TqApi 可能只请求最新 2 根（本地 SQLite 有历史）；断线重连
+        // 无法确定停机期间缺了多少根，保守地用至少 200 根重放订阅。
+        const int replay_width = std::max(width, 200);
+        body.klines.push_back(KlineSub{key.first, key.second, replay_width});
     }
     SPDLOG_INFO(
         "[RemoteMd] resync: {} symbols, {} klines", body.symbols.size(), body.klines.size());

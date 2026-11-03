@@ -55,6 +55,17 @@ url = "https://openmd.shinnytech.com/t/md/symbols/symbol.json"
 refresh_interval_sec = 21600
 initial_delay_sec = 60
 
+# ---- K 线历史缓存 ----
+# node 在本地 SQLite 中保存最近 K 线；重启后先注入本地历史，
+# 缓存足够新时只向远端请求最新 2 根，避免重复下载完整历史。
+[kline_cache]
+enabled = true
+file = "kline_cache.sqlite3"
+max_bars_per_series = 2000
+flush_interval_ms = 250
+max_pending_bars = 50000
+fresh_after_sec = 900
+
 # ---- 运行时线程 ----
 # io_context worker 数。数据面（TqApi/DataManager/网关）绑定 core strand 串行；
 # HTTP 每连接独立 strand，可在多个 worker 上并行处理 socket 读写。

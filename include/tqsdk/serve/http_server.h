@@ -51,6 +51,7 @@ inline void from_json(const json& j, CatalogQuery& q) {
 ///   GET    /healthz                       -> {"ok":true}
 ///   GET    /quote/{symbol}                -> Quote 快照（不存在则空占位并触发订阅）
 ///   GET    /kline/{symbol}/{duration_ns}  -> {"symbol","duration_ns","bars":[...]}
+///   GET    /kline-cache/status             -> SQLite K 线缓存状态
 ///   GET    /account                       -> Account 快照
 ///   GET    /orders                        -> {"orders":{oid: Order,...}}
 ///   GET    /trades                        -> {"trades":{tid: Trade,...}}

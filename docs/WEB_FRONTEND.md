@@ -238,6 +238,7 @@ GET  /readyz
 GET  /metrics
 GET  /quote/{symbol}
 GET  /kline/{symbol}/{duration_ns}
+GET  /kline-cache/status
 GET  /account
 GET  /orders
 GET  /trades

@@ -35,9 +35,10 @@ using namespace tqsdk;
 
 // 持有运行期全部对象，保证生命周期覆盖 io.run()。
 struct NodeRuntime {
-    std::shared_ptr<InstrumentCatalog>   catalog;
-    std::unique_ptr<TqApi>               api;
-    std::unique_ptr<serve::HttpServer>   http;
+    std::shared_ptr<InstrumentCatalog> catalog;
+    std::shared_ptr<KlineStore>        kline_store;
+    std::unique_ptr<TqApi>             api;
+    std::unique_ptr<serve::HttpServer> http;
 };
 
 } // namespace
@@ -74,9 +75,16 @@ int main(int argc, char** argv) {
     if (cfg.instruments.enabled) {
         rt->catalog = std::make_shared<InstrumentCatalog>(cfg.instruments);
         if (!rt->catalog->load_local()) {
-            SPDLOG_WARN("[node] instrument catalog not available yet; background refresh will retry");
+            SPDLOG_WARN(
+                "[node] instrument catalog not available yet; background refresh will retry");
         }
         rt->catalog->start_background_refresh();
+    }
+    if (cfg.kline_cache.enabled) {
+        rt->kline_store = std::make_shared<KlineStore>(cfg.kline_cache);
+        if (!rt->kline_store->ready()) {
+            SPDLOG_WARN("[node] kline cache unavailable; continuing without history cache");
+        }
     }
 
     // 引导协程：建连 gw -> 建 TqApi -> 预订阅 -> 起 HTTP serve。
@@ -85,7 +93,7 @@ int main(int argc, char** argv) {
     // 每连接 strand 上并行，进入路由 handler 前切回 core_ex。
     auto bootstrap = [&io, io_ex, core_ex, rt, &cfg]() -> asio::awaitable<void> {
         try {
-            rt->api = co_await make_tqapi(io, cfg.upstream, core_ex);
+            rt->api = co_await make_tqapi(io, cfg.upstream, core_ex, rt->kline_store);
         } catch (const std::exception& e) {
             SPDLOG_CRITICAL("[node] failed to connect/init upstream gw: {}", e.what());
             io.stop();
@@ -147,6 +155,10 @@ int main(int argc, char** argv) {
     }
     io.restart();
     io.run_for(std::chrono::milliseconds(200)); // 排空 close 触发的回调
+    if (rt->kline_store) {
+        rt->kline_store->flush();
+        rt->kline_store->stop();
+    }
     SPDLOG_INFO("[node] exited");
     return 0;
 }

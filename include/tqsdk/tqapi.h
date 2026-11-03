@@ -4,6 +4,7 @@
 
 #include "tqsdk/data/data_manager.h"
 #include "tqsdk/data/diff_merge_engine.h"
+#include "tqsdk/data/kline_store.h"
 #include "tqsdk/gateway/market_data_gateway.h"
 #include "tqsdk/gateway/trading_gateway.h"
 #include "tqsdk/update_signal.h"
@@ -30,7 +31,8 @@ class TqApi {
 public:
     TqApi(asio::any_io_executor              ex,
           std::unique_ptr<MarketDataGateway> md,
-          std::unique_ptr<TradingGateway>    td);
+          std::unique_ptr<TradingGateway>    td,
+          std::shared_ptr<KlineStore>        kline_store = nullptr);
 
     ~TqApi();
 
@@ -49,6 +51,7 @@ public:
     bool           ready() const;
     nlohmann::json readiness_json() const;
     nlohmann::json metrics_json() const;
+    nlohmann::json kline_cache_status() const;
 
     // 注册一个在 close() 时同步执行的清理钩子（按注册顺序调用）。
     // 用于关闭网关之外、TqApi 不直接持有的资源（例如远程模式下共享的
@@ -106,6 +109,13 @@ private:
     asio::awaitable<void> md_loop();
     asio::awaitable<void> td_loop();
 
+    void hydrate_kline_cache(std::string_view symbol,
+                             int64_t          duration_ns,
+                             int              view_width,
+                             KlineStream&     stream);
+    int  remote_kline_width(std::string_view symbol, int64_t duration_ns, int requested) const;
+    void persist_changed_klines();
+
     asio::any_io_executor              ex_;
     std::unique_ptr<MarketDataGateway> md_;
     std::unique_ptr<TradingGateway>    td_;
@@ -122,6 +132,10 @@ private:
     std::atomic<bool>     td_ready_{false};
     std::atomic<bool>     md_connected_{false};
     std::atomic<bool>     td_connected_{false};
+
+    std::shared_ptr<KlineStore>           kline_store_;
+    std::unordered_map<std::string, int>  cache_loaded_width_;
+    std::unordered_map<std::string, bool> cache_fresh_;
 
     std::vector<std::function<void()>> close_hooks_;
 };

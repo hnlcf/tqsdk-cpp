@@ -38,3 +38,8 @@ symbol.json
 # Tauri/Rust 生成物
 web/apps/desktop/src-tauri/target/
 web/apps/desktop/src-tauri/gen/
+
+# K 线 SQLite 缓存
+kline_cache.sqlite3
+kline_cache.sqlite3-wal
+kline_cache.sqlite3-shm

@@ -64,6 +64,10 @@ struct KlineStream {
 
     /// 字段更新标志位图
     uint64_t changed_fields = 0;
+
+    /// 本地历史缓存已注入。为 true 时远端历史帧按 datetime 合并，
+    /// 不能整体替换（远端可能只请求了最新 2 根）。
+    bool cached_history = false;
 };
 
 } // namespace tqsdk

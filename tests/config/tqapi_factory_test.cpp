@@ -300,6 +300,27 @@ TEST(TqApiFactoryConfig, ParsesRuntimeThreads) {
     EXPECT_EQ(parse_node_config("[runtime]\nthreads = 1000\n").runtime.threads, 64);
 }
 
+TEST(TqApiFactoryConfig, ParsesKlineCache) {
+    auto node = parse_node_config(R"(
+[kline_cache]
+enabled = true
+file = "data/kline.sqlite3"
+max_bars_per_series = 500
+flush_interval_ms = 50
+max_pending_bars = 1234
+fresh_after_sec = 60
+)");
+    EXPECT_TRUE(node.kline_cache.enabled);
+    EXPECT_EQ(node.kline_cache.file, "data/kline.sqlite3");
+    EXPECT_EQ(node.kline_cache.max_bars_per_series, 500);
+    EXPECT_EQ(node.kline_cache.flush_interval_ms, 50);
+    EXPECT_EQ(node.kline_cache.max_pending_bars, 1234u);
+    EXPECT_EQ(node.kline_cache.fresh_after_sec, 60);
+
+    auto disabled = parse_node_config("[kline_cache]\nenabled = false\n");
+    EXPECT_FALSE(disabled.kline_cache.enabled);
+}
+
 TEST(TqApiFactoryConfig, ParsesCtpSection) {
     const char* toml = R"(
 [md]

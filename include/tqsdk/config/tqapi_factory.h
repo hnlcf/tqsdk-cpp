@@ -2,6 +2,7 @@
 
 #include "tqsdk/pch.h"
 
+#include "tqsdk/data/kline_store.h"
 #include "tqsdk/gateway/ctp/ctp_config.h"
 #include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/ipc/protocol.h"
@@ -106,7 +107,10 @@ TqApiConfig parse_tqapi_config(std::string_view toml_text);
 /// core_ex 为空时使用 ctx 的 executor；多线程运行时调用方应传入 core strand，
 /// TqApi/DataManager/网关事件循环全部绑定到该 executor。
 asio::awaitable<std::unique_ptr<TqApi>>
-make_tqapi(asio::io_context& ctx, const TqApiConfig& cfg, asio::any_io_executor core_ex = {});
+make_tqapi(asio::io_context&           ctx,
+           const TqApiConfig&          cfg,
+           asio::any_io_executor       core_ex     = {},
+           std::shared_ptr<KlineStore> kline_store = nullptr);
 
 // ============================================================================
 // 两进程（tqsdk-gw / tqsdk-node）的配置
@@ -166,8 +170,9 @@ struct NodeConfig {
     TqApiConfig               upstream; ///< 到 gw 的连接（md/td.kind = Remote）
     std::string               serve_bind = "127.0.0.1";
     uint16_t                  serve_port = 8080;
-    std::vector<InstrumentId> symbols; ///< 启动即预订阅的合约（便于直接 curl 到数据）
+    std::vector<InstrumentId> symbols;     ///< 启动即预订阅的合约（便于直接 curl 到数据）
     InstrumentCatalog::Config instruments; ///< [instruments] 标准合约目录/刷新
+    KlineStore::Config        kline_cache; ///< [kline_cache] 本地 K 线历史缓存
 
     /// [serve.ws]：同一 HTTP 端口上的 WebSocket 实时推送。
     struct Ws {

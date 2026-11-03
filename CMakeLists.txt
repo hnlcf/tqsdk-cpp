@@ -44,6 +44,7 @@ add_library(tqsdk_core SHARED
     src/serve/json_convert.cpp
     src/config/tqapi_factory.cpp
     src/data/diff_merge_engine.cpp
+    src/data/kline_store.cpp
     src/gateway/sim/sim_td_gateway.cpp
     src/gateway/tq/tq_md_protocol.cpp
     src/gateway/tq/tq_md_gateway.cpp
@@ -209,6 +210,8 @@ if(TQSDK_BUILD_TESTS)
         tests/channel/channel_close_test.cpp
         tests/channel/channel_multiplex_test.cpp
         tests/data/data_manager_test.cpp
+        tests/data/kline_store_test.cpp
+        tests/data/kline_cache_integration_test.cpp
         tests/data/diff_merge_test.cpp
         tests/data/entity_store_test.cpp
         tests/ipc/uds_channel_test.cpp
@@ -320,7 +323,7 @@ endif()
 install(FILES config/gw.toml config/node.toml
         DESTINATION share/tqsdk/config)
 install(FILES README.md docs/CTP.md docs/SOAK_PERF.md docs/THREADING.md
-              docs/IPC_RECOVERY.md docs/HA.md docs/WEB_FRONTEND.md docs/INSTRUMENTS.md
+              docs/IPC_RECOVERY.md docs/HA.md docs/WEB_FRONTEND.md docs/INSTRUMENTS.md docs/KLINE_CACHE.md
         DESTINATION share/doc/tqsdk)
 
 # ==========================================================

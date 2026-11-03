@@ -6,10 +6,12 @@ namespace tqsdk {
 
 TqApi::TqApi(asio::any_io_executor              ex,
              std::unique_ptr<MarketDataGateway> md,
-             std::unique_ptr<TradingGateway>    td)
+             std::unique_ptr<TradingGateway>    td,
+             std::shared_ptr<KlineStore>        kline_store)
     : ex_(ex),
       md_(std::move(md)),
       td_(std::move(td)),
+      kline_store_(std::move(kline_store)),
       merger_(data_),
       update_signal_(ex_),
       order_seq_(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(
@@ -70,6 +72,9 @@ void TqApi::close() {
         }
     }
     close_hooks_.clear();
+    if (kline_store_) {
+        kline_store_->flush();
+    }
 
     // 唤醒所有挂起的 wait_update：closed_ 置位后它们会返回 false。
     update_signal_.notify();
@@ -130,7 +135,98 @@ nlohmann::json TqApi::metrics_json() const {
     if (td_) {
         j["td"]["metrics"] = td_->metrics();
     }
+    j["kline_store"] = kline_cache_status();
     return j;
+}
+
+nlohmann::json TqApi::kline_cache_status() const {
+    if (!kline_store_) {
+        return nlohmann::json{{"enabled", false}};
+    }
+    return kline_store_->status_json();
+}
+
+void TqApi::hydrate_kline_cache(std::string_view symbol,
+                                int64_t          duration_ns,
+                                int              view_width,
+                                KlineStream&     stream) {
+    if (!kline_store_ || !kline_store_->ready() || view_width <= 0) {
+        return;
+    }
+
+    const std::string key       = KlineRegistry::make_key(symbol, duration_ns);
+    auto              loaded_it = cache_loaded_width_.find(key);
+    if (loaded_it != cache_loaded_width_.end() && stream.cached_history &&
+        loaded_it->second >= view_width) {
+        return;
+    }
+
+    auto loaded = kline_store_->load_recent(std::string(symbol), duration_ns, view_width);
+    cache_loaded_width_[key] = view_width;
+    // 只有“足够新且缓存深度覆盖本次 view_width”才只取远端 tail；
+    // 新合约/缓存不足时必须请求完整窗口。
+    cache_fresh_[key] =
+        kline_store_->is_fresh(loaded.meta) && static_cast<int>(loaded.bars.size()) >= view_width;
+    if (loaded.bars.empty()) {
+        return;
+    }
+
+    // 已有远端实时 bar 时也按 datetime 合并，避免重复。
+    for (auto& incoming : loaded.bars) {
+        auto pos =
+            std::lower_bound(stream.bars.begin(),
+                             stream.bars.end(),
+                             incoming.datetime,
+                             [](const KlineBar& item, TimeStamp dt) { return item.datetime < dt; });
+        if (pos != stream.bars.end() && pos->datetime == incoming.datetime) {
+            *pos = std::move(incoming);
+        } else {
+            stream.bars.insert(pos, std::move(incoming));
+        }
+    }
+    while (static_cast<int>(stream.bars.size()) > stream.capacity) {
+        stream.bars.pop_front();
+    }
+    stream.cached_history = true;
+    stream.changed_fields |= KlineChangeDetail::Reset;
+}
+
+int TqApi::remote_kline_width(std::string_view symbol, int64_t duration_ns, int requested) const {
+    const std::string key = KlineRegistry::make_key(symbol, duration_ns);
+    auto              fit = cache_fresh_.find(key);
+    if (fit == cache_fresh_.end() || !fit->second) {
+        return requested;
+    }
+    // 缓存仍新鲜：只让远端补最新一根/两根，历史由 SQLite 供给。
+    const int remote = std::min(requested, 2);
+    SPDLOG_DEBUG("[TqApi] kline cache {}|{}: remote view_width {} -> {}",
+                 symbol,
+                 duration_ns,
+                 requested,
+                 remote);
+    return remote;
+}
+
+void TqApi::persist_changed_klines() {
+    if (!kline_store_ || !kline_store_->ready()) {
+        return;
+    }
+    constexpr uint64_t kAnyChange =
+        KlineChangeDetail::Reset | KlineChangeDetail::LastUpdated | KlineChangeDetail::Appended;
+    for (auto& [_, stream] : data_.klines) {
+        if ((stream.changed_fields & kAnyChange) == 0) {
+            continue;
+        }
+        if (stream.changed_fields & KlineChangeDetail::Reset) {
+            kline_store_->put_bars(stream.instrumnet_id,
+                                   static_cast<int64_t>(stream.duration_ns),
+                                   std::vector<KlineBar>(stream.bars.begin(), stream.bars.end()));
+        } else if (!stream.bars.empty()) {
+            kline_store_->put_bars(stream.instrumnet_id,
+                                   static_cast<int64_t>(stream.duration_ns),
+                                   std::vector<KlineBar>{stream.bars.back()});
+        }
+    }
 }
 
 // ---------- 后台消费循环 ----------
@@ -150,6 +246,7 @@ asio::awaitable<void> TqApi::md_loop() {
             md_connected_.store(true, std::memory_order_relaxed);
             md_ready_.store(true, std::memory_order_relaxed);
             merger_.apply(ev->payload);
+            persist_changed_klines();
             update_signal_.notify();
             break;
         case MarketDataEvent::Kind::Disconnected:
@@ -276,15 +373,22 @@ KlineStream* TqApi::get_kline_serial(std::string_view symbol, int64_t duration_n
     bool         created = false;
     KlineStream& k =
         data_.klines.get_or_create(std::string(symbol), duration_ns, view_width, &created);
+    if (static_cast<int>(k.capacity) < view_width) {
+        k.capacity = static_cast<uint64_t>(view_width);
+    }
+
+    // 先把本地历史注入，再决定远端请求宽度；HTTP 首次读也能立即拿到历史。
+    hydrate_kline_cache(symbol, duration_ns, view_width, k);
 
     // 仅首次创建该序列时发起订阅（幂等）；重复调用只读不重复订阅。
     if (created && md_) {
-        std::string sym = std::string(symbol);
+        std::string sym          = std::string(symbol);
+        const int   remote_width = remote_kline_width(symbol, duration_ns, view_width);
         co_spawn_logged(
             ex_,
             [](MarketDataGateway& md, std::string s, int64_t dur, int w) -> asio::awaitable<void> {
                 co_await md.subscribe_kline(s, dur, w);
-            }(*md_, std::move(sym), duration_ns, view_width),
+            }(*md_, std::move(sym), duration_ns, remote_width),
             "TqApi.subscribe_kline");
     }
     return &k;
@@ -314,8 +418,10 @@ TqApi::subscribe_kline(std::string symbol, int64_t duration_ns, int view_width) 
     if (static_cast<int>(k.capacity) < view_width) {
         k.capacity = static_cast<uint64_t>(view_width);
     }
+    hydrate_kline_cache(symbol, duration_ns, view_width, k);
     if (md_) {
-        co_await md_->subscribe_kline(symbol, duration_ns, view_width);
+        co_await md_->subscribe_kline(
+            symbol, duration_ns, remote_kline_width(symbol, duration_ns, view_width));
     }
     co_return;
 }

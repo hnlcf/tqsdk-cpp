@@ -222,8 +222,10 @@ TqApiConfig load_tqapi_config(const std::string& path) {
     return build_from_toml(root);
 }
 
-asio::awaitable<std::unique_ptr<TqApi>>
-make_tqapi(asio::io_context& ctx, const TqApiConfig& cfg, asio::any_io_executor core_ex) {
+asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context&           ctx,
+                                                   const TqApiConfig&          cfg,
+                                                   asio::any_io_executor       core_ex,
+                                                   std::shared_ptr<KlineStore> kline_store) {
     auto ex = core_ex ? std::move(core_ex) : asio::any_io_executor(ctx.get_executor());
 
     const bool need_md_remote = cfg.md.kind == MdKind::Remote;
@@ -315,7 +317,7 @@ make_tqapi(asio::io_context& ctx, const TqApiConfig& cfg, asio::any_io_executor 
         client->start();
     }
 
-    auto api = std::make_unique<TqApi>(ex, std::move(md), std::move(td));
+    auto api = std::make_unique<TqApi>(ex, std::move(md), std::move(td), std::move(kline_store));
     // 远程模式：把共享 IpcClient 的关闭纳入 TqApi::close()，确保 close() 会
     // 同步关闭 IPC 连接（进而唤醒读循环），调用方驱动 io 后即可安全析构。
     if (client) {
@@ -447,13 +449,25 @@ NodeConfig build_node_from_toml(const toml::table& root) {
         }
     }
     if (const auto& t = require_table(root, "instruments"); !t.empty()) {
-        cfg.instruments.enabled = get_bool(t, "enabled", true);
-        cfg.instruments.file    = get_str(t, "file", cfg.instruments.file);
-        cfg.instruments.url     = get_str(t, "url", cfg.instruments.url);
+        cfg.instruments.enabled          = get_bool(t, "enabled", true);
+        cfg.instruments.file             = get_str(t, "file", cfg.instruments.file);
+        cfg.instruments.url              = get_str(t, "url", cfg.instruments.url);
         cfg.instruments.refresh_interval = std::chrono::seconds(
             get_int(t, "refresh_interval_sec", cfg.instruments.refresh_interval.count()));
         cfg.instruments.initial_delay = std::chrono::seconds(
             get_int(t, "initial_delay_sec", cfg.instruments.initial_delay.count()));
+    }
+    if (const auto& t = require_table(root, "kline_cache"); !t.empty()) {
+        cfg.kline_cache.enabled             = get_bool(t, "enabled", true);
+        cfg.kline_cache.file                = get_str(t, "file", cfg.kline_cache.file);
+        cfg.kline_cache.max_bars_per_series = static_cast<int>(std::max<int64_t>(
+            1, get_int(t, "max_bars_per_series", cfg.kline_cache.max_bars_per_series)));
+        cfg.kline_cache.flush_interval_ms   = static_cast<int>(std::max<int64_t>(
+            1, get_int(t, "flush_interval_ms", cfg.kline_cache.flush_interval_ms)));
+        cfg.kline_cache.max_pending_bars    = static_cast<std::size_t>(
+            std::max<int64_t>(1, get_int(t, "max_pending_bars", cfg.kline_cache.max_pending_bars)));
+        cfg.kline_cache.fresh_after_sec =
+            std::max<int64_t>(0, get_int(t, "fresh_after_sec", cfg.kline_cache.fresh_after_sec));
     }
     cfg.runtime = parse_runtime(root);
     return cfg;

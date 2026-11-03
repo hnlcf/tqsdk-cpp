@@ -738,7 +738,29 @@ void DiffMergeEngine::merge_one_kline(std::string_view      sym,
     };
 
     if (bars.size() > 1) {
-        // 历史加载:整体替换
+        if (s.cached_history) {
+            // 本地缓存 + 远端只取了最新几根：按 datetime 合并，不能清掉更早历史。
+            for (auto& raw : bars) {
+                KlineBar incoming = parse_bar(raw);
+                auto     pos      = std::lower_bound(
+                    s.bars.begin(),
+                    s.bars.end(),
+                    incoming.datetime,
+                    [](const KlineBar& item, TimeStamp dt) { return item.datetime < dt; });
+                if (pos != s.bars.end() && pos->datetime == incoming.datetime) {
+                    *pos = std::move(incoming);
+                } else {
+                    s.bars.insert(pos, std::move(incoming));
+                }
+            }
+            while (static_cast<int>(s.bars.size()) > s.capacity) {
+                s.bars.pop_front();
+            }
+            s.changed_fields |= KlineChangeDetail::Reset;
+            return;
+        }
+
+        // 无本地历史：远端历史帧是权威全量，整体替换。
         s.bars.clear();
         for (auto& b : bars) {
             s.bars.push_back(parse_bar(b));
