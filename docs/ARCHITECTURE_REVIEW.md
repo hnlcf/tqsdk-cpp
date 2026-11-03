@@ -248,4 +248,4 @@ option(TQSDK_ENABLE_KLINE_CACHE ...)
 - `Date/time` 统一 `TimeStamp=uint64` 的边界，避免 signed/unsigned cast；
 - `KlineStore` 目前按每序列 2000 根裁剪，文件 free page 不做 VACUUM；
 - `InstrumentCatalog` 目录重复 id 目前 last-wins，可增加数据质量统计；
-- Tauri sidecar/动态端口仍未完成（系统 WebKitGTK/rsvg 依赖）。
+- Web/Tauri 前端已废弃；Qt 6 Widgets 独立前端骨架已加入 `ui/`，见 `docs/UI_QT.md`。

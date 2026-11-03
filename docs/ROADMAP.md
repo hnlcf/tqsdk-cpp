@@ -567,6 +567,6 @@ apps/
    见 `docs/HA.md`。
 3. **长稳/性能**：继续跑 24h soak，建立 CTP 专项 tick/order/query 基线；
    见 `docs/SOAK_PERF.md`。
-4. **Web 客户端**：React + Lightweight Charts 的只读行情 -> 交易面板 -> Tauri 桌面壳；
-   选型/目录/通信见 `docs/WEB_FRONTEND.md`。
+4. **Qt 桌面客户端**：独立进程，REST + WebSocket 复用 node；
+   设计/目录/通信见 `docs/UI_QT.md`。
 5. **后续架构**：Channel 多消费者、序列化下沉到 thread_pool、gateway 指标回传。

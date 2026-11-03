@@ -9,7 +9,8 @@
     "nlohmann-json",
     "openssl",
     "spdlog",
+    "sqlitecpp",
     "tomlplusplus",
-    "sqlitecpp"
+    "qt"
   ]
 }

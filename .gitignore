@@ -23,21 +23,11 @@ compile_commands.json
 # ---- 本机 soak/perf 产物 ----
 artifacts/
 
-# ---- Web 前端生成物 ----
-node_modules/
-web/apps/*/dist/
-web/**/node_modules/
-web/.vite/
-
 # tqsdk 运行期导出的合约快照
 latest.json
 
 # 天勤标准合约目录（由 node 下载/本地维护）
 symbol.json
-
-# Tauri/Rust 生成物
-web/apps/desktop/src-tauri/target/
-web/apps/desktop/src-tauri/gen/
 
 # K 线 SQLite 缓存
 kline_cache.sqlite3

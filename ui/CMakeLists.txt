@@ -1,0 +1,44 @@
+# TQSDK Qt desktop UI (independent frontend process)
+cmake_minimum_required(VERSION 3.20)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    project(tqsdk_ui VERSION 0.1.0 LANGUAGES CXX)
+endif()
+#
+# This target intentionally does NOT link tqsdk_core. The UI talks to
+# tqsdk-node through REST + WebSocket so it can be built, upgraded and
+# shipped independently from the C++ backend.
+
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network WebSockets)
+qt_standard_project_setup()
+
+set(TQSDK_UI_SOURCES
+    src/main.cpp
+    src/app/MainWindow.cpp
+    src/app/MainWindow.h
+)
+
+qt_add_executable(tqsdk-ui ${TQSDK_UI_SOURCES})
+
+target_include_directories(tqsdk-ui PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(tqsdk-ui PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Network
+    Qt6::WebSockets
+)
+
+target_compile_features(tqsdk-ui PRIVATE cxx_std_20)
+
+set_target_properties(tqsdk-ui PROPERTIES
+    WIN32_EXECUTABLE TRUE
+    MACOSX_BUNDLE TRUE
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+install(TARGETS tqsdk-ui
+        BUNDLE  DESTINATION .
+        RUNTIME DESTINATION bin)
