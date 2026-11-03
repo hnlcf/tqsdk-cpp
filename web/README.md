@@ -1,8 +1,9 @@
 # TQSDK Web Terminal
 
-Phase 0 静态原型：SolidJS + Vite + TypeScript + TradingView Lightweight Charts。
+SolidJS + Vite + TypeScript + TradingView Lightweight Charts 的期货终端原型。
 
-当前数据全部是本地 mock，不会连接 `/order`，也不会发送任何真实报单。
+行情/合约优先连接 node（`/api/catalog`、`/quote`、`/kline`、`/stream`）；
+后端不可用时自动回退到本地 mock。下单面板仍只更新提示文案，不会发送真实报单。
 
 ## 运行
 
@@ -11,6 +12,12 @@ cd web
 nvm use lts
 npm install
 npm run dev
+```
+
+默认 Vite 把 `/api` 代理到 `http://127.0.0.1:18081`。连接其他 node：
+
+```fish
+env VITE_PROXY_TARGET=http://127.0.0.1:18082 npm run dev
 ```
 
 打开 <http://127.0.0.1:5173>。
@@ -36,6 +43,7 @@ web/
   apps/web/                 SolidJS 应用
     src/App.tsx             页面布局、mock 持仓/委托/下单面板
     src/chart/KLineChart.tsx Lightweight Charts 封装（跟随主题）
+    src/api/                REST/WS client + catalog
     src/pages/              期货列表 / 期权链页面
     src/data/mock.ts        mock K 线/报价/持仓/委托/期货/期权
   package.json              npm workspace 根

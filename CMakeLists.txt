@@ -38,6 +38,7 @@ add_library(tqsdk_core SHARED
     src/ipc/remote_td_gateway.cpp
     src/ipc/gateway_server.cpp
     src/serve/http_server.cpp
+    src/instrument/instrument_catalog.cpp
     src/serve/ws_stream.cpp
     src/serve/json_convert.cpp
     src/config/tqapi_factory.cpp
@@ -224,6 +225,7 @@ if(TQSDK_BUILD_TESTS)
         tests/e2e/mock_e2e_edges_test.cpp
         tests/e2e/sim_td_e2e_test.cpp
         tests/gateway/tq_md_protocol_test.cpp
+        tests/instrument/instrument_catalog_test.cpp
         tests/serve/ws_protocol_test.cpp
         tests/serve/ws_stream_test.cpp
         tests/serve/threading_test.cpp
@@ -316,7 +318,7 @@ endif()
 install(FILES config/gw.toml config/node.toml
         DESTINATION share/tqsdk/config)
 install(FILES README.md docs/CTP.md docs/SOAK_PERF.md docs/THREADING.md
-              docs/IPC_RECOVERY.md docs/HA.md docs/WEB_FRONTEND.md
+              docs/IPC_RECOVERY.md docs/HA.md docs/WEB_FRONTEND.md docs/INSTRUMENTS.md
         DESTINATION share/doc/tqsdk)
 
 # ==========================================================

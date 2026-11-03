@@ -31,3 +31,6 @@ web/.vite/
 
 # tqsdk 运行期导出的合约快照
 latest.json
+
+# 天勤标准合约目录（由 node 下载/本地维护）
+symbol.json

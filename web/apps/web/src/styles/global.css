@@ -1153,6 +1153,12 @@ tbody tr:hover {
 
 .option-panel {
   min-height: 340px;
+  max-height: 430px;
+  flex: none;
+}
+
+.option-table {
+  min-width: 760px;
 }
 
 .option-table-title {
@@ -1352,4 +1358,231 @@ html[data-theme="light"] .chart-credit {
   .option-footnote {
     flex-direction: column;
   }
+}
+
+/* ---------- live catalog/options additions ---------- */
+.compact-heading {
+  padding: 14px 18px;
+}
+
+.compact-heading h1 {
+  margin: 3px 0 0;
+  font-size: 20px;
+}
+
+.source-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  color: var(--muted);
+  vertical-align: middle;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.source-badge.live {
+  color: var(--green);
+  border-color: rgba(22, 199, 132, 0.35);
+  background: rgba(22, 199, 132, 0.08);
+}
+
+.option-selectors {
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.option-selectors label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.option-selectors label > span,
+.expiry-chip > span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.option-selectors select {
+  min-width: 112px;
+  height: 29px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0 7px;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.option-selectors select:focus {
+  border-color: var(--blue);
+}
+
+.expiry-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+
+.expiry-chip strong {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.option-analytics {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1fr;
+  gap: 12px;
+  min-height: 268px;
+}
+
+.payoff-panel,
+.selected-chart {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.payoff-panel .panel-heading,
+.selected-chart .panel-heading {
+  padding-bottom: 4px;
+}
+
+.payoff-chart {
+  flex: 1;
+  min-height: 190px;
+  padding: 0 12px 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.payoff-chart svg {
+  width: 100%;
+  height: 150px;
+  overflow: visible;
+}
+
+.payoff-chart .axis-zero {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.payoff-chart .payoff-line {
+  fill: none;
+  stroke: var(--blue);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 5px rgba(79, 140, 255, 0.32));
+}
+
+.payoff-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-top: 4px;
+}
+
+.payoff-legend button {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 5px;
+  color: var(--muted);
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 8px;
+}
+
+.payoff-legend button:hover {
+  color: var(--red);
+  border-color: rgba(234, 57, 67, 0.4);
+}
+
+.mini-chart {
+  position: relative;
+  flex: 1;
+  min-height: 220px;
+  margin-top: 2px;
+}
+
+.option-table input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+
+.option-table td:first-child,
+.option-table td:last-child {
+  text-align: center;
+}
+
+.option-table th:first-child,
+.option-table th:last-child {
+  text-align: center;
+}
+
+html[data-theme="light"] .option-selectors select {
+  background: #f7f9fc;
+}
+
+html[data-theme="light"] .main-nav {
+  background: #f3f6fa;
+}
+
+html[data-theme="light"] .source-badge.live {
+  background: rgba(10, 158, 110, 0.08);
+}
+
+@media (max-width: 1320px) {
+  .option-analytics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .payoff-panel {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 920px) {
+  .option-selectors {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .option-selectors label,
+  .option-selectors select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .expiry-chip {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .option-analytics {
+    grid-template-columns: 1fr;
+  }
+
+  .payoff-panel {
+    grid-column: auto;
+  }
+}
+
+.status-dot.mock {
+  background: var(--amber);
+  box-shadow: 0 0 0 4px rgba(231, 179, 90, 0.1), 0 0 14px rgba(231, 179, 90, 0.55);
 }

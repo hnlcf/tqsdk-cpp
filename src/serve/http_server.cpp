@@ -14,16 +14,43 @@ using json = nlohmann::json;
 // JSON 字段映射统一放在 serve/json_convert.h，REST 与 WebSocket 共用。
 // 路由路径解析 / URL 解码 / 参数提取均已下沉到 serve/router.h。
 
+std::size_t query_size(std::string_view value, std::size_t fallback, std::size_t max_value) {
+    if (value.empty()) {
+        return fallback;
+    }
+    try {
+        return std::min<std::size_t>(max_value, std::stoull(std::string{value}));
+    } catch (...) {
+        return fallback;
+    }
+}
+
+bool query_bool(std::string_view value, bool fallback) {
+    if (value.empty()) {
+        return fallback;
+    }
+    return value == "1" || value == "true" || value == "yes";
+}
+
+json catalog_not_ready() {
+    return json{{"error", "instrument catalog is not loaded"}};
+}
+
 } // namespace
 
-HttpServer::HttpServer(TqApi* api, asio::any_io_executor ex, WsOptions ws_options)
-    : HttpServer(api, ex, std::move(ws_options), ex) {}
+HttpServer::HttpServer(TqApi*                api,
+                       asio::any_io_executor  ex,
+                       WsOptions              ws_options,
+                       InstrumentCatalog*     catalog)
+    : HttpServer(api, ex, std::move(ws_options), ex, catalog) {}
 
 HttpServer::HttpServer(TqApi*                api,
                        asio::any_io_executor io_ex,
                        WsOptions             ws_options,
-                       asio::any_io_executor data_ex)
+                       asio::any_io_executor data_ex,
+                       InstrumentCatalog*    catalog)
     : api_(api),
+      catalog_(catalog),
       io_ex_(std::move(io_ex)),
       data_ex_(data_ex ? std::move(data_ex) : io_ex_),
       acceptor_(io_ex_),
@@ -49,6 +76,108 @@ void HttpServer::setup_routes() {
          })},
         {http::verb::get, "/metrics", make_entry([this]() -> asio::awaitable<json> {
              co_return api_->metrics_json();
+         })},
+        {http::verb::get, "/catalog/status", make_entry([this]() -> asio::awaitable<Response> {
+             if (catalog_ == nullptr) {
+                 co_return Response{http::status::service_unavailable,
+                                    catalog_not_ready(),
+                                    {}};
+             }
+             co_return Response{http::status::ok, catalog_->status_json(), {}};
+         })},
+        {http::verb::get,
+         "/catalog/instruments",
+         make_entry([this](Query<CatalogQuery> query) -> asio::awaitable<json> {
+             if (catalog_ == nullptr) {
+                 throw HttpError{http::status::service_unavailable, catalog_not_ready()};
+             }
+             InstrumentCatalog::ListFilter filter;
+             filter.classes         = query.value.classes;
+             filter.exchange        = query.value.exchange;
+             filter.product         = query.value.product;
+             filter.query           = query.value.q;
+             filter.underlying      = query.value.underlying;
+             filter.include_expired = query_bool(query.value.include_expired, false);
+             filter.limit           = query_size(query.value.limit, 5000, 20000);
+             filter.offset          = query_size(query.value.offset, 0, 1'000'000);
+             auto items             = catalog_->list(filter);
+             json out               = json::array();
+             for (const auto& item : items) {
+                 out.push_back(InstrumentCatalog::to_json(item));
+             }
+             co_return json{{"instruments", std::move(out)},
+                            {"count", items.size()},
+                            {"catalog", catalog_->status_json()}};
+         })},
+        {http::verb::get,
+         "/catalog/instruments/{instrument_id}",
+         make_entry([this](std::string instrument_id) -> asio::awaitable<json> {
+             if (catalog_ == nullptr) {
+                 throw HttpError{http::status::service_unavailable, catalog_not_ready()};
+             }
+             auto item = catalog_->find(instrument_id);
+             if (!item) {
+                 throw HttpError{http::status::not_found,
+                                 json{{"error", "instrument not found"}}};
+             }
+             co_return InstrumentCatalog::to_json(*item);
+         })},
+        {http::verb::get,
+         "/catalog/options/products",
+         make_entry([this]() -> asio::awaitable<json> {
+             if (catalog_ == nullptr) {
+                 throw HttpError{http::status::service_unavailable, catalog_not_ready()};
+             }
+             const auto products = catalog_->option_products();
+             json       out      = json::array();
+             for (const auto& p : products) {
+                 out.push_back(json{{"exchange", p.exchange},
+                                    {"product", p.product},
+                                    {"product_name", p.product_name},
+                                    {"underlying_symbol", p.underlying_symbol},
+                                    {"expire_datetime", p.expire_datetime},
+                                    {"calls", p.calls},
+                                    {"puts", p.puts}});
+             }
+             co_return json{{"products", std::move(out)},
+                            {"catalog", catalog_->status_json()}};
+         })},
+        {http::verb::get,
+         "/catalog/option-chain/{underlying}",
+         make_entry([this](std::string underlying) -> asio::awaitable<json> {
+             if (catalog_ == nullptr) {
+                 throw HttpError{http::status::service_unavailable, catalog_not_ready()};
+             }
+             const auto contracts = catalog_->option_contracts(underlying, 2000);
+             if (contracts.empty()) {
+                 throw HttpError{http::status::not_found,
+                                 json{{"error", "option chain not found"}}};
+             }
+
+             json calls = json::array();
+             json puts  = json::array();
+             for (const auto& contract : contracts) {
+                 auto item          = InstrumentCatalog::to_json(contract);
+                 item["quote"]      = quote_to_json(api_->get_quote(contract.instrument_id));
+                 if (contract.option_class == "CALL") {
+                     calls.push_back(std::move(item));
+                 } else if (contract.option_class == "PUT") {
+                     puts.push_back(std::move(item));
+                 }
+             }
+             auto underlying_item = catalog_->find(underlying);
+             auto underlying_json = underlying_item ? InstrumentCatalog::to_json(*underlying_item)
+                                                     : json::object();
+             co_return json{
+                 {"underlying", underlying},
+                 {"underlying_contract", std::move(underlying_json)},
+                 {"underlying_quote", quote_to_json(api_->get_quote(underlying))},
+                 {"expire_datetime", contracts.front().expire_datetime},
+                 {"product", InstrumentCatalog::product_of(underlying)},
+                 {"product_name", contracts.front().product_short_name},
+                 {"calls", std::move(calls)},
+                 {"puts", std::move(puts)},
+             };
          })},
         {http::verb::get,
          "/quote/{symbol}",

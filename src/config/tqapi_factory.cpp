@@ -101,6 +101,15 @@ int64_t get_int(const toml::table& tbl, std::string_view key, int64_t def) {
     return def;
 }
 
+bool get_bool(const toml::table& tbl, std::string_view key, bool def) {
+    if (auto* v = tbl.get(key)) {
+        if (auto b = v->value<bool>())
+            return *b;
+        throw std::runtime_error("config: key '" + std::string(key) + "' must be a boolean");
+    }
+    return def;
+}
+
 const toml::table& require_table(const toml::table& root, std::string_view name) {
     const toml::table*       t = root[name].as_table();
     static const toml::table empty{};
@@ -436,6 +445,15 @@ NodeConfig build_node_from_toml(const toml::table& root) {
             cfg.ws.max_queue = static_cast<std::size_t>(
                 std::max<int64_t>(1, get_int(w, "max_queue", cfg.ws.max_queue)));
         }
+    }
+    if (const auto& t = require_table(root, "instruments"); !t.empty()) {
+        cfg.instruments.enabled = get_bool(t, "enabled", true);
+        cfg.instruments.file    = get_str(t, "file", cfg.instruments.file);
+        cfg.instruments.url     = get_str(t, "url", cfg.instruments.url);
+        cfg.instruments.refresh_interval = std::chrono::seconds(
+            get_int(t, "refresh_interval_sec", cfg.instruments.refresh_interval.count()));
+        cfg.instruments.initial_delay = std::chrono::seconds(
+            get_int(t, "initial_delay_sec", cfg.instruments.initial_delay.count()));
     }
     cfg.runtime = parse_runtime(root);
     return cfg;

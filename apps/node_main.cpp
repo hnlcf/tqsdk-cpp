@@ -1,6 +1,7 @@
 #include "tqsdk/pch.h"
 
 #include "tqsdk/config/tqapi_factory.h"
+#include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/serve/http_server.h"
 #include "tqsdk/tqapi.h"
 #include "tqsdk/util/log.h"
@@ -34,8 +35,9 @@ using namespace tqsdk;
 
 // 持有运行期全部对象，保证生命周期覆盖 io.run()。
 struct NodeRuntime {
-    std::unique_ptr<TqApi>             api;
-    std::unique_ptr<serve::HttpServer> http;
+    std::shared_ptr<InstrumentCatalog>   catalog;
+    std::unique_ptr<TqApi>               api;
+    std::unique_ptr<serve::HttpServer>   http;
 };
 
 } // namespace
@@ -69,6 +71,14 @@ int main(int argc, char** argv) {
     auto             core_ex = asio::make_strand(io);
     auto             rt      = std::make_shared<NodeRuntime>();
 
+    if (cfg.instruments.enabled) {
+        rt->catalog = std::make_shared<InstrumentCatalog>(cfg.instruments);
+        if (!rt->catalog->load_local()) {
+            SPDLOG_WARN("[node] instrument catalog not available yet; background refresh will retry");
+        }
+        rt->catalog->start_background_refresh();
+    }
+
     // 引导协程：建连 gw -> 建 TqApi -> 预订阅 -> 起 HTTP serve。
     // 失败（gw 未就绪/握手失败）记错误并停止 io。
     // TqApi/网关/DataManager 全部绑定 core_ex；HTTP 连接 I/O 在 io_ex 的
@@ -95,7 +105,8 @@ int main(int argc, char** argv) {
         ws_opts.max_clients        = cfg.ws.max_clients;
         ws_opts.max_queue          = cfg.ws.max_queue;
 
-        rt->http = std::make_unique<serve::HttpServer>(rt->api.get(), io_ex, ws_opts, core_ex);
+        rt->http = std::make_unique<serve::HttpServer>(
+            rt->api.get(), io_ex, std::move(ws_opts), core_ex, rt->catalog.get());
         try {
             rt->http->listen(cfg.serve_bind, cfg.serve_port);
         } catch (const std::exception& e) {
@@ -130,6 +141,9 @@ int main(int argc, char** argv) {
     }
     if (rt->api) {
         rt->api->close();
+    }
+    if (rt->catalog) {
+        rt->catalog->stop();
     }
     io.restart();
     io.run_for(std::chrono::milliseconds(200)); // 排空 close 触发的回调

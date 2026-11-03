@@ -4,6 +4,8 @@
 
 namespace tqsdk {
 
+namespace asio = boost::asio;
+
 /// 进程级运行参数（[runtime] 段）。
 struct RuntimeConfig {
     /// io_context 工作线程数。1 表示单线程（默认）。

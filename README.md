@@ -398,6 +398,7 @@ length = 2 + payload.size()          # 含 type+encoding
 CTP 接入见 [`docs/CTP.md`](./CTP.md)；
 长稳/性能见 [`docs/SOAK_PERF.md`](./SOAK_PERF.md)；
 高可用/多网关见 [`docs/HA.md`](./HA.md)；
+标准合约目录/期权元数据见 [`docs/INSTRUMENTS.md`](./INSTRUMENTS.md)；
 Web/Tauri 前端路线见 [`docs/WEB_FRONTEND.md`](./WEB_FRONTEND.md)。
 
 ### 源码地图
@@ -436,12 +437,13 @@ include/tqsdk/
     ws_protocol.h           /stream 强类型消息（WsClientMessage/WsServerMessage）
     ws_stream.h             WebSocketHub：/stream 增量推送 + 订阅引用计数
     json_convert.h          DataManager 实体 -> JSON（REST/WS 共用）
+  instrument/instrument_catalog.h  标准合约目录/期权元数据/空闲下载刷新
   config/tqapi_factory.h    配置解析 + make_tqapi + 两进程配置
   util/                     spawn_logged / async_mutex / serde / log / runtime
 src/                        对应实现
 apps/                       gw_main.cpp / node_main.cpp
 config/                     gw.toml / node.toml
-tests/                      229 用例（CTP 构建 242；channel/data/gateway/ipc/serve/e2e/config）
+tests/                      230 用例（CTP 构建 243；channel/data/gateway/ipc/serve/e2e/config）
 examples/demo.cpp           实时行情示例
 scripts/                    两进程冒烟 / 协议探测 / soak / perf baseline
 web/apps/web                SolidJS + Lightweight Charts Phase 0 原型

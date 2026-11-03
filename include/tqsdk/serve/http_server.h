@@ -2,6 +2,7 @@
 
 #include "tqsdk/pch.h"
 
+#include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/serve/router.h"
 #include "tqsdk/serve/ws_stream.h"
 #include "tqsdk/tqapi.h"
@@ -17,6 +18,28 @@ namespace beast = boost::beast;
 namespace http  = boost::beast::http;
 namespace net   = boost::asio;
 using tcp       = boost::asio::ip::tcp;
+
+/// /catalog/instruments 的查询参数（全部用字符串接收再解析，兼容 ?limit=100）。
+struct CatalogQuery {
+    std::string classes;
+    std::string exchange;
+    std::string product;
+    std::string q;
+    std::string underlying;
+    std::string include_expired;
+    std::string limit;
+    std::string offset;
+};
+inline void from_json(const json& j, CatalogQuery& q) {
+    q.classes         = j.value("classes", std::string{});
+    q.exchange        = j.value("exchange", std::string{});
+    q.product         = j.value("product", std::string{});
+    q.q               = j.value("q", std::string{});
+    q.underlying      = j.value("underlying", std::string{});
+    q.include_expired = j.value("include_expired", std::string{});
+    q.limit           = j.value("limit", std::string{});
+    q.offset          = j.value("offset", std::string{});
+}
 
 /// HttpServer —— 对外暴露的只读 + 下单 REST 接口（node 进程 serve 层）。
 ///
@@ -53,7 +76,10 @@ public:
     /// api 与 executor 均由调用方持有，生命周期需覆盖本对象。
     /// ws_options 控制同一端口上的 WebSocket `/stream` 升级路由。
     /// 兼容构造：I/O 与数据处理使用同一 executor（单线程/测试）。
-    HttpServer(TqApi* api, asio::any_io_executor ex, WsOptions ws_options = {});
+    HttpServer(TqApi*                api,
+               asio::any_io_executor  ex,
+               WsOptions              ws_options = {},
+               InstrumentCatalog*     catalog    = nullptr);
 
     /// 双 executor 构造：
     ///   - io_ex      ：accept / socket 读写（可跨多线程、每连接一条 strand）
@@ -62,7 +88,8 @@ public:
     HttpServer(TqApi*                api,
                asio::any_io_executor io_ex,
                WsOptions             ws_options,
-               asio::any_io_executor data_ex);
+               asio::any_io_executor data_ex,
+               InstrumentCatalog*    catalog = nullptr);
 
     /// 绑定并监听 addr:port；开始 accept 循环（后台协程）。失败抛 system_error。
     /// 需在 io_context.run() 之前调用。
@@ -89,6 +116,7 @@ private:
     void setup_routes();
 
     TqApi*                        api_;
+    InstrumentCatalog*            catalog_ = nullptr;
     asio::any_io_executor         io_ex_;
     asio::any_io_executor         data_ex_;
     tcp::acceptor                 acceptor_;

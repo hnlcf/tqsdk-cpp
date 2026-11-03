@@ -3,6 +3,7 @@
 #include "tqsdk/pch.h"
 
 #include "tqsdk/gateway/ctp/ctp_config.h"
+#include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/ipc/protocol.h"
 #include "tqsdk/tqapi.h"
 #include "tqsdk/util/runtime.h"
@@ -166,6 +167,7 @@ struct NodeConfig {
     std::string               serve_bind = "127.0.0.1";
     uint16_t                  serve_port = 8080;
     std::vector<InstrumentId> symbols; ///< 启动即预订阅的合约（便于直接 curl 到数据）
+    InstrumentCatalog::Config instruments; ///< [instruments] 标准合约目录/刷新
 
     /// [serve.ws]：同一 HTTP 端口上的 WebSocket 实时推送。
     struct Ws {

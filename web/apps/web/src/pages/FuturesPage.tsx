@@ -1,5 +1,6 @@
-import { For, createSignal } from "solid-js";
-import { FUTURES_ROWS } from "../data/mock";
+import { For, createSignal, onMount } from "solid-js";
+import { getInstruments } from "../api/client";
+import { FUTURES_ROWS, type FuturesRow } from "../data/mock";
 
 interface Props {
   onSelect: (symbol: string) => void;
@@ -8,10 +9,38 @@ interface Props {
 export default function FuturesPage(props: Props) {
   const [query, setQuery] = createSignal("");
   const [exchange, setExchange] = createSignal("ALL");
+  const [allRows, setAllRows] = createSignal<FuturesRow[]>(FUTURES_ROWS);
+  const [live, setLive] = createSignal(false);
+
+  onMount(async () => {
+    try {
+      const response = await getInstruments({
+        classes: "FUTURE,FUTURE_CONT,FUTURE_INDEX",
+        limit: 3000,
+      });
+      if (response.instruments.length > 0) {
+        setAllRows(
+          response.instruments.map((item) => ({
+            symbol: item.instrument_id,
+            name: item.name || item.instrument_id,
+            exchange: item.exchange_id,
+            price: item.last_price || 0,
+            changePct: 0,
+            volume: item.pre_volume || 0,
+            openInterest: item.open_interest || 0,
+            marginRate: 0,
+          })),
+        );
+        setLive(true);
+      }
+    } catch {
+      setLive(false);
+    }
+  });
 
   const rows = () => {
     const q = query().trim().toLowerCase();
-    return FUTURES_ROWS.filter((row) => {
+    return allRows().filter((row) => {
       const exchangeMatch = exchange() === "ALL" || row.exchange === exchange();
       const queryMatch =
         !q ||
@@ -26,8 +55,7 @@ export default function FuturesPage(props: Props) {
       <div class="page-heading">
         <div>
           <span class="eyebrow">MARKET SCREENER</span>
-          <h1>期货列表</h1>
-          <p>合约筛选、行情概览与快速跳转。当前为 mock 数据，下一阶段接 REST/WS。</p>
+          <h1>期货列表 <span class={`source-badge ${live() ? "live" : ""}`}>{live() ? "LIVE" : "MOCK"}</span></h1>
         </div>
         <div class="page-heading-stats">
           <div>
@@ -35,12 +63,12 @@ export default function FuturesPage(props: Props) {
             <strong>{rows().length}</strong>
           </div>
           <div>
-            <small>上涨</small>
-            <strong class="positive">{rows().filter((row) => row.changePct >= 0).length}</strong>
+            <small>有行情</small>
+            <strong class="positive">{rows().filter((row) => row.price > 0).length}</strong>
           </div>
           <div>
-            <small>下跌</small>
-            <strong class="negative">{rows().filter((row) => row.changePct < 0).length}</strong>
+            <small>无行情</small>
+            <strong class="muted">{rows().filter((row) => row.price <= 0).length}</strong>
           </div>
         </div>
       </div>
@@ -94,14 +122,13 @@ export default function FuturesPage(props: Props) {
                   <td>
                     <span class="exchange-tag">{row.exchange}</span>
                   </td>
-                  <td class="mono">{row.price.toLocaleString("zh-CN")}</td>
-                  <td class={row.changePct >= 0 ? "positive" : "negative"}>
-                    {row.changePct >= 0 ? "+" : ""}
-                    {row.changePct.toFixed(2)}%
+                  <td class="mono">{row.price > 0 ? row.price.toLocaleString("zh-CN") : "—"}</td>
+                  <td class={row.price > 0 ? (row.changePct >= 0 ? "positive" : "negative") : "muted"}>
+                    {row.price > 0 ? `${row.changePct >= 0 ? "+" : ""}${row.changePct.toFixed(2)}%` : "—"}
                   </td>
-                  <td class="mono">{row.volume.toLocaleString("zh-CN")}</td>
-                  <td class="mono">{row.openInterest.toLocaleString("zh-CN")}</td>
-                  <td class="mono">{(row.marginRate * 100).toFixed(0)}%</td>
+                  <td class="mono">{row.volume > 0 ? row.volume.toLocaleString("zh-CN") : "—"}</td>
+                  <td class="mono">{row.openInterest > 0 ? row.openInterest.toLocaleString("zh-CN") : "—"}</td>
+                  <td class="mono">{row.marginRate > 0 ? `${(row.marginRate * 100).toFixed(0)}%` : "—"}</td>
                 </tr>
               )}
             </For>

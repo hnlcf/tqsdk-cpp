@@ -196,15 +196,15 @@ Tauri WebView -> Rust FFI -> libtqsdk_core.so
 ```text
 tqsdk_cpp/
   web/
-    package.json                 # pnpm workspace
-    pnpm-workspace.yaml
+    package.json                 # npm workspace
+    package-lock.json
     apps/
       web/                       # SolidJS + Vite Web 客户端
         src/
-          app/
+          api/                       REST/WS client
           pages/
           widgets/
-          stores/
+          chart/                     Lightweight Charts 封装
           styles/
       desktop/                   # Tauri 2 壳（后续）
         src-tauri/
@@ -244,8 +244,17 @@ GET  /trades
 GET  /positions
 POST /order
 DELETE /order/{order_id}
+
+GET  /catalog/status
+GET  /catalog/instruments?classes=FUTURE,FUTURE_CONT&exchange=SHFE&q=rb
+GET  /catalog/instruments/{instrument_id}
+GET  /catalog/options/products
+GET  /catalog/option-chain/{underlying}
 WS   /stream
 ```
+
+合约目录来自 node 在空闲时下载的 `symbol.json` / `latest.json`，详见
+[`docs/INSTRUMENTS.md`](./INSTRUMENTS.md)。
 
 WebSocket 客户端消息：
 

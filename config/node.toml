@@ -45,6 +45,16 @@ max_clients = 256
 # 单连接待发送队列上限；慢消费者丢最旧行情
 max_queue = 1024
 
+# ---- 标准合约目录 ----
+# 优先加载本地 symbol.json（active 合约，35MB）；不存在时回退 latest.json。
+# 后台线程按 refresh_interval_sec 空闲下载并原子替换；首次缺失时立即尝试下载。
+[instruments]
+enabled = true
+file = "symbol.json"
+url = "https://openmd.shinnytech.com/t/md/symbols/symbol.json"
+refresh_interval_sec = 21600
+initial_delay_sec = 60
+
 # ---- 运行时线程 ----
 # io_context worker 数。数据面（TqApi/DataManager/网关）绑定 core strand 串行；
 # HTTP 每连接独立 strand，可在多个 worker 上并行处理 socket 读写。

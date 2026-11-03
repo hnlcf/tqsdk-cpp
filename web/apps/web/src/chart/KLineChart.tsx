@@ -47,6 +47,7 @@ export default function KLineChart(props: Props) {
   let candle: ISeriesApi<"Candlestick"> | undefined;
   let volume: ISeriesApi<"Histogram"> | undefined;
   let priceLine: IPriceLine | undefined;
+  let dataKey = "";
 
   onMount(() => {
     if (!container) return;
@@ -147,6 +148,31 @@ export default function KLineChart(props: Props) {
       volume = undefined;
       priceLine = undefined;
     });
+  });
+
+  createEffect(() => {
+    const bars = props.bars;
+    if (!bars.length || !candle || !volume) return;
+    const nextKey = `${props.symbol}:${bars.length}:${bars[0].time}:${bars[bars.length - 1].time}`;
+    if (nextKey === dataKey) return;
+    dataKey = nextKey;
+    candle.setData(
+      bars.map((bar) => ({
+        time: bar.time as UTCTimestamp,
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+      })),
+    );
+    volume.setData(
+      bars.map((bar) => ({
+        time: bar.time as UTCTimestamp,
+        value: bar.volume,
+        color: bar.close >= bar.open ? "#16c78455" : "#ea394355",
+      })),
+    );
+    chart?.timeScale().fitContent();
   });
 
   createEffect(() => {

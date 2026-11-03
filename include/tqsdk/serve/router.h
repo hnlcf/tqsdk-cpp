@@ -70,6 +70,7 @@ struct HttpError {
 /// 查询字符串提取器：形参写 Query<MyStruct> 即可把 ?a=1&b=x 映射成结构体。
 template <typename T>
 struct Query {
+    using value_type = T;
     T value{};
 };
 

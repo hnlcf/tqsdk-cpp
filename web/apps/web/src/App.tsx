@@ -1,5 +1,13 @@
 import { For, Match, Switch, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import KLineChart from "./chart/KLineChart";
+import {
+  createMarketStream,
+  getKline,
+  getQuote,
+  type KlineBar,
+  type MarketStream,
+  type Quote,
+} from "./api/client";
 import FuturesPage from "./pages/FuturesPage";
 import OptionsPage from "./pages/OptionsPage";
 import {
@@ -23,6 +31,23 @@ const NAV_ITEMS = [
 
 type View = (typeof NAV_ITEMS)[number]["id"] | "research";
 type Theme = "dark" | "light";
+
+function toBars(rows: KlineBar[]): Bar[] {
+  return rows
+    .filter((row) => Number.isFinite(row.datetime) && row.datetime > 0)
+    .map((row) => ({
+      time: Math.floor(row.datetime / 1_000_000_000),
+      open: row.open,
+      high: row.high,
+      low: row.low,
+      close: row.close,
+      volume: row.volume,
+    }));
+}
+
+function finitePrice(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
 
 function readInitialView(): View {
   const value = new URLSearchParams(window.location.search).get("view");
@@ -52,19 +77,50 @@ export default function App() {
   const [ticketMsg, setTicketMsg] = createSignal("模拟模式 · 不会发送到柜台");
   const [theme, setTheme] = createSignal<Theme>(readInitialTheme());
   const [view, setView] = createSignal<View>(readInitialView());
+  const [liveQuote, setLiveQuote] = createSignal<Quote>();
+  const [liveBars, setLiveBars] = createSignal<Bar[]>([]);
+  const [streamStatus, setStreamStatus] = createSignal<"connecting" | "online" | "offline">("connecting");
+  const [mounted, setMounted] = createSignal(false);
+  let stream: MarketStream | undefined;
+  let loadGeneration = 0;
 
   const activeMeta = () => WATCHLIST.find((item) => item.symbol === selected()) ?? WATCHLIST[0];
-  const last = () => bars()[bars().length - 1];
-  const quote = () => quoteFromBars(selected(), activeMeta().name, bars());
+  const chartBars = () => (liveBars().length > 0 ? liveBars() : bars());
+  const last = () => chartBars()[chartBars().length - 1];
+  const mockQuote = () => quoteFromBars(selected(), activeMeta().name, chartBars());
+  const quote = () => {
+    const live = liveQuote();
+    if (live && finitePrice(live.last_price)) {
+      const previous = finitePrice(live.pre_settlement)
+        ? live.pre_settlement
+        : finitePrice(live.pre_close)
+          ? live.pre_close
+          : live.last_price;
+      const change = live.last_price - previous;
+      return {
+        symbol: live.instrument_id,
+        name: activeMeta().name,
+        price: live.last_price,
+        change,
+        changePct: previous > 0 ? (change / previous) * 100 : 0,
+        bid: finitePrice(live.bid_price1) ? live.bid_price1 : live.last_price - 1,
+        ask: finitePrice(live.ask_price1) ? live.ask_price1 : live.last_price + 1,
+        volume: live.volume ?? 0,
+        openInterest: live.open_interest ?? 0,
+      };
+    }
+    return mockQuote();
+  };
   const positions = (): Position[] => MOCK_POSITIONS;
   const orders = (): OrderRow[] => MOCK_ORDERS;
   const watchPrice = (symbol: string, fallback: number) =>
     symbol === selected() ? quote().price : fallback;
   const watchChange = (symbol: string, fallback: number) =>
     symbol === selected() ? quote().changePct : fallback;
+  const isLive = () => streamStatus() === "online" && finitePrice(liveQuote()?.last_price);
 
   createEffect(() => {
-    setPrice(Math.round(last().close));
+    setPrice(Math.round(quote().price));
   });
 
   createEffect(() => {
@@ -92,6 +148,35 @@ export default function App() {
   }
 
   onMount(() => {
+    setMounted(true);
+    stream = createMarketStream({
+      onStatus: (status) => setStreamStatus(status),
+      onQuote: (quotes) => {
+        const next = quotes[selected()];
+        if (next) setLiveQuote(next);
+      },
+      onKline: (symbol, duration, payload) => {
+        if (symbol !== selected() || duration !== "60000000000") return;
+        const update = payload as { reset?: boolean; bars?: KlineBar[] };
+        const incoming = toBars(update.bars ?? []);
+        if (incoming.length === 0) return;
+        if (update.reset) {
+          setLiveBars(incoming);
+          return;
+        }
+        setLiveBars((previous) => {
+          const next = previous.slice();
+          for (const bar of incoming) {
+            const index = next.findIndex((item) => item.time === bar.time);
+            if (index >= 0) next[index] = bar;
+            else next.push(bar);
+          }
+          next.sort((a, b) => a.time - b.time);
+          return next;
+        });
+      },
+    });
+
     const timer = window.setInterval(() => {
       setBars((previous) => {
         const next = previous.slice();
@@ -100,8 +185,36 @@ export default function App() {
         return next;
       });
     }, 1200);
-    onCleanup(() => window.clearInterval(timer));
+    onCleanup(() => {
+      window.clearInterval(timer);
+      stream?.close();
+    });
   });
+
+  createEffect(() => {
+    if (!mounted()) return;
+    const symbol = selected();
+    void loadMarket(symbol);
+    stream?.subscribe([symbol], [{ symbol, duration_ns: 60_000_000_000 }]);
+  });
+
+  async function loadMarket(symbol: string) {
+    const generation = ++loadGeneration;
+    try {
+      const [quoteResponse, klineResponse] = await Promise.all([
+        getQuote(symbol),
+        getKline(symbol, 60_000_000_000),
+      ]);
+      if (generation !== loadGeneration) return;
+      setLiveQuote(quoteResponse);
+      const nextBars = toBars(klineResponse.bars);
+      if (nextBars.length > 0) setLiveBars(nextBars);
+    } catch {
+      if (generation !== loadGeneration) return;
+      setLiveQuote(undefined);
+      setLiveBars([]);
+    }
+  }
 
   function submitDemoOrder(event: SubmitEvent) {
     event.preventDefault();
@@ -117,7 +230,7 @@ export default function App() {
           <span class="brand-mark">TQ</span>
           <div>
             <strong>TQSDK Terminal</strong>
-            <small>Futures workstation · Phase 0</small>
+            <small>Futures workstation · Live market</small>
           </div>
         </div>
 
@@ -139,8 +252,8 @@ export default function App() {
         </nav>
 
         <div class="topbar-meta">
-          <span class="status-dot" />
-          <span>模拟行情</span>
+          <span class={`status-dot ${isLive() ? "live" : "mock"}`} />
+          <span>{isLive() ? "实盘行情" : streamStatus() === "connecting" ? "行情连接中" : "模拟行情"}</span>
           <span class="divider" />
           <span>SHFE / DCE / CZCE</span>
           <span class="clock">{new Date().toLocaleTimeString("zh-CN", { hour12: false })}</span>
@@ -284,7 +397,7 @@ export default function App() {
           </div>
 
           <div class="chart-shell">
-            <KLineChart bars={bars()} last={last()} symbol={selected()} theme={theme()} />
+            <KLineChart bars={chartBars()} last={last()} symbol={selected()} theme={theme()} />
           </div>
 
           <div class="chart-footer">
@@ -504,7 +617,7 @@ export default function App() {
           <FuturesPage onSelect={openSymbol} />
         </Match>
         <Match when={view() === "options"}>
-          <OptionsPage />
+          <OptionsPage theme={theme()} />
         </Match>
       </Switch>
 
