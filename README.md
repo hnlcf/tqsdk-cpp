@@ -293,7 +293,9 @@ websocat -t ws://127.0.0.1:8080/stream
    "topics":["account","orders","trades","positions"]}
 ```
 
-消息（文本帧，UTF-8 JSON）：
+消息（文本帧，UTF-8 JSON）。C++ 侧消息结构定义在 `include/tqsdk/serve/ws_protocol.h`：
+`WsClientMessage` / `WsServerMessage` 是强类型 variant，配套 `to_json/from_json`、
+`parse_ws_client_message()`、`parse_ws_server_message()` 与 `serialize_ws_message()`。
 
 | 方向 | 消息 |
 |---|---|
@@ -372,6 +374,7 @@ include/tqsdk/
   serve/
     router.h                类型化路由（axum 风格）
     http_server.h           REST 服务（node serve 层）
+    ws_protocol.h           /stream 强类型消息（WsClientMessage/WsServerMessage）
     ws_stream.h             WebSocketHub：/stream 增量推送 + 订阅引用计数
     json_convert.h          DataManager 实体 -> JSON（REST/WS 共用）
   config/tqapi_factory.h    配置解析 + make_tqapi + 两进程配置
@@ -379,7 +382,7 @@ include/tqsdk/
 src/                        对应实现
 apps/                       gw_main.cpp / node_main.cpp
 config/                     gw.toml / node.toml
-tests/                      ~198 用例（channel/data/gateway/ipc/serve/e2e/config）
+tests/                      ~208 用例（channel/data/gateway/ipc/serve/e2e/config）
 examples/demo.cpp           实时行情示例
 scripts/                    两进程冒烟 / 协议探测
 ```

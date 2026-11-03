@@ -181,6 +181,7 @@ if(TQSDK_BUILD_TESTS)
         tests/e2e/mock_e2e_edges_test.cpp
         tests/e2e/sim_td_e2e_test.cpp
         tests/gateway/tq_md_protocol_test.cpp
+        tests/serve/ws_protocol_test.cpp
         tests/serve/ws_stream_test.cpp
         tests/e2e/tq_md_network_test.cpp
     )

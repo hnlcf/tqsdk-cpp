@@ -15,61 +15,6 @@ namespace {
 using json = nlohmann::json;
 using namespace boost::asio::experimental::awaitable_operators;
 
-std::vector<std::string> parse_symbols(const json& j) {
-    std::vector<std::string> out;
-    if (auto it = j.find("symbols"); it != j.end() && it->is_array()) {
-        for (const auto& v : *it) {
-            if (v.is_string()) {
-                out.push_back(v.get<std::string>());
-            }
-        }
-    }
-    return out;
-}
-
-std::vector<KlineSubscription> parse_klines(const json& j) {
-    std::vector<KlineSubscription> out;
-    if (auto it = j.find("klines"); it != j.end() && it->is_array()) {
-        for (const auto& v : *it) {
-            if (!v.is_object()) {
-                continue;
-            }
-            KlineSubscription k;
-            k.symbol      = v.value("symbol", std::string{});
-            k.duration_ns = v.value("duration_ns", int64_t{0});
-            k.view_width  = v.value("view_width", 200);
-            if (!k.symbol.empty() && k.duration_ns > 0) {
-                if (k.view_width <= 0) {
-                    k.view_width = 200;
-                }
-                out.push_back(std::move(k));
-            }
-        }
-    }
-    return out;
-}
-
-std::vector<std::string> parse_topics(const json& j) {
-    std::vector<std::string> out;
-    if (auto it = j.find("topics"); it != j.end() && it->is_array()) {
-        for (const auto& v : *it) {
-            if (v.is_string()) {
-                out.push_back(v.get<std::string>());
-            }
-        }
-    }
-    return out;
-}
-
-json kline_request_json(const std::vector<KlineSubscription>& klines) {
-    json out = json::array();
-    for (const auto& k : klines) {
-        out.push_back(json{
-            {"symbol", k.symbol}, {"duration_ns", k.duration_ns}, {"view_width", k.view_width}});
-    }
-    return out;
-}
-
 } // namespace
 
 // ============================================================================
@@ -96,6 +41,12 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
             ex_, [self]() -> asio::awaitable<void> { co_await self->writer_loop(); }, "Ws.writer");
         co_spawn_logged(
             ex_, [self]() -> asio::awaitable<void> { co_await self->reader_loop(); }, "Ws.reader");
+    }
+
+    /// 发送一条强类型服务端消息（自动序列化为文本帧）。
+    template <typename Message>
+    void send(Message msg) {
+        enqueue(serialize_ws_message(WsServerMessage{std::move(msg)}));
     }
 
     // 只允许在 io_context 线程调用。队列满时丢最旧消息，形成"行情可丢"的背压。
@@ -140,7 +91,7 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
             try {
                 co_await handle_message(std::move(msg));
             } catch (const std::exception& e) {
-                enqueue(json{{"type", "error"}, {"error", e.what()}}.dump());
+                send(WsError{e.what()});
             }
         }
         shutdown();
@@ -190,34 +141,40 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
         shutdown();
     }
 
-    asio::awaitable<void> handle_message(std::string msg) {
-        json j = json::parse(msg, nullptr, false);
-        if (j.is_discarded() || !j.is_object()) {
-            enqueue(json{{"type", "error"}, {"error", "invalid json"}}.dump());
+    asio::awaitable<void> handle_message(std::string text) {
+        WsClientMessage message;
+        try {
+            message = parse_ws_client_message(text);
+        } catch (const std::exception& e) {
+            send(WsError{e.what()});
             co_return;
         }
 
-        const std::string op = j.value("op", std::string{});
-        if (op == "ping") {
-            enqueue(json{{"type", "pong"}}.dump());
+        // 编译期分派到各自的 handler；不会漏掉新加的 variant 成员。
+        co_await std::visit([this](const auto& msg) { return handle(msg); }, message);
+    }
+
+    asio::awaitable<void> handle(const WsPing&) {
+        send(WsPong{});
+        co_return;
+    }
+
+    asio::awaitable<void> handle(const WsSubscribe& msg) {
+        auto hub = hub_.lock();
+        if (!hub) {
+            send(WsError{"server shutting down"});
             co_return;
         }
-        if (op == "subscribe" || op == "unsubscribe") {
-            auto hub = hub_.lock();
-            if (!hub) {
-                enqueue(json{{"type", "error"}, {"error", "server shutting down"}}.dump());
-                co_return;
-            }
-            if (op == "subscribe") {
-                co_await hub->add_subscriptions(
-                    shared_from_this(), parse_symbols(j), parse_klines(j), parse_topics(j));
-            } else {
-                co_await hub->remove_subscriptions(
-                    shared_from_this(), parse_symbols(j), parse_klines(j));
-            }
+        co_await hub->add_subscriptions(shared_from_this(), msg);
+    }
+
+    asio::awaitable<void> handle(const WsUnsubscribe& msg) {
+        auto hub = hub_.lock();
+        if (!hub) {
+            send(WsError{"server shutting down"});
             co_return;
         }
-        enqueue(json{{"type", "error"}, {"error", "unknown op: " + op}}.dump());
+        co_await hub->remove_subscriptions(shared_from_this(), msg);
     }
 
     // ---- 订阅状态（由 hub 在单一 io 线程内读写）----
@@ -306,10 +263,10 @@ asio::awaitable<void> WebSocketHub::accept(asio::ip::tcp::socket            sock
     auto client = std::make_shared<Client>(id, std::move(ws), shared_from_this(), ex_, options_);
     clients_.emplace(id, client);
 
-    client->enqueue(json{{"type", "welcome"},
-                         {"protocol", 1},
-                         {"heartbeat_interval_ms", options_.heartbeat_interval.count()}}
-                        .dump());
+    WsWelcome welcome;
+    welcome.protocol              = kWsProtocolVersion;
+    welcome.heartbeat_interval_ms = options_.heartbeat_interval.count();
+    client->send(std::move(welcome));
     client->start();
     SPDLOG_INFO("[WsHub] client {} connected (total={})", id, clients_.size());
     co_return;
@@ -350,17 +307,15 @@ asio::awaitable<void> WebSocketHub::push_loop() {
     co_return;
 }
 
-asio::awaitable<void> WebSocketHub::add_subscriptions(std::shared_ptr<Client>        client,
-                                                      std::vector<std::string>       symbols,
-                                                      std::vector<KlineSubscription> klines,
-                                                      std::vector<std::string>       topics) {
+asio::awaitable<void> WebSocketHub::add_subscriptions(std::shared_ptr<Client> client,
+                                                      WsSubscribe             request) {
     if (!client || client->closed()) {
         co_return;
     }
 
     // topics：首次订阅未显式给出时默认全开；显式给出则整体替换。
-    if (!topics.empty()) {
-        client->topics             = std::set<std::string>(topics.begin(), topics.end());
+    if (!request.topics.empty()) {
+        client->topics = std::set<std::string>(request.topics.begin(), request.topics.end());
         client->topics_initialized = true;
     } else if (!client->topics_initialized) {
         client->topics             = {"account", "orders", "trades", "positions"};
@@ -370,7 +325,7 @@ asio::awaitable<void> WebSocketHub::add_subscriptions(std::shared_ptr<Client>   
     std::vector<std::string>       new_symbols;
     std::vector<KlineSubscription> new_klines;
 
-    for (const auto& sym : symbols) {
+    for (const auto& sym : request.symbols) {
         if (!client->symbols.insert(sym).second) {
             continue;
         }
@@ -380,7 +335,7 @@ asio::awaitable<void> WebSocketHub::add_subscriptions(std::shared_ptr<Client>   
         }
     }
 
-    for (const auto& k : klines) {
+    for (const auto& k : request.klines) {
         const auto key = std::make_pair(k.symbol, k.duration_ns);
         if (!client->klines.emplace(key, k.view_width).second) {
             continue;
@@ -410,19 +365,17 @@ asio::awaitable<void> WebSocketHub::add_subscriptions(std::shared_ptr<Client>   
         co_await api_->subscribe_kline(k.symbol, k.duration_ns, k.view_width);
     }
 
-    client->enqueue(
-        json{{"type", "subscribed"},
-             {"symbols", symbols},
-             {"klines", kline_request_json(klines)},
-             {"topics", std::vector<std::string>(client->topics.begin(), client->topics.end())}}
-            .dump());
-    client->enqueue(json{{"type", "snapshot"}, {"data", snapshot_for(*client)}}.dump());
+    WsSubscribed ack;
+    ack.symbols = std::move(request.symbols);
+    ack.klines  = std::move(request.klines);
+    ack.topics.assign(client->topics.begin(), client->topics.end());
+    client->send(std::move(ack));
+    client->send(WsSnapshot{snapshot_for(*client)});
     co_return;
 }
 
-asio::awaitable<void> WebSocketHub::remove_subscriptions(std::shared_ptr<Client>        client,
-                                                         std::vector<std::string>       symbols,
-                                                         std::vector<KlineSubscription> klines) {
+asio::awaitable<void> WebSocketHub::remove_subscriptions(std::shared_ptr<Client> client,
+                                                         WsUnsubscribe           request) {
     if (!client) {
         co_return;
     }
@@ -430,7 +383,7 @@ asio::awaitable<void> WebSocketHub::remove_subscriptions(std::shared_ptr<Client>
     std::vector<std::string>                     release_symbols;
     std::vector<std::pair<std::string, int64_t>> release_klines;
 
-    for (const auto& sym : symbols) {
+    for (const auto& sym : request.symbols) {
         if (client->symbols.erase(sym) == 0) {
             continue;
         }
@@ -440,7 +393,7 @@ asio::awaitable<void> WebSocketHub::remove_subscriptions(std::shared_ptr<Client>
             release_symbols.push_back(sym);
         }
     }
-    for (const auto& k : klines) {
+    for (const auto& k : request.klines) {
         const auto key = std::make_pair(k.symbol, k.duration_ns);
         if (client->klines.erase(key) == 0) {
             continue;
@@ -452,9 +405,10 @@ asio::awaitable<void> WebSocketHub::remove_subscriptions(std::shared_ptr<Client>
         }
     }
 
-    client->enqueue(
-        json{{"type", "unsubscribed"}, {"symbols", symbols}, {"klines", kline_request_json(klines)}}
-            .dump());
+    WsUnsubscribed ack;
+    ack.symbols = std::move(request.symbols);
+    ack.klines  = std::move(request.klines);
+    client->send(std::move(ack));
 
     if (!release_symbols.empty() || !release_klines.empty()) {
         co_await api_->release(std::move(release_symbols), std::move(release_klines));
@@ -639,11 +593,11 @@ void WebSocketHub::broadcast(const nlohmann::json& diff) {
         if (data.empty()) {
             continue;
         }
-        json msg{{"type", "diff"},
-                 {"seq", seq_.fetch_add(1, std::memory_order_relaxed) + 1},
-                 {"timestamp_ns", now_ns},
-                 {"data", std::move(data)}};
-        client->enqueue(msg.dump());
+        WsDiff msg;
+        msg.seq          = seq_.fetch_add(1, std::memory_order_relaxed) + 1;
+        msg.timestamp_ns = now_ns;
+        msg.data         = std::move(data);
+        client->send(std::move(msg));
     }
 }
 

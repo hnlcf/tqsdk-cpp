@@ -2,6 +2,7 @@
 
 #include "tqsdk/pch.h"
 
+#include "tqsdk/serve/ws_protocol.h"
 #include "tqsdk/tqapi.h"
 
 #include <boost/asio/ip/tcp.hpp>
@@ -31,13 +32,6 @@ struct WsOptions {
     std::size_t max_queue = 1024;
 };
 
-/// 一条 K 线订阅请求。
-struct KlineSubscription {
-    std::string symbol;
-    int64_t     duration_ns = 0;
-    int         view_width  = 200;
-};
-
 /// WebSocketHub —— node serve 层的实时推送中心。
 ///
 /// 设计：
@@ -50,7 +44,8 @@ struct KlineSubscription {
 ///     reader 只处理入站命令并投递到该连接的待写队列，避免并发 async_write。
 ///   - 单 io_context 线程；队列/订阅表不加锁。
 ///
-/// 客户端协议（文本帧，UTF-8 JSON）：
+/// 客户端协议（文本帧，UTF-8 JSON）。消息结构定义在 `serve/ws_protocol.h`：
+/// `WsClientMessage` / `WsServerMessage` 为强类型 variant，带 to_json/from_json。
 ///   服务端欢迎：  {"type":"welcome","protocol":1,"heartbeat_interval_ms":30000}
 ///   订阅：        {"op":"subscribe","symbols":["SHFE.rb2610"],
 ///                  "klines":[{"symbol":"SHFE.rb2610","duration_ns":60000000000,
@@ -96,14 +91,10 @@ private:
     asio::awaitable<void> push_loop();
     asio::awaitable<void> wait_stop();
 
-    asio::awaitable<void> add_subscriptions(std::shared_ptr<Client>        client,
-                                            std::vector<std::string>       symbols,
-                                            std::vector<KlineSubscription> klines,
-                                            std::vector<std::string>       topics);
+    asio::awaitable<void> add_subscriptions(std::shared_ptr<Client> client, WsSubscribe request);
 
-    asio::awaitable<void> remove_subscriptions(std::shared_ptr<Client>        client,
-                                               std::vector<std::string>       symbols,
-                                               std::vector<KlineSubscription> klines);
+    asio::awaitable<void> remove_subscriptions(std::shared_ptr<Client> client,
+                                               WsUnsubscribe           request);
 
     /// reader 退出时调用：从 clients_ 摘除并把该连接独占的订阅 release 给 TqApi。
     asio::awaitable<void> remove_client(uint64_t id);

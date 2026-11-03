@@ -386,16 +386,20 @@
     `build_diff()` 读取 `changed_fields` 并生成全局 diff，`filter_diff()` 按连接过滤后广播。
   - **订阅引用计数**：`quote_refs_` / `kline_refs_` 聚合多客户端订阅；0->1 调
     `TqApi::subscribe_quotes/subscribe_kline`，1->0 调 `TqApi::release`；断连时统一回收。
-  - `welcome` / `subscribed` / `snapshot` / `diff` / `pong` / `error` 消息协议。
+  - **强类型消息**：`ws_protocol.h` 定义 `WsClientMessage` / `WsServerMessage` variant；
+    `handle_message` 解析后 `std::visit` 分派到 `handle(WsSubscribe/WsUnsubscribe/WsPing)`，
+    发送侧构造 `WsWelcome/WsSubscribed/WsSnapshot/WsDiff/WsPong/WsError` 后统一序列化。
 - **不负责**：合并、下单（仍经 HTTP 路由）。
 - **关键约定**：
   - quote diff 只含变化字段；K 线 `{"reset":bool,"bars":[...]}`，reset=false 时仅最后一根。
   - 交易类 topic（account/orders/trades/positions）首次订阅未显式给出 `topics` 时默认全开。
   - 单 io_context 线程，订阅表/队列不加锁。
   - 后台 `push_loop` 与客户端协程都用 `co_spawn_logged`，异常不静默吞掉。
-- **关键文件**：`include/tqsdk/serve/ws_stream.h`、`src/serve/ws_stream.cpp`、
-  `include/tqsdk/serve/json_convert.h`、`src/serve/json_convert.cpp`
-- **测试**：`tests/serve/ws_stream_test.cpp`（快照/部分 diff/K 线 reset/退订 release/ping/config）。
+  - 协议解析失败统一抛 `WsProtocolError`，连接层回 `WsError` 文本帧。
+- **关键文件**：`include/tqsdk/serve/ws_protocol.h`、`include/tqsdk/serve/ws_stream.h`、
+  `src/serve/ws_stream.cpp`、`include/tqsdk/serve/json_convert.h`、`src/serve/json_convert.cpp`
+- **测试**：`tests/serve/ws_protocol_test.cpp`（解析/序列化/异常）、
+  `tests/serve/ws_stream_test.cpp`（快照/部分 diff/K 线 reset/退订 release/ping/config）。
 
 ---
 

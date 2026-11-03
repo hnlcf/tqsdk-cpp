@@ -1,0 +1,381 @@
+#pragma once
+
+#include "tqsdk/pch.h"
+
+#include <variant>
+
+namespace tqsdk {
+namespace serve {
+
+using Json = nlohmann::json;
+
+/// `/stream` 当前协议版本（放在 welcome.protocol 中）。
+inline constexpr int kWsProtocolVersion = 1;
+
+/// WebSocket 协议消息格式错误（JSON 非法 / 缺字段 / op/type 未知）。
+struct WsProtocolError : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+
+namespace detail {
+
+/// 把 nlohmann 的 type_error/out_of_range 统一收敛成 WsProtocolError，
+/// 让调用方只需处理一种协议异常。
+template <typename Message>
+Message get_or_throw(const Json& j, const char* name) {
+    try {
+        return j.get<Message>();
+    } catch (const WsProtocolError&) {
+        throw;
+    } catch (const std::exception& e) {
+        throw WsProtocolError(std::string(name) + ": " + e.what());
+    }
+}
+
+} // namespace detail
+
+// ============================================================================
+// 客户端 -> 服务端
+// ============================================================================
+
+struct KlineSubscription {
+    std::string symbol;
+    int64_t     duration_ns = 0;
+    int         view_width  = 200;
+};
+
+inline void to_json(Json& j, const KlineSubscription& k) {
+    j = Json{{"symbol", k.symbol}, {"duration_ns", k.duration_ns}, {"view_width", k.view_width}};
+}
+inline void from_json(const Json& j, KlineSubscription& k) {
+    k.symbol      = j.value("symbol", std::string{});
+    k.duration_ns = j.value("duration_ns", int64_t{0});
+    k.view_width  = j.value("view_width", 200);
+}
+
+/// {"op":"subscribe","symbols":[...],"klines":[...],"topics":[...]}
+struct WsSubscribe {
+    std::vector<std::string>       symbols;
+    std::vector<KlineSubscription> klines;
+    std::vector<std::string>       topics;
+};
+
+/// {"op":"unsubscribe","symbols":[...],"klines":[...]}
+struct WsUnsubscribe {
+    std::vector<std::string>       symbols;
+    std::vector<KlineSubscription> klines;
+};
+
+/// {"op":"ping"}
+struct WsPing {};
+
+inline void to_json(Json& j, const WsSubscribe& m) {
+    j = Json{
+        {"op", "subscribe"}, {"symbols", m.symbols}, {"klines", m.klines}, {"topics", m.topics}};
+}
+inline void from_json(const Json& j, WsSubscribe& m) {
+    if (j.value("op", std::string{}) != "subscribe") {
+        throw WsProtocolError("expected op=subscribe");
+    }
+    m.symbols.clear();
+    for (const auto& s : j.value("symbols", std::vector<std::string>{})) {
+        if (!s.empty()) {
+            m.symbols.push_back(s);
+        }
+    }
+    m.klines.clear();
+    for (auto k : j.value("klines", std::vector<KlineSubscription>{})) {
+        if (k.symbol.empty() || k.duration_ns <= 0) {
+            continue;
+        }
+        if (k.view_width <= 0) {
+            k.view_width = 200;
+        }
+        m.klines.push_back(std::move(k));
+    }
+    m.topics.clear();
+    for (const auto& t : j.value("topics", std::vector<std::string>{})) {
+        if (!t.empty()) {
+            m.topics.push_back(t);
+        }
+    }
+}
+
+inline void to_json(Json& j, const WsUnsubscribe& m) {
+    j = Json{{"op", "unsubscribe"}, {"symbols", m.symbols}, {"klines", m.klines}};
+}
+inline void from_json(const Json& j, WsUnsubscribe& m) {
+    if (j.value("op", std::string{}) != "unsubscribe") {
+        throw WsProtocolError("expected op=unsubscribe");
+    }
+    m.symbols.clear();
+    for (const auto& s : j.value("symbols", std::vector<std::string>{})) {
+        if (!s.empty()) {
+            m.symbols.push_back(s);
+        }
+    }
+    m.klines.clear();
+    for (auto k : j.value("klines", std::vector<KlineSubscription>{})) {
+        if (k.symbol.empty() || k.duration_ns <= 0) {
+            continue;
+        }
+        if (k.view_width <= 0) {
+            k.view_width = 200;
+        }
+        m.klines.push_back(std::move(k));
+    }
+}
+
+inline void to_json(Json& j, const WsPing&) {
+    j = Json{{"op", "ping"}};
+}
+inline void from_json(const Json& j, WsPing&) {
+    if (j.value("op", std::string{}) != "ping") {
+        throw WsProtocolError("expected op=ping");
+    }
+}
+
+/// 客户端消息的强类型 variant。
+using WsClientMessage = std::variant<WsSubscribe, WsUnsubscribe, WsPing>;
+
+inline void to_json(Json& j, const WsClientMessage& m) {
+    std::visit([&j](const auto& v) { j = v; }, m);
+}
+
+/// 从 JSON DOM / 文本解析客户端消息；失败抛 WsProtocolError。
+WsClientMessage parse_ws_client_message(const Json& j);
+
+template <typename Text>
+inline constexpr bool kWsTextLike =
+    std::is_convertible_v<const std::decay_t<Text>&, std::string_view>;
+
+template <typename Text, std::enable_if_t<kWsTextLike<Text>, int> = 0>
+WsClientMessage parse_ws_client_message(const Text& text);
+
+inline void from_json(const Json& j, WsClientMessage& m) {
+    m = parse_ws_client_message(j);
+}
+
+// ============================================================================
+// 服务端 -> 客户端
+// ============================================================================
+
+/// {"type":"welcome","protocol":1,"heartbeat_interval_ms":30000}
+struct WsWelcome {
+    int     protocol              = kWsProtocolVersion;
+    int64_t heartbeat_interval_ms = 30'000;
+};
+
+/// {"type":"subscribed","symbols":[...],"klines":[...],"topics":[...]}
+struct WsSubscribed {
+    std::vector<std::string>       symbols;
+    std::vector<KlineSubscription> klines;
+    std::vector<std::string>       topics;
+};
+
+/// {"type":"unsubscribed","symbols":[...],"klines":[...]}
+struct WsUnsubscribed {
+    std::vector<std::string>       symbols;
+    std::vector<KlineSubscription> klines;
+};
+
+/// {"type":"snapshot","data":{...}}
+struct WsSnapshot {
+    Json data = Json::object();
+};
+
+/// {"type":"diff","seq":N,"timestamp_ns":...,"data":{...}}
+struct WsDiff {
+    uint64_t seq          = 0;
+    int64_t  timestamp_ns = 0;
+    Json     data         = Json::object();
+};
+
+/// {"type":"pong"}
+struct WsPong {};
+
+/// {"type":"error","error":"..."}
+struct WsError {
+    std::string error;
+};
+
+inline void to_json(Json& j, const WsWelcome& m) {
+    j = Json{{"type", "welcome"},
+             {"protocol", m.protocol},
+             {"heartbeat_interval_ms", m.heartbeat_interval_ms}};
+}
+inline void from_json(const Json& j, WsWelcome& m) {
+    if (j.value("type", std::string{}) != "welcome") {
+        throw WsProtocolError("expected type=welcome");
+    }
+    m.protocol              = j.value("protocol", kWsProtocolVersion);
+    m.heartbeat_interval_ms = j.value("heartbeat_interval_ms", int64_t{30'000});
+}
+
+inline void to_json(Json& j, const WsSubscribed& m) {
+    j = Json{
+        {"type", "subscribed"}, {"symbols", m.symbols}, {"klines", m.klines}, {"topics", m.topics}};
+}
+inline void from_json(const Json& j, WsSubscribed& m) {
+    if (j.value("type", std::string{}) != "subscribed") {
+        throw WsProtocolError("expected type=subscribed");
+    }
+    m.symbols = j.value("symbols", std::vector<std::string>{});
+    m.klines  = j.value("klines", std::vector<KlineSubscription>{});
+    m.topics  = j.value("topics", std::vector<std::string>{});
+}
+
+inline void to_json(Json& j, const WsUnsubscribed& m) {
+    j = Json{{"type", "unsubscribed"}, {"symbols", m.symbols}, {"klines", m.klines}};
+}
+inline void from_json(const Json& j, WsUnsubscribed& m) {
+    if (j.value("type", std::string{}) != "unsubscribed") {
+        throw WsProtocolError("expected type=unsubscribed");
+    }
+    m.symbols = j.value("symbols", std::vector<std::string>{});
+    m.klines  = j.value("klines", std::vector<KlineSubscription>{});
+}
+
+inline void to_json(Json& j, const WsSnapshot& m) {
+    j = Json{{"type", "snapshot"}, {"data", m.data}};
+}
+inline void from_json(const Json& j, WsSnapshot& m) {
+    if (j.value("type", std::string{}) != "snapshot") {
+        throw WsProtocolError("expected type=snapshot");
+    }
+    m.data = j.value("data", Json::object());
+}
+
+inline void to_json(Json& j, const WsDiff& m) {
+    j = Json{{"type", "diff"}, {"seq", m.seq}, {"timestamp_ns", m.timestamp_ns}, {"data", m.data}};
+}
+inline void from_json(const Json& j, WsDiff& m) {
+    if (j.value("type", std::string{}) != "diff") {
+        throw WsProtocolError("expected type=diff");
+    }
+    m.seq          = j.value("seq", uint64_t{0});
+    m.timestamp_ns = j.value("timestamp_ns", int64_t{0});
+    m.data         = j.value("data", Json::object());
+}
+
+inline void to_json(Json& j, const WsPong&) {
+    j = Json{{"type", "pong"}};
+}
+inline void from_json(const Json& j, WsPong&) {
+    if (j.value("type", std::string{}) != "pong") {
+        throw WsProtocolError("expected type=pong");
+    }
+}
+
+inline void to_json(Json& j, const WsError& m) {
+    j = Json{{"type", "error"}, {"error", m.error}};
+}
+inline void from_json(const Json& j, WsError& m) {
+    if (j.value("type", std::string{}) != "error") {
+        throw WsProtocolError("expected type=error");
+    }
+    m.error = j.value("error", std::string{});
+}
+
+/// 服务端消息的强类型 variant。
+using WsServerMessage =
+    std::variant<WsWelcome, WsSubscribed, WsUnsubscribed, WsSnapshot, WsDiff, WsPong, WsError>;
+
+inline void to_json(Json& j, const WsServerMessage& m) {
+    std::visit([&j](const auto& v) { j = v; }, m);
+}
+
+/// 从 JSON DOM / 文本解析服务端消息；失败抛 WsProtocolError。
+WsServerMessage parse_ws_server_message(const Json& j);
+
+template <typename Text, std::enable_if_t<kWsTextLike<Text>, int> = 0>
+WsServerMessage parse_ws_server_message(const Text& text);
+
+inline void from_json(const Json& j, WsServerMessage& m) {
+    m = parse_ws_server_message(j);
+}
+
+// ============================================================================
+// 解析 / 序列化辅助
+// ============================================================================
+
+inline WsClientMessage parse_ws_client_message(const Json& j) {
+    if (!j.is_object()) {
+        throw WsProtocolError("client message must be a JSON object");
+    }
+    const std::string op = j.value("op", std::string{});
+    if (op == "subscribe") {
+        return detail::get_or_throw<WsSubscribe>(j, "subscribe");
+    }
+    if (op == "unsubscribe") {
+        return detail::get_or_throw<WsUnsubscribe>(j, "unsubscribe");
+    }
+    if (op == "ping") {
+        return detail::get_or_throw<WsPing>(j, "ping");
+    }
+    if (op.empty()) {
+        throw WsProtocolError("missing op");
+    }
+    throw WsProtocolError("unknown op: " + op);
+}
+
+template <typename Text, std::enable_if_t<kWsTextLike<Text>, int>>
+inline WsClientMessage parse_ws_client_message(const Text& text) {
+    const std::string_view sv = text;
+    Json                   j  = Json::parse(sv.begin(), sv.end(), nullptr, false);
+    if (j.is_discarded()) {
+        throw WsProtocolError("invalid json");
+    }
+    return parse_ws_client_message(j);
+}
+
+inline WsServerMessage parse_ws_server_message(const Json& j) {
+    if (!j.is_object()) {
+        throw WsProtocolError("server message must be a JSON object");
+    }
+    const std::string type = j.value("type", std::string{});
+    if (type == "welcome") {
+        return detail::get_or_throw<WsWelcome>(j, "welcome");
+    }
+    if (type == "subscribed") {
+        return detail::get_or_throw<WsSubscribed>(j, "subscribed");
+    }
+    if (type == "unsubscribed") {
+        return detail::get_or_throw<WsUnsubscribed>(j, "unsubscribed");
+    }
+    if (type == "snapshot") {
+        return detail::get_or_throw<WsSnapshot>(j, "snapshot");
+    }
+    if (type == "diff") {
+        return detail::get_or_throw<WsDiff>(j, "diff");
+    }
+    if (type == "pong") {
+        return detail::get_or_throw<WsPong>(j, "pong");
+    }
+    if (type == "error") {
+        return detail::get_or_throw<WsError>(j, "error");
+    }
+    if (type.empty()) {
+        throw WsProtocolError("missing type");
+    }
+    throw WsProtocolError("unknown type: " + type);
+}
+
+template <typename Text, std::enable_if_t<kWsTextLike<Text>, int>>
+inline WsServerMessage parse_ws_server_message(const Text& text) {
+    const std::string_view sv = text;
+    Json                   j  = Json::parse(sv.begin(), sv.end(), nullptr, false);
+    if (j.is_discarded()) {
+        throw WsProtocolError("invalid json");
+    }
+    return parse_ws_server_message(j);
+}
+
+/// 任意协议结构 / variant -> 文本帧。
+template <typename Message>
+std::string serialize_ws_message(const Message& msg) {
+    return Json(msg).dump();
+}
+
+} // namespace serve
+} // namespace tqsdk

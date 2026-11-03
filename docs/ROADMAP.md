@@ -18,8 +18,9 @@
   统一配置与 `make_tqapi`。多 node 共享 gw 网关 + 引用计数退订 + peek 闸门（见 MODULES §3.5）。
 - ✅ **阶段 7 基础 REST**：`serve/router`（类型化路由）、`serve/http_server`（quote/kline/account/orders/trades/
   positions/下单/撤单）。
-- ✅ **阶段 7 WebSocket 推送**：`serve/ws_stream`（`/stream` 升级、welcome/subscribe/snapshot/diff/ping、
-  每连接单写者 + 有界队列、订阅引用计数）、`serve/json_convert`（REST/WS 共用字段映射）。
+- ✅ **阶段 7 WebSocket 推送**：`serve/ws_protocol`（强类型 WsClientMessage/WsServerMessage）、
+  `serve/ws_stream`（`/stream` 升级、welcome/subscribe/snapshot/diff/ping、每连接单写者 +
+  有界队列、订阅引用计数）、`serve/json_convert`（REST/WS 共用字段映射）。
 - ⬜ 未完成：CTP（阶段4）、seq/gap 检测与断线补发（4.6）、共享内存快通道、多线程/strand、soak。
 
 > 下方 4~10 章保留为**设计意图与原始规划**，与已实现代码若有出入，以 `docs/MODULES.md` 为准。
@@ -96,7 +97,7 @@
 - Channel 家族：basic/bounded/multiplex/close 全覆盖测试。
 - UDS IPC 通道：帧编解码、大 payload(1MB)、对端关闭、非法帧、幂等 close、双向并发。
 - 日志分级与文件轮转；测试 `main()` 统一初始化。
-- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 198 项
+- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 208 项
   （其中 2 个联网行情测试默认跳过）。
 
 ### 2.5 测试规模快照（阶段 3 历史快照；当前总数见上）
@@ -479,7 +480,7 @@ include/tqsdk/
     uds_channel.h         UDS 实现
   util/                   log / serde / async_mutex / spawn_logged
 src/                      对应实现
-tests/                    ~198 用例
+tests/                    ~208 用例
 examples/demo.cpp
 scripts/probe_*.py        协议探测
 third_party/ctp/          CTP SDK（有头与 so，网关未实现）
