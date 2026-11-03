@@ -22,3 +22,9 @@ brokers.json
 compile_commands.json
 # ---- 本机 soak/perf 产物 ----
 artifacts/
+
+# ---- Web 前端生成物 ----
+node_modules/
+web/apps/*/dist/
+web/**/node_modules/
+web/.vite/

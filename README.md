@@ -444,4 +444,5 @@ config/                     gw.toml / node.toml
 tests/                      229 用例（CTP 构建 242；channel/data/gateway/ipc/serve/e2e/config）
 examples/demo.cpp           实时行情示例
 scripts/                    两进程冒烟 / 协议探测 / soak / perf baseline
+web/apps/web                SolidJS + Lightweight Charts Phase 0 原型
 ```

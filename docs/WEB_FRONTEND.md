@@ -10,11 +10,10 @@
 
 ```text
 Web 第一版：
-  React 19 + TypeScript + Vite
+  SolidJS + TypeScript + Vite
   + TradingView Lightweight Charts v5
-  + TanStack Query（REST 快照）
-  + WebSocket（增量 diff / 重连）
-  + Zustand（轻量客户端状态）
+  + solid-js/store（本地数据）
+  + REST 快照 + WebSocket 增量 diff / 重连
 
 桌面版：
   Tauri 2 + 同一套 Web UI
@@ -116,24 +115,36 @@ Tauri WebView -> Rust FFI -> libtqsdk_core.so
 不要使用 TradingView Advanced Charts / Charting Library 作为默认方案：
 它是闭源、申请制、有 watermark/bar 上限等限制，不适合本地开源项目。
 
-## 3. React 还是 Solid
+## 3. SolidJS 还是 React
 
-| 维度 | React 19 | SolidJS |
+| 维度 | SolidJS | React 19 |
 |---|---|---|
-| 生态 | 最大，图表/表格/状态/测试库齐全 | 小而精，金融图表封装少 |
-| 性能 | 足够；配合 compiler/memo 可控制重渲染 | 细粒度更新更自然 |
-| 招聘/维护 | 容易 | 相对小众 |
-| TradingView 集成 | 社区封装多，vanilla API 也简单 | 需要自己封装 |
-| 复杂交易 UI | 表单、表格、虚拟列表生态成熟 | 需要更多自研 |
+| 响应式 | 细粒度 signal/effect，更新路径短 | 组件级 re-render，需要 memo/compiler |
+| 生态 | 图表/表格/路由/测试库较少 | 最大，生态最成熟 |
+| 学习曲线 | JSX 风格接近 React，但无 hooks 依赖数组 | hooks/闭包心智负担更重 |
+| TradingView 集成 | 直接用 vanilla API 封装，反而简单 | 社区封装多，但封装层也可能引入重渲染 |
+| 复杂交易 UI | 表格/虚拟列表需要更多自研 | 现成方案多 |
+| 打包/运行时 | 更小、启动更轻 | 更大 |
 
-建议 **React + TypeScript**。理由不是 React 渲染更快，而是交易客户端会大量
-依赖表格、表单、虚拟滚动、路由、测试和图表封装；React 的生态成本最低。
-如果后续发现 K 线高频更新导致 React 重渲染成为瓶颈，应优先：
+本项目选择 **SolidJS + TypeScript**，原因是：
 
-- 把图表实例放在 `useRef`，用命令式 `series.update()`；
-- 指标计算移到 Worker；
-- 只让“当前报价/持仓摘要”进入 React state；
-- 而不是整体换 Solid。
+1. 你本人更熟悉 SolidJS，长期维护成本最低；
+2. 交易客户端的高频更新主要是行情/持仓数据，Solid 的细粒度更新更自然；
+3. K 线由 Lightweight Charts 自己用 Canvas 渲染，不需要依赖 React 的图表封装；
+4. 交易 UI 的表格/表单规模可控，不需要为了生态引入 React。
+
+需要接受的代价：
+
+- Solid 的组件库、表格、虚拟列表、测试工具比 React 少；
+- 复杂通用组件需要自己写或做少量适配；
+- 图表必须按 vanilla API 封装，不要把每 tick 数据塞进 Solid store 触发全树更新。
+
+实现原则：
+
+- 图表实例放 `let chart`/普通变量，用命令式 `series.update()`；
+- 行情/持仓使用 `createStore` + 细粒度 selector，避免整页重渲染；
+- 指标计算移到 Web Worker；
+- 只让“当前报价/持仓摘要”进入响应式 UI，K 线数据走图表实例。
 
 ## 4. Tauri 2 vs Qt
 
@@ -188,7 +199,7 @@ tqsdk_cpp/
     package.json                 # pnpm workspace
     pnpm-workspace.yaml
     apps/
-      web/                       # React + Vite Web 客户端
+      web/                       # SolidJS + Vite Web 客户端
         src/
           app/
           pages/
@@ -272,18 +283,37 @@ WebSocket 客户端消息：
 2. **rAF 批处理**：同一帧内多个 tick 合并成一次 update；
 3. **指标 Worker**：MA/MACD/KDJ 在大数据量下放 Web Worker，避免阻塞 UI；
 4. **虚拟列表**：订单/成交/持仓表用虚拟滚动；
-5. **图表实例命令式**：React 只管理容器和生命周期，不让每 tick 触发整页 render；
+5. **图表实例命令式**：Solid 只管理容器和生命周期，不让每 tick 触发整页 render；
 6. **WS 限流**：前端按 30～60Hz 合并行情；交易回报不合并；
 7. **桌面端**：Tauri 只做壳，不让 IPC 进入每 tick 热路径；WebSocket 仍走本地回环。
 
 ## 8. 分阶段路线
 
-### Phase 0：静态原型（1～2 天）
+### Phase 0：静态原型（已完成，2026-11-03）
 
-- Vite + React + TS；
+- Vite + SolidJS + TS；
 - 用 mock 数据画 K 线 + 成交量 + 持仓表；
 - 验证 Lightweight Charts v5 的 API、主题、响应式；
 - 不接真实交易。
+
+落地位置：
+
+```text
+web/apps/web/src/App.tsx
+web/apps/web/src/chart/KLineChart.tsx
+web/apps/web/src/data/mock.ts
+```
+
+运行：
+
+```fish
+cd web
+nvm use lts
+npm install
+npm run dev
+```
+
+`npm run build`（含 `tsc --noEmit`）已通过；当前是纯 mock，下单按钮只更新提示文案。
 
 ### Phase 1：只读行情客户端（3～5 天）
 
