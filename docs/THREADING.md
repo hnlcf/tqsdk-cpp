@@ -81,10 +81,13 @@ gw 当前使用**一条进程级 core strand** 承载：
 - 每个连接的 `IpcSession` 后台读/心跳/看门狗协程。
 
 worker 线程数 > 1 时，socket I/O 可以由多个线程推进，但所有业务状态更新
-仍被 strand 串行化。这样做的原因是：多个 node 连接共享同一份 md/td 网关对象，
-当前 `Channel<T>` 是单消费者语义，还没有实现“多连接广播 + 每连接独立 strand”
-所需的 fan-out 层。先把状态安全收敛，再演进到每网关/每连接 strand，比在
-未定义广播语义的情况下直接并行更安全。
+仍被 strand 串行化。
+
+多 node 共享网关的“单消费者 Channel”问题已由 `ipc/event_bus.h` 解决：
+EventBus 是唯一消费者，把事件非阻塞复制到每个 `GatewayIpcServer` 的有界 sink。
+但 sink 的 `try_send()` 仍要求与 bus 同 executor；要给每个连接独立 strand，
+还需要把 sink 入队改成“post 到连接 strand”或线程安全队列。因此 gw 当前仍把
+总线、server、session 收敛到一条 core strand，先把正确性固定下来。
 
 ## 4. 生命周期与关闭顺序
 
@@ -145,8 +148,8 @@ TSAN_OPTIONS=halt_on_error=1 ./build-tsan/tqsdk_tests \
 
 当前是“多线程传输 + 单 core 数据面”的安全折中。下一步可做：
 
-1. 为 md/td 网关引入真正的 fan-out hub，让每个 node 连接拥有独立发送队列与
-   strand；
+1. 在 EventBus 基础上，让每条 gw 连接拥有独立 strand：把 sink 入队改成
+   post 到连接 strand 的无阻塞投递；
 2. 把 `Channel<T>` 升级为跨 executor、多消费者安全实现（或改用
    `asio::experimental::channel`）；
 3. 将序列化/大 JSON 构造下沉到 thread_pool，core 只做指针交换；

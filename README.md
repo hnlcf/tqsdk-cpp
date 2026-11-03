@@ -261,8 +261,9 @@ tqsdk-gw（接入进程）                         tqsdk-node（数据服务进�
 - **单一权威数据源**：只有 node 合并并持有内存截面；gw 只做接入与协议翻译。
 - **同一接口两种实现**：`RemoteMdGateway`/`RemoteTdGateway` 与 `TqMdGateway`/`SimTdGateway`
   实现同一套网关接口，`TqApi` 无感知。
-- **多 node 共享一个 gw 网关**：行情网关用**引用计数退订 + 投递前过滤 + peek 闸门**，保证 node 断联后
-  不再产生无人消费的行情入队（详见 `docs/MODULES.md` §3.5）。
+- **多 node 共享一个 gw 网关**：`ipc/event_bus.h` 把单消费者网关 output 非阻塞广播到
+  每个连接的有界 sink（慢连接只丢自己的最旧事件）；行情网关用**引用计数退订 + 投递前过滤 +
+  peek 闸门**，保证 node 断联后不再产生无人消费的行情入队（详见 `docs/MODULES.md` §3.5）。
 
 ### 运行
 
@@ -395,6 +396,7 @@ include/tqsdk/
     codec.h                 ICodec：JSON/MessagePack 抽象
     protocol.h              各 FrameType 消息体 schema + encode/decode 辅助
     stream_seq.h            epoch/seq、缺口检测、OutboundStream replay buffer
+    event_bus.h             单消费者网关输出 -> 多 node 连接的非阻塞扇出
     ipc_session.h           会话：握手 / 心跳 / 看门狗 / 帧路由
     ipc_client.h            帧分发 + 命令 rid 关联 + 缺口/重连/Resume
     gateway_server.h        gw 侧桥接（真实网关 <-> IPC）
@@ -411,7 +413,7 @@ include/tqsdk/
 src/                        对应实现
 apps/                       gw_main.cpp / node_main.cpp
 config/                     gw.toml / node.toml
-tests/                      ~222 用例（channel/data/gateway/ipc/serve/e2e/config）
+tests/                      ~224 用例（channel/data/gateway/ipc/serve/e2e/config）
 examples/demo.cpp           实时行情示例
 scripts/                    两进程冒烟 / 协议探测
 ```

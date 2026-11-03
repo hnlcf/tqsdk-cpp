@@ -131,17 +131,30 @@ int main(int argc, char** argv) {
             ex, [&td]() -> asio::awaitable<void> { co_await td->start(); }, "gw.td.start");
     }
 
+    // 单消费者网关输出 -> 多连接 sink 的扇出层。多个 node 同时连接时，
+    // 每个连接收到同一份事件，而不是互相抢 Channel。
+    std::shared_ptr<ipc::EventBus<MarketDataEvent>> md_bus;
+    std::shared_ptr<ipc::EventBus<TradeEvent>>      td_bus;
+    if (md) {
+        md_bus = std::make_shared<ipc::EventBus<MarketDataEvent>>(md->output(), ex);
+        md_bus->start();
+    }
+    if (td) {
+        td_bus = std::make_shared<ipc::EventBus<TradeEvent>>(td->event_output(), ex);
+        td_bus->start();
+    }
+
     // 活动连接注册表：shutdown 时统一 close。GatewayIpcServer 由各自的
     // 后台循环以 shared_from_this 自持，这里只保留一份引用用于优雅关闭。
     auto live_servers = std::make_shared<std::vector<std::shared_ptr<ipc::GatewayIpcServer>>>();
 
     // 处理一条已建立的 channel：握手 -> 建 Server -> 登记 -> 自持运行。
     // 握手失败/连接断开时，watchdog 协程把 server 从注册表移除并 close。
-    auto on_accept = [&cfg,
-                      ex](std::unique_ptr<ipc::IIpcChannel> channel,
-                          std::shared_ptr<std::vector<std::shared_ptr<ipc::GatewayIpcServer>>> live,
-                          MarketDataGateway*                                                   md_p,
-                          TradingGateway* td_p) {
+    auto on_accept = [&cfg, ex, md_bus, td_bus](
+                         std::unique_ptr<ipc::IIpcChannel> channel,
+                         std::shared_ptr<std::vector<std::shared_ptr<ipc::GatewayIpcServer>>> live,
+                         MarketDataGateway*                                                   md_p,
+                         TradingGateway* td_p) {
         ipc::IpcSession::Options opts;
         opts.local_role         = ipc::IpcRole::Gateway; // gw 侧声明 Gateway
         opts.local_name         = cfg.local_name;
@@ -153,7 +166,7 @@ int main(int argc, char** argv) {
         auto session = std::make_unique<ipc::IpcSession>(std::move(channel), ex, opts);
         co_spawn_logged(
             ex,
-            [session = std::move(session), ex, live, md_p, td_p]() mutable
+            [session = std::move(session), ex, live, md_p, td_p, md_bus, td_bus]() mutable
                 -> asio::awaitable<void> {
                 try {
                     co_await session->start(); // 握手；失败抛异常
@@ -165,6 +178,7 @@ int main(int argc, char** argv) {
 
                 auto srv =
                     std::make_shared<ipc::GatewayIpcServer>(std::move(session), md_p, td_p, ex);
+                srv->attach_buses(md_bus.get(), td_bus.get());
                 srv->start();
                 live->push_back(srv);
 

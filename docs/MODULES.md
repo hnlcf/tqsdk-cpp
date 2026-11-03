@@ -330,8 +330,11 @@
   - 同一 symbol 被显式订阅且被 K 线依赖时计数为 2；只退订行情不会提前释放合约行情。
   - 同连接重复订阅同一 kline 不重复计数（按 `sym|dur` 去重）。
   - td 的 Ack **不上推**（已作为 CommandAck 同步返回）。
-- **关键文件**：`include/tqsdk/ipc/gateway_server.h`、`src/ipc/gateway_server.cpp`
-- **测试**：`tests/ipc/gateway_server_test.cpp`。
+  - 多 node 共享同一网关时，`attach_buses()` 从 `EventBus` 接收本连接 sink；
+    未挂接时直接消费网关 output（单连接兼容路径）。
+- **关键文件**：`include/tqsdk/ipc/gateway_server.h`、`src/ipc/gateway_server.cpp`、
+  `include/tqsdk/ipc/event_bus.h`
+- **测试**：`tests/ipc/gateway_server_test.cpp`（含 EventBus 双连接广播）。
 
 ### 4.8 RemoteMdGateway / RemoteTdGateway（node 侧代理）
 
@@ -539,7 +542,7 @@
 - **线程模型**：node 为“多 worker 传输 + 单 core strand 数据面”；gw 仍把所有网关/会话收敛到单 core strand。TCP/UDP 之外的每网关/每客户端独立 strand 需要先实现 Channel fan-out，见 `THREADING.md` §7。
 - **自动重连**：`IpcClient`（远程 md/td）已支持指数退避重连 + Resume；`TqMdGateway`/`TqTdGateway` 直连天勤/CTP 的重连仍由各自网关实现（当前 TqMdGateway 投递 Disconnected 后不自动重连）。
 - **seq / gap 检测**：md/td 已实现 epoch+seq、重复丢弃、gap 回调、Resume/replay、md resync、td TradeSnapshot 对账；跨版本旧 peer 按 seq=0 兼容。
-- **多 node 广播**：gw 的 md/td `Channel<T>` 仍是单消费者；多个 GatewayIpcServer 共享同一网关时当前事件会被分摊而非广播，需要独立 fan-out 层（roadmap 阶段 D 后续）。
+- **多 node 广播**：已由 `ipc/event_bus.h` 解决——EventBus 独占读取单消费者网关 output，把事件以非阻塞 `Channel::try_send()` 复制到每个连接的有界 sink；慢连接只丢自己的最旧事件。`GatewayIpcServer::attach_buses()` 在 gw_main 中统一挂接。
 - **CTP 网关**：未实现（roadmap 阶段4）。
 - **共享内存快通道**：未实现（性能阶段可选项）。
 - **WebSocket 与 wait_update**：`HttpServer` 内的 `WebSocketHub::push_loop` 是 serve 层

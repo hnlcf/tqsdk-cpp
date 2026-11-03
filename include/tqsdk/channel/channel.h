@@ -23,6 +23,11 @@ public:
     // close 后抛 system_error{operation_aborted}
     asio::awaitable<void> async_send(T item);
 
+    // 非阻塞生产者：仅允许在 Channel 所属 executor 上调用。
+    // 有界且已满时丢弃最旧元素（行情广播的“慢消费者不拖垮其他连接”语义）。
+    // 返回 false 表示通道已关闭。
+    bool try_send(T item);
+
     // 消费者：取队首；空且未 close 时挂起
     // close 且空时返回 nullopt
     asio::awaitable<std::optional<T>> async_receive();
@@ -127,6 +132,21 @@ asio::awaitable<void> Channel<T>::async_send(T item) {
     wake_one(recv_waiters_);
 
     co_return;
+}
+
+// ---------- try_send ----------
+template <typename T>
+bool Channel<T>::try_send(T item) {
+    if (closed_) {
+        return false;
+    }
+    if (capacity_ > 0 && queue_.size() >= capacity_) {
+        // 慢消费者：丢弃最旧元素，保留最新状态（行情/交易快照均为最新优先）。
+        queue_.pop_front();
+    }
+    queue_.push_back(std::move(item));
+    wake_one(recv_waiters_);
+    return true;
 }
 
 // ---------- receive ----------

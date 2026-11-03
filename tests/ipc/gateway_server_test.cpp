@@ -764,6 +764,119 @@ TEST(GatewayIpcServerTest, ResumeEpochMismatchTriggersTradeSnapshot) {
     ::unlink(path.c_str());
 }
 
+// 两个 node 同时连接共享同一 md 网关：EventBus 必须把同一事件广播给两条连接。
+TEST(GatewayIpcServerTest, EventBusBroadcastsToAllConnections) {
+    const std::string path1 = make_uds_path("bus1");
+    const std::string path2 = make_uds_path("bus2");
+    asio::io_context  io;
+    auto              pair1 = make_uds_pair(io, path1);
+    auto              pair2 = make_uds_pair(io, path2);
+
+    RecordingMdGateway md(io.get_executor());
+
+    auto gw1 = std::make_unique<IpcSession>(
+        std::move(pair1.srv), io.get_executor(), opt(IpcRole::Gateway, "gw1"));
+    auto gw2 = std::make_unique<IpcSession>(
+        std::move(pair2.srv), io.get_executor(), opt(IpcRole::Gateway, "gw2"));
+    auto node1 = std::make_unique<IpcSession>(
+        std::move(pair1.cli), io.get_executor(), opt(IpcRole::Node, "node1"));
+    auto node2 = std::make_unique<IpcSession>(
+        std::move(pair2.cli), io.get_executor(), opt(IpcRole::Node, "node2"));
+
+    auto t1 = test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await gw1->start(); });
+    auto t2 = test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await gw2->start(); });
+    auto t3 = test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await node1->start(); });
+    auto t4 = test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await node2->start(); });
+    test::wait_all(io, std::chrono::seconds(2), t1, t2, t3, t4);
+    t1.get();
+    t2.get();
+    t3.get();
+    t4.get();
+
+    auto bus  = std::make_shared<EventBus<MarketDataEvent>>(md.output(), io.get_executor());
+    auto srv1 = std::make_shared<GatewayIpcServer>(std::move(gw1), &md, nullptr, io.get_executor());
+    auto srv2 = std::make_shared<GatewayIpcServer>(std::move(gw2), &md, nullptr, io.get_executor());
+    srv1->attach_buses(bus.get(), nullptr);
+    srv2->attach_buses(bus.get(), nullptr);
+    bus->start();
+    srv1->start();
+    srv2->start();
+
+    bool        acked1 = false, acked2 = false;
+    bool        push1 = false, push2 = false;
+    uint64_t    seq1 = 0, seq2 = 0;
+    std::string epoch1, epoch2;
+    json        data1, data2;
+
+    auto task = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
+        SubscribeBody sub1;
+        sub1.symbols = {"SHFE.rb2610"};
+        co_await node1->send_body<FrameType::Subscribe>(sub1);
+        SubscribeBody sub2;
+        sub2.symbols = {"DCE.i2601"};
+        co_await node2->send_body<FrameType::Subscribe>(sub2);
+
+        auto a1 = co_await node1->incoming().async_receive();
+        if (a1.has_value()) {
+            acked1 = decode_as<FrameType::SubscribeAck>(*a1).ok;
+        }
+        auto a2 = co_await node2->incoming().async_receive();
+        if (a2.has_value()) {
+            acked2 = decode_as<FrameType::SubscribeAck>(*a2).ok;
+        }
+
+        md.inject(nlohmann::json{
+            {"quotes",
+             {{"SHFE.rb2610", {{"last_price", 3800.0}}}, {"DCE.i2601", {{"last_price", 800.0}}}}}});
+
+        auto p1 = co_await node1->incoming().async_receive();
+        if (p1.has_value()) {
+            auto b = decode_as<FrameType::MarketDataPush>(*p1);
+            push1  = true;
+            seq1   = b.meta.seq;
+            epoch1 = b.meta.epoch;
+            data1  = std::move(b.data);
+        }
+        auto p2 = co_await node2->incoming().async_receive();
+        if (p2.has_value()) {
+            auto b = decode_as<FrameType::MarketDataPush>(*p2);
+            push2  = true;
+            seq2   = b.meta.seq;
+            epoch2 = b.meta.epoch;
+            data2  = std::move(b.data);
+        }
+    });
+    test::wait_all(io, std::chrono::seconds(3), task);
+    task.rethrow_if_error();
+
+    EXPECT_TRUE(acked1);
+    EXPECT_TRUE(acked2);
+    EXPECT_TRUE(push1);
+    EXPECT_TRUE(push2);
+    EXPECT_EQ(seq1, 1u);
+    EXPECT_EQ(seq2, 1u);
+    // 每个 GatewayIpcServer 是独立连接/独立流，epoch 各自生成。
+    EXPECT_FALSE(epoch1.empty());
+    EXPECT_FALSE(epoch2.empty());
+
+    // 同一广播事件按连接订阅裁剪，互不泄漏。
+    ASSERT_TRUE(data1.contains("quotes"));
+    EXPECT_TRUE(data1["quotes"].contains("SHFE.rb2610"));
+    EXPECT_FALSE(data1["quotes"].contains("DCE.i2601"));
+    ASSERT_TRUE(data2.contains("quotes"));
+    EXPECT_TRUE(data2["quotes"].contains("DCE.i2601"));
+    EXPECT_FALSE(data2["quotes"].contains("SHFE.rb2610"));
+
+    bus->stop();
+    srv1->close();
+    srv2->close();
+    node1->close();
+    node2->close();
+    test::drive_for(io, std::chrono::milliseconds(100));
+    ::unlink(path1.c_str());
+    ::unlink(path2.c_str());
+}
+
 } // namespace
 } // namespace ipc
 } // namespace tqsdk

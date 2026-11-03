@@ -27,8 +27,10 @@
 - ✅ **阶段 8 多线程**：`[runtime].threads` / `--threads`，node 每连接 HTTP strand +
   单 core strand 数据面，gw 单 core strand；4 worker 并发 HTTP、WebSocket、两进程
   断线重启恢复已实测；TSan 覆盖核心并发用例。详见 [`THREADING.md`](./THREADING.md)。
-- ⬜ 未完成：CTP（阶段4）、共享内存快通道、多 node 广播 fan-out、
-  WebSocket 每客户端独立 strand、24h soak/perf baseline。
+- ✅ **多 node 扇出**：`ipc/event_bus.h` 把共享网关 output 非阻塞广播到每连接
+  有界 sink；`GatewayIpcServer::attach_buses()` 在 gw_main 统一挂接，双连接广播有测。
+- ⬜ 未完成：CTP（阶段4）、共享内存快通道、WebSocket 每客户端独立 strand、
+  gw 每连接独立 strand、24h soak/perf baseline。
 
 > 下方 4~10 章保留为**设计意图与原始规划**，与已实现代码若有出入，以 `docs/MODULES.md` 为准。
 
@@ -104,7 +106,7 @@
 - Channel 家族：basic/bounded/multiplex/close 全覆盖测试。
 - UDS IPC 通道：帧编解码、大 payload(1MB)、对端关闭、非法帧、幂等 close、双向并发。
 - 日志分级与文件轮转；测试 `main()` 统一初始化。
-- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 222 项
+- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 224 项
   （其中 2 个联网行情测试默认跳过），TSan 并发用例全绿。
 
 ### 2.5 测试规模快照（阶段 3 历史快照；当前总数见上）
@@ -369,7 +371,7 @@
 - [x] 两进程 4 worker 冒烟：并发 REST、WebSocket subscribe/ping、杀 gw 重启后自动恢复。
 - [ ] 24h soak（内存、句柄、队列水位）。
 - [ ] 命令重传/ack 去重的 CTP 专项回归（依赖阶段4）。
-- [ ] 多 node 同时连接时的广播 fan-out 正确性测试。
+- [x] 多 node 同时连接时的广播 fan-out 正确性测试（EventBus 双连接）。
 
 **验收**：故障注入下数据不丢（交易）/可重建（行情），长稳 24h 无泄漏。
 
@@ -495,7 +497,7 @@ include/tqsdk/
     uds_channel.h         UDS 实现
   util/                   log / serde / async_mutex / spawn_logged / runtime
 src/                      对应实现
-tests/                    ~222 用例
+tests/                    ~224 用例
 examples/demo.cpp
 scripts/probe_*.py        协议探测
 third_party/ctp/          CTP SDK（有头与 so，网关未实现）

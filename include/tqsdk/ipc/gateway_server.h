@@ -4,6 +4,7 @@
 
 #include "tqsdk/gateway/market_data_gateway.h"
 #include "tqsdk/gateway/trading_gateway.h"
+#include "tqsdk/ipc/event_bus.h"
 #include "tqsdk/ipc/ipc_session.h"
 #include "tqsdk/ipc/protocol.h"
 #include "tqsdk/ipc/stream_seq.h"
@@ -70,6 +71,11 @@ public:
     GatewayIpcServer(const GatewayIpcServer&)            = delete;
     GatewayIpcServer& operator=(const GatewayIpcServer&) = delete;
 
+    /// 挂接扇出总线（多 node 共享同一 gw 网关时必须使用）。
+    /// 须在 start() 前调用；bus 生命周期由调用方持有，通常覆盖整个进程。
+    /// 未挂接时退化为直接消费网关 output()（单连接测试/兼容路径）。
+    void attach_buses(EventBus<MarketDataEvent>* md_bus, EventBus<TradeEvent>* td_bus);
+
     /// 启动 md/td pump 与 control 循环（后台协程）。幂等。
     ///
     /// 自持语义：每个后台协程都持有一份 shared_from_this()，因此本对象在
@@ -111,10 +117,21 @@ private:
     /// 发送交易全量快照（td stream 也占一个 seq）。
     asio::awaitable<void> send_td_snapshot();
 
+    /// 按本连接的订阅集合裁剪 md diff（quotes/klines）。
+    /// 返回 false 表示该事件对本连接没有任何内容，可直接丢弃。
+    bool filter_md_for_connection(MarketDataEvent& ev) const;
+
     std::unique_ptr<IpcSession> session_;
     MarketDataGateway*          md_;
     TradingGateway*             td_;
     asio::any_io_executor       ex_;
+
+    // 多 node 扇出：attach_buses 后 md_pump/td_pump 消费自己的 sink，
+    // 由 EventBus 把共享网关事件复制到每个连接。
+    EventBus<MarketDataEvent>* md_bus_{nullptr};
+    EventBus<TradeEvent>*      td_bus_{nullptr};
+    Channel<MarketDataEvent>   md_sink_;
+    Channel<TradeEvent>        td_sink_;
 
     std::string    stream_epoch_;
     OutboundStream md_stream_;

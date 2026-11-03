@@ -24,6 +24,8 @@ GatewayIpcServer::GatewayIpcServer(std::unique_ptr<IpcSession> session,
       md_(md),
       td_(td),
       ex_(std::move(ex)),
+      md_sink_(ex_, 2048),
+      td_sink_(ex_, 2048),
       stream_epoch_(make_stream_epoch("gw")),
       md_stream_(StreamKind::Md, stream_epoch_, options.md_replay),
       td_stream_(StreamKind::Td, stream_epoch_, options.td_replay),
@@ -118,6 +120,18 @@ asio::awaitable<void> GatewayIpcServer::handle_resume(const ReceivedFrame& frame
     co_return;
 }
 
+void GatewayIpcServer::attach_buses(EventBus<MarketDataEvent>* md_bus,
+                                    EventBus<TradeEvent>*      td_bus) {
+    md_bus_ = md_bus;
+    td_bus_ = td_bus;
+    if (md_bus_ != nullptr) {
+        md_bus_->add_sink(&md_sink_);
+    }
+    if (td_bus_ != nullptr) {
+        td_bus_->add_sink(&td_sink_);
+    }
+}
+
 void GatewayIpcServer::start() {
     if (started_ || closed_) {
         return;
@@ -144,6 +158,18 @@ void GatewayIpcServer::close() noexcept {
         return;
     }
     closed_ = true;
+    // 先从扇出总线摘除，再关闭自己的 sink；避免 bus 继续向已析构连接投递。
+    if (md_bus_ != nullptr) {
+        md_bus_->remove_sink(&md_sink_);
+        md_bus_ = nullptr;
+    }
+    if (td_bus_ != nullptr) {
+        td_bus_->remove_sink(&td_sink_);
+        td_bus_ = nullptr;
+    }
+    md_sink_.close();
+    td_sink_.close();
+
     // 唤醒阻塞在网关 output 上的 pump（wait_stop 分支）。
     md_stop_timer_.cancel();
     td_stop_timer_.cancel();
@@ -186,11 +212,80 @@ asio::awaitable<void> GatewayIpcServer::wait_stop(asio::steady_timer& t) {
     co_return;
 }
 
+bool GatewayIpcServer::filter_md_for_connection(MarketDataEvent& ev) const {
+    if (ev.kind != MarketDataEvent::Kind::Diff && ev.kind != MarketDataEvent::Kind::Kline) {
+        return true;
+    }
+    if (!ev.payload.is_object()) {
+        return true;
+    }
+
+    bool  any = false;
+    auto& j   = ev.payload;
+
+    if (auto qit = j.find("quotes"); qit != j.end() && qit->is_object()) {
+        auto& quotes = *qit;
+        for (auto it = quotes.begin(); it != quotes.end();) {
+            if (symbol_use_.count(it.key()) != 0) {
+                any = true;
+                ++it;
+            } else {
+                it = quotes.erase(it);
+            }
+        }
+        if (quotes.empty()) {
+            j.erase("quotes");
+        }
+    }
+
+    if (auto kit = j.find("klines"); kit != j.end() && kit->is_object()) {
+        auto& klines = *kit;
+        for (auto sit = klines.begin(); sit != klines.end();) {
+            if (!sit.value().is_object()) {
+                sit = klines.erase(sit);
+                continue;
+            }
+            const std::string symbol = sit.key();
+            for (auto dit = sit.value().begin(); dit != sit.value().end();) {
+                int64_t dur = 0;
+                try {
+                    dur = std::stoll(dit.key());
+                } catch (...) {
+                    dit = sit.value().erase(dit);
+                    continue;
+                }
+                const auto key = std::make_pair(symbol, dur);
+                if (std::find(subscribed_klines_.begin(), subscribed_klines_.end(), key) !=
+                    subscribed_klines_.end()) {
+                    any = true;
+                    ++dit;
+                } else {
+                    dit = sit.value().erase(dit);
+                }
+            }
+            if (sit.value().empty()) {
+                sit = klines.erase(sit);
+            } else {
+                ++sit;
+            }
+        }
+        if (klines.empty()) {
+            j.erase("klines");
+        }
+    }
+
+    // 没有 quotes/klines 字段的未知事件不主动丢弃，保留扩展性。
+    if (!ev.payload.contains("quotes") && !ev.payload.contains("klines")) {
+        return true;
+    }
+    return any;
+}
+
 // ---------------------------------------------------------------------------
 // md_pump：把行情网关事件翻译成 MarketDataPush / GatewayEvent 上推。
 // ---------------------------------------------------------------------------
 asio::awaitable<void> GatewayIpcServer::md_pump() {
-    auto& out = md_->output();
+    Channel<MarketDataEvent>& out = (md_bus_ != nullptr) ? md_sink_ : md_->output();
     while (!closed_) {
         // race：网关事件 vs 停止信号。若停止先到，接收方被取消并退出循环。
         std::variant<std::optional<MarketDataEvent>, std::monostate> raced;
@@ -210,6 +305,11 @@ asio::awaitable<void> GatewayIpcServer::md_pump() {
             // 网关关闭了事件源：md 側结束，但不连带关闭整条连接。
             SPDLOG_DEBUG("[Gw.md_pump] md output closed");
             co_return;
+        }
+
+        // 多 node 通过 EventBus 收到同一事件后，各连接只发送自己订阅的部分。
+        if (!filter_md_for_connection(*ev)) {
+            continue;
         }
 
         try {
@@ -244,7 +344,7 @@ asio::awaitable<void> GatewayIpcServer::md_pump() {
 // td_pump：把交易网关事件翻译成 TradePush / GatewayEvent 上推。
 // ---------------------------------------------------------------------------
 asio::awaitable<void> GatewayIpcServer::td_pump() {
-    auto& out = td_->event_output();
+    Channel<TradeEvent>& out = (td_bus_ != nullptr) ? td_sink_ : td_->event_output();
     while (!closed_) {
         std::variant<std::optional<TradeEvent>, std::monostate> raced;
         try {

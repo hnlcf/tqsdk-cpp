@@ -89,3 +89,24 @@ TEST(ChannelBasic, MovesNonCopyablePayload) {
     ASSERT_NE(got, nullptr);
     EXPECT_EQ(*got, 99);
 }
+
+TEST(ChannelBasic, TrySendDropsOldestWhenFull) {
+    asio::io_context ctx;
+    Channel<int>     ch(ctx.get_executor(), 2);
+
+    EXPECT_TRUE(ch.try_send(1));
+    EXPECT_TRUE(ch.try_send(2));
+    EXPECT_TRUE(ch.try_send(3)); // 满：丢弃最旧的 1
+    EXPECT_EQ(ch.size(), 2u);
+
+    std::vector<int> got;
+    run_coro(ctx, [&]() -> asio::awaitable<void> {
+        got.push_back(*co_await ch.async_receive());
+        got.push_back(*co_await ch.async_receive());
+        co_return;
+    }());
+    EXPECT_EQ(got, (std::vector<int>{2, 3}));
+
+    ch.close();
+    EXPECT_FALSE(ch.try_send(4));
+}
