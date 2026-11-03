@@ -174,7 +174,10 @@ TSAN_OPTIONS=halt_on_error=1 ./build-tsan/tqsdk_tests \
 2. gw 每 node 连接 `srv_ex` strand + 进程级 `gateway_ex_`；
 3. `EventBus` 非阻塞 fan-out，sink 投递 post 到连接 strand；
 4. `scripts/soak_two_process.py`（默认 24h）与 `scripts/perf_baseline.py`；
-5. TSan 覆盖 `Threading.* / WsStream.* / GatewayIpcServerTest.* / IpcClientTest.*`。
+5. TSan 覆盖 `Threading.* / WsStream.* / GatewayIpcServerTest.* / IpcClientTest.*`；
+6. `Channel::post_send/post_close` 支持跨线程生产者，先 post 到所属 executor
+   再改队列；已加入 4 线程 producer 单测；
+7. node `/readyz`（td 快照/行情就绪）与 `/metrics`（IPC seq gap/duplicate/resume）。
 
 下一步可做：
 

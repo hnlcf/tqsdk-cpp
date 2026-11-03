@@ -158,5 +158,13 @@ void RemoteTdGateway::on_frame(ReceivedFrame&& frame) {
     }
 }
 
+nlohmann::json RemoteTdGateway::metrics() const {
+    return nlohmann::json{
+        {"kind", "remote_td"},
+        {"ack_timeout_ms", ack_timeout_.count()},
+        {"ipc", client_.metrics_json()},
+    };
+}
+
 } // namespace ipc
 } // namespace tqsdk

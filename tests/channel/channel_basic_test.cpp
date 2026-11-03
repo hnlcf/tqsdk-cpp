@@ -110,3 +110,50 @@ TEST(ChannelBasic, TrySendDropsOldestWhenFull) {
     ch.close();
     EXPECT_FALSE(ch.try_send(4));
 }
+
+TEST(ChannelBasic, PostSendFromWorkerThreads) {
+    asio::io_context ctx;
+    auto             strand = asio::make_strand(ctx);
+    Channel<int>     ch(strand);
+
+    constexpr int kThreads   = 4;
+    constexpr int kPerThread = 100;
+    constexpr int kTotal     = kThreads * kPerThread;
+
+    int       received = 0;
+    long long sum      = 0;
+    bool      done     = false;
+    asio::co_spawn(
+        strand,
+        [&]() -> asio::awaitable<void> {
+            while (received < kTotal) {
+                auto item = co_await ch.async_receive();
+                if (!item) {
+                    break;
+                }
+                ++received;
+                sum += *item;
+            }
+            done = true;
+            ch.close();
+            co_return;
+        },
+        asio::detached);
+
+    std::vector<std::thread> producers;
+    for (int t = 0; t < kThreads; ++t) {
+        producers.emplace_back([&ch, t]() {
+            for (int i = 0; i < kPerThread; ++i) {
+                ch.post_send(t * kPerThread + i);
+            }
+        });
+    }
+    for (auto& t : producers) {
+        t.join();
+    }
+    ctx.run();
+
+    EXPECT_TRUE(done);
+    EXPECT_EQ(received, kTotal);
+    EXPECT_EQ(sum, static_cast<long long>(kTotal - 1) * kTotal / 2);
+}

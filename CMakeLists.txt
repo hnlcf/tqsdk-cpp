@@ -64,6 +64,10 @@ target_include_directories(tqsdk_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+set_target_properties(tqsdk_core PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION 0
+)
 
 target_link_libraries(tqsdk_core PUBLIC
     Boost::asio
@@ -158,6 +162,7 @@ if(TQSDK_ENABLE_CTP)
         src/gateway/ctp/ctp_td_gateway.cpp
         src/gateway/ctp/ctp_md_gateway.cpp
         src/gateway/ctp/ctp_task_queue.cpp
+        src/gateway/ctp/ctp_order_store.cpp
         src/gateway/ctp/ctp_spi_impl.cpp
     )
 
@@ -222,6 +227,7 @@ if(TQSDK_BUILD_TESTS)
         tests/serve/ws_protocol_test.cpp
         tests/serve/ws_stream_test.cpp
         tests/serve/threading_test.cpp
+        tests/serve/readiness_test.cpp
         tests/e2e/tq_md_network_test.cpp
     )
     target_include_directories(tqsdk_tests PRIVATE
@@ -230,7 +236,11 @@ if(TQSDK_BUILD_TESTS)
     target_link_libraries(tqsdk_tests PRIVATE tqsdk_core GTest::gtest)
 
     if(TQSDK_ENABLE_CTP)
-        target_sources(tqsdk_tests PRIVATE tests/gateway/ctp_mapping_test.cpp)
+        target_sources(tqsdk_tests PRIVATE
+            tests/gateway/ctp_mapping_test.cpp
+            tests/gateway/ctp_order_store_test.cpp
+            tests/gateway/ctp_fault_injection_test.cpp
+        )
     endif()
 
     include(GoogleTest)
@@ -256,9 +266,31 @@ endif()
 
 # 唯一的核心动态库（CTP 开启时 CTP 目标文件已编入本库）。
 install(TARGETS tqsdk_core
+        EXPORT tqsdkTargets
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
-        RUNTIME DESTINATION bin)
+        RUNTIME DESTINATION bin
+        INCLUDES DESTINATION include)
+
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+    cmake/tqsdkConfig.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/tqsdkConfig.cmake"
+    INSTALL_DESTINATION lib/cmake/tqsdk
+)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/tqsdkConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(EXPORT tqsdkTargets
+        FILE tqsdkTargets.cmake
+        NAMESPACE tqsdk::
+        DESTINATION lib/cmake/tqsdk)
+install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/tqsdkConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/tqsdkConfigVersion.cmake"
+        DESTINATION lib/cmake/tqsdk)
 
 # 头文件：include/ 下的内容原样铺到 <prefix>/include/
 install(DIRECTORY include/
@@ -284,6 +316,7 @@ endif()
 install(FILES config/gw.toml config/node.toml
         DESTINATION share/tqsdk/config)
 install(FILES README.md docs/CTP.md docs/SOAK_PERF.md docs/THREADING.md
+              docs/IPC_RECOVERY.md docs/HA.md docs/WEB_FRONTEND.md
         DESTINATION share/doc/tqsdk)
 
 # ==========================================================

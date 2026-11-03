@@ -163,5 +163,12 @@ void RemoteMdGateway::on_frame(ReceivedFrame&& frame) {
     }
 }
 
+nlohmann::json RemoteMdGateway::metrics() const {
+    return nlohmann::json{
+        {"kind", "remote_md"},
+        {"ipc", client_.metrics_json()},
+    };
+}
+
 } // namespace ipc
 } // namespace tqsdk

@@ -460,5 +460,21 @@ void IpcClient::stop() noexcept {
     }
 }
 
+nlohmann::json IpcClient::metrics_json() const {
+    const auto m = metrics_;
+    return nlohmann::json{
+        {"md_frames", m.md_frames},
+        {"td_frames", m.td_frames},
+        {"md_gaps", m.md_gaps},
+        {"td_gaps", m.td_gaps},
+        {"md_duplicates", m.md_duplicates},
+        {"td_duplicates", m.td_duplicates},
+        {"md_epoch_changes", m.md_epoch_changes},
+        {"td_epoch_changes", m.td_epoch_changes},
+        {"md_resume_requests", m.md_resume_requests},
+        {"td_resume_requests", m.td_resume_requests},
+    };
+}
+
 } // namespace ipc
 } // namespace tqsdk

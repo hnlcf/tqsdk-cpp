@@ -116,6 +116,12 @@ public:
 
     // 交易事件推送通道；TqApi 的后台 td_loop 从此消费。
     virtual Channel<TradeEvent>& event_output() = 0;
+
+    // 可选指标；无指标的网关返回空 object。
+    virtual nlohmann::json metrics() const { return nlohmann::json::object(); }
+
+    // 远端网关需要先收到一次完整 Snapshot 才算就绪；本地/mock 网关默认无需。
+    virtual bool requires_initial_trade_snapshot() const { return false; }
 };
 
 } // namespace tqsdk

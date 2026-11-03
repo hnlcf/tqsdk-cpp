@@ -2,8 +2,12 @@
 
 #include "tqsdk/gateway/ctp/ctp_config.h"
 #include "tqsdk/gateway/ctp/ctp_convert.h"
+#include "tqsdk/gateway/ctp/ctp_order_store.h"
 #include "tqsdk/gateway/ctp/ctp_spi_impl.h"
 #include "tqsdk/gateway/trading_gateway.h"
+#include "tqsdk/util/async_mutex.h"
+
+class CtpFaultInjectionTest;
 
 namespace tqsdk {
 
@@ -102,30 +106,51 @@ private:
     struct QueryJob {
         QueryKind   kind;
         std::string symbol;
-        int         attempts = 0;
+        int         attempts   = 0;
+        int         request_id = 0;
     };
 
-    void        install_callbacks();
-    void        stop_impl() noexcept;
-    void        do_login();
-    void        do_settlement();
-    void        emit(TradeEvent ev);
-    void        schedule_refresh();
-    void        start_queries(bool initial);
-    void        finish_queries();
-    void        pump_queries();
-    void        schedule_query_after(std::chrono::milliseconds delay);
-    int         send_query(const QueryJob& job);
-    void        query_failed();
-    void        finish_instrument_query();
-    void        complete_queries();
-    std::string make_order_ref(const OrderId& rid);
-    std::string rid_for_ref(std::string_view ref) const;
-    CommandAck  send_insert(const InsertOrderReq& req, const OrderId& rid);
-    CommandAck  send_cancel(const CancelOrderReq& req);
-    void        emit_diff(bool initial_snapshot);
-    void        reject_order(std::string_view ref, std::string message);
-    void        rebuild_positions();
+    struct ActiveQuery {
+        QueryKind   kind;
+        std::string symbol;
+        int         request_id = 0;
+    };
+
+    void                  install_callbacks();
+    void                  stop_impl() noexcept;
+    void                  do_login();
+    void                  do_settlement();
+    void                  emit(TradeEvent ev);
+    void                  schedule_refresh();
+    void                  start_queries(bool initial);
+    void                  finish_queries();
+    void                  pump_queries();
+    void                  schedule_query_after(std::chrono::milliseconds delay);
+    int                   send_query(QueryJob& job);
+    void                  query_failed(QueryKind kind);
+    void                  finish_instrument_query();
+    bool                  active_query_matches(QueryKind kind, int request_id) const;
+    void                  arm_query_watchdog();
+    void                  reset_query_state();
+    void                  complete_queries();
+    std::string           make_order_ref(const OrderId& rid);
+    std::string           rid_for_ref(std::string_view ref) const;
+    CommandAck            send_insert(const InsertOrderReq& req, const OrderId& rid);
+    CommandAck            send_cancel(const CancelOrderReq& req);
+    void                  emit_diff(bool initial_snapshot);
+    void                  reject_order(std::string_view ref, std::string message);
+    void                  rebuild_positions();
+    void                  load_persisted_orders();
+    void                  persist_order(const OrderId&     rid,
+                                        const CachedOrder& order,
+                                        std::string        status,
+                                        std::string        message);
+    void                  persist_cached_order(const OrderId& rid);
+    char                  ctp_offset_for_order(std::string_view exchange,
+                                               std::string_view instrument,
+                                               Direction        direction,
+                                               Offset           offset) const;
+    asio::awaitable<void> acquire_order_slot();
 
     boost::asio::any_io_executor   ex_;
     CtpConfig                      cfg_;
@@ -153,21 +178,30 @@ private:
     std::map<std::string, ctp::InstrumentSpec> instruments_;
     nlohmann::json                             account_ = nlohmann::json::object();
 
-    std::map<std::string, std::string> ref_to_rid_;
-    std::map<std::string, std::string> rid_to_ref_;
+    std::map<std::string, std::string>  ref_to_rid_;
+    std::map<std::string, std::string>  rid_to_ref_;
+    std::unique_ptr<ctp::CtpOrderStore> order_store_;
 
-    int                       pending_queries_            = 0;
-    bool                      query_in_flight_            = false;
-    bool                      query_waiting_              = false;
-    bool                      query_initial_              = false;
-    bool                      refresh_pending_            = false;
-    bool                      positions_ready_            = false;
-    bool                      instruments_ready_          = false;
-    int                       pending_instrument_queries_ = 0;
-    QueryKind                 active_query_kind_          = QueryKind::Account;
-    std::deque<QueryJob>      query_queue_;
-    boost::asio::steady_timer refresh_timer_;
-    boost::asio::steady_timer query_timer_;
+    int                                   pending_queries_            = 0;
+    bool                                  query_in_flight_            = false;
+    bool                                  query_waiting_              = false;
+    bool                                  query_initial_              = false;
+    bool                                  refresh_pending_            = false;
+    bool                                  positions_ready_            = false;
+    bool                                  instruments_ready_          = false;
+    int                                   pending_instrument_queries_ = 0;
+    uint64_t                              query_generation_           = 0;
+    std::optional<ActiveQuery>            active_query_;
+    std::deque<QueryJob>                  query_queue_;
+    std::chrono::milliseconds             query_timeout_{10'000};
+    boost::asio::steady_timer             refresh_timer_;
+    boost::asio::steady_timer             query_timer_;
+    boost::asio::steady_timer             query_watchdog_;
+    AsyncMutex                            order_mutex_;
+    boost::asio::steady_timer             order_timer_;
+    std::chrono::steady_clock::time_point next_order_at_;
+
+    friend class ::CtpFaultInjectionTest;
 };
 
 } // namespace tqsdk

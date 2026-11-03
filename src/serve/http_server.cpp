@@ -39,6 +39,17 @@ void HttpServer::setup_routes() {
         {http::verb::get, "/healthz", make_entry([]() -> asio::awaitable<json> {
              co_return json{{"ok", true}};
          })},
+        {http::verb::get, "/readyz", make_entry([this]() -> asio::awaitable<Response> {
+             auto     j = api_->readiness_json();
+             Response r;
+             r.status =
+                 j.value("ready", false) ? http::status::ok : http::status::service_unavailable;
+             r.body = std::move(j);
+             co_return r;
+         })},
+        {http::verb::get, "/metrics", make_entry([this]() -> asio::awaitable<json> {
+             co_return api_->metrics_json();
+         })},
         {http::verb::get,
          "/quote/{symbol}",
          make_entry([this](std::string symbol) -> asio::awaitable<json> {

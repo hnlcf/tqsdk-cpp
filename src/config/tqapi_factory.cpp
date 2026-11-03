@@ -118,6 +118,8 @@ CtpConfig parse_ctp_config(const toml::table& root) {
         ctp.td_front  = get_str(t, "td_front", ctp.td_front);
         ctp.md_front  = get_str(t, "md_front", ctp.md_front);
         ctp.flow_path = get_str(t, "flow_path", ctp.flow_path);
+        ctp.order_interval =
+            std::chrono::milliseconds(get_int(t, "order_interval_ms", ctp.order_interval.count()));
     }
     return ctp;
 }

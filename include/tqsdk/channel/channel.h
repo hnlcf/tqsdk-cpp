@@ -28,6 +28,13 @@ public:
     // 返回 false 表示通道已关闭。
     bool try_send(T item);
 
+    // 跨线程生产者：post 到 Channel 所属 executor 后 try_send。
+    // 调用方必须保证 Channel 在 posted handler 执行前存活。
+    void post_send(T item);
+
+    // 跨线程关闭：post 到所属 executor 执行 close()。
+    void post_close();
+
     // 消费者：取队首；空且未 close 时挂起
     // close 且空时返回 nullopt
     asio::awaitable<std::optional<T>> async_receive();
@@ -148,6 +155,21 @@ bool Channel<T>::try_send(T item) {
     queue_.push_back(std::move(item));
     wake_one(recv_waiters_);
     return true;
+}
+
+// ---------- cross-thread post ----------
+template <typename T>
+void Channel<T>::post_send(T item) {
+    asio::post(ex_, [this, item = std::move(item)]() mutable {
+        if (!try_send(std::move(item))) {
+            SPDLOG_TRACE("Channel::post_send: channel closed");
+        }
+    });
+}
+
+template <typename T>
+void Channel<T>::post_close() {
+    asio::post(ex_, [this]() { close(); });
 }
 
 // ---------- receive ----------

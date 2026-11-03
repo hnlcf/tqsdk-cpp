@@ -39,6 +39,7 @@ public:
             const std::vector<std::pair<std::string, int64_t>>& klines) override;
 
     Channel<MarketDataEvent>& output() override { return ch_; }
+    nlohmann::json            metrics() const override;
 
     /// 供 IpcClient 调用：把一帧翻译成事件推入 output()。
     void on_frame(ReceivedFrame&& frame);

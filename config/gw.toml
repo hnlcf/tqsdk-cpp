@@ -64,3 +64,4 @@ threads = 2
 # td_front = "tcp://180.168.146.187:10130"
 # md_front = "tcp://180.168.146.187:10131"
 # flow_path = "/tmp/tqsdk_ctp"
+# order_interval_ms = 100

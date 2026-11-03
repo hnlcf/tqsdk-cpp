@@ -87,6 +87,52 @@ void TqApi::add_close_hook(std::function<void()> hook) {
     close_hooks_.push_back(std::move(hook));
 }
 
+bool TqApi::md_ready() const {
+    return md_ ? md_ready_.load(std::memory_order_relaxed) : true;
+}
+
+bool TqApi::td_ready() const {
+    if (!td_) {
+        return true;
+    }
+    if (td_ready_.load(std::memory_order_relaxed)) {
+        return true;
+    }
+    return !td_->requires_initial_trade_snapshot();
+}
+
+bool TqApi::ready() const {
+    return started_.load(std::memory_order_relaxed) && !closed_.load(std::memory_order_relaxed) &&
+           md_ready() && td_ready();
+}
+
+nlohmann::json TqApi::readiness_json() const {
+    return nlohmann::json{
+        {"ready", ready()},
+        {"started", started_.load(std::memory_order_relaxed)},
+        {"closed", closed_.load(std::memory_order_relaxed)},
+        {"md",
+         {{"present", md_ != nullptr},
+          {"ready", md_ready()},
+          {"connected", md_connected_.load(std::memory_order_relaxed)}}},
+        {"td",
+         {{"present", td_ != nullptr},
+          {"ready", td_ready()},
+          {"connected", td_connected_.load(std::memory_order_relaxed)}}},
+    };
+}
+
+nlohmann::json TqApi::metrics_json() const {
+    auto j = readiness_json();
+    if (md_) {
+        j["md"]["metrics"] = md_->metrics();
+    }
+    if (td_) {
+        j["td"]["metrics"] = td_->metrics();
+    }
+    return j;
+}
+
 // ---------- 后台消费循环 ----------
 asio::awaitable<void> TqApi::md_loop() {
     if (!md_) {
@@ -101,10 +147,14 @@ asio::awaitable<void> TqApi::md_loop() {
         switch (ev->kind) {
         case MarketDataEvent::Kind::Diff:
         case MarketDataEvent::Kind::Kline:
+            md_connected_.store(true, std::memory_order_relaxed);
+            md_ready_.store(true, std::memory_order_relaxed);
             merger_.apply(ev->payload);
             update_signal_.notify();
             break;
         case MarketDataEvent::Kind::Disconnected:
+            md_connected_.store(false, std::memory_order_relaxed);
+            md_ready_.store(false, std::memory_order_relaxed);
             SPDLOG_WARN("[TqApi.md_loop] market data disconnected");
             break;
         case MarketDataEvent::Kind::Error:
@@ -128,20 +178,27 @@ asio::awaitable<void> TqApi::td_loop() {
         }
         switch (ev->kind) {
         case TradeEvent::Kind::Diff:
+            td_connected_.store(true, std::memory_order_relaxed);
+            td_ready_.store(true, std::memory_order_relaxed);
             merger_.apply(ev->payload);
             update_signal_.notify();
             break;
         case TradeEvent::Kind::Snapshot:
             // 对账快照：先清空交易实体，再按完整 diff 建库，避免旧订单残留。
             data_.clear_trading();
+            td_connected_.store(true, std::memory_order_relaxed);
+            td_ready_.store(true, std::memory_order_relaxed);
             merger_.apply(ev->payload);
             update_signal_.notify();
             break;
         case TradeEvent::Kind::Ack:
             // 命令级回执：阶段 2 不单独触发 wait_update，
             // 真正的状态推进由后续 Diff 驱动。
+            td_connected_.store(true, std::memory_order_relaxed);
             break;
         case TradeEvent::Kind::Disconnected:
+            td_connected_.store(false, std::memory_order_relaxed);
+            td_ready_.store(false, std::memory_order_relaxed);
             SPDLOG_WARN("[TqApi.td_loop] trading disconnected");
             break;
         case TradeEvent::Kind::Error:

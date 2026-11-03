@@ -65,5 +65,8 @@ public:
 
     // 网关内部将收到的行情 diff 推入此通道；TqApi 的后台 md_loop 从此消费。
     virtual Channel<MarketDataEvent>& output() = 0;
+
+    // 可选指标；无指标的网关返回空 object。
+    virtual nlohmann::json metrics() const { return nlohmann::json::object(); }
 };
 } // namespace tqsdk

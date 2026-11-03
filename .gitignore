@@ -20,3 +20,5 @@ brokers.json
 
 # ---- 生成物 ----
 compile_commands.json
+# ---- 本机 soak/perf 产物 ----
+artifacts/

@@ -180,19 +180,24 @@ cmake --build build -j
 cmake -S . -B build -DTQSDK_BUILD_EXAMPLES=ON
 cmake --build build -j --target tqsdk_demo
 
-# 打包（Release/CTP 示例）
-cmake -S . -B build-pkg -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
-  -DVCPKG_INSTALLED_DIR="$PWD/build/vcpkg_installed" \
-  -DVCPKG_MANIFEST_INSTALL=OFF \
-  -DTQSDK_ENABLE_CTP=ON
-cmake --build build-pkg -j
-cmake --build build-pkg --target package
-# build-pkg/tqsdk_cpp-<version>-Linux-<arch>.tar.gz
+# 打包（Release/CTP；需要 VCPKG_ROOT）
+VCPKG_ROOT=/path/to/vcpkg cmake --preset package
+VCPKG_ROOT=/path/to/vcpkg cmake --build build-package -j
+VCPKG_ROOT=/path/to/vcpkg cmake --build build-package --target package
+# build-package/tqsdk_cpp-<version>-Linux-<arch>.tar.gz
 ```
 
 包内是 `bin/`、`lib/`、`include/`、`share/`；CTP 开启时 `lib/` 同时带
-`libtqsdk_core.so` 和 `libthost*.so`，核心库已设置 `$ORIGIN` RPATH。
+`libtqsdk_core.so`、版本化符号链接和 `libthost*.so`，核心库已设置
+`$ORIGIN` RPATH。包内还包含 `lib/cmake/tqsdk/`，下游可：
+
+```cmake
+find_package(tqsdk CONFIG REQUIRED)
+target_link_libraries(my_app PRIVATE tqsdk::tqsdk_core)
+```
+
+> 下游编译还需要 Boost/OpenSSL/spdlog/nlohmann_json 等头文件依赖；
+> 使用 vcpkg 时把 `VCPKG_ROOT` 和 `CMAKE_TOOLCHAIN_FILE` 一并传入即可。
 
 ### 日志
 
@@ -391,7 +396,9 @@ length = 2 + payload.size()          # 含 type+encoding
 可靠性恢复见 [`docs/IPC_RECOVERY.md`](./IPC_RECOVERY.md)；
 多线程模型见 [`docs/THREADING.md`](./THREADING.md)；
 CTP 接入见 [`docs/CTP.md`](./CTP.md)；
-长稳/性能见 [`docs/SOAK_PERF.md`](./SOAK_PERF.md)。
+长稳/性能见 [`docs/SOAK_PERF.md`](./SOAK_PERF.md)；
+高可用/多网关见 [`docs/HA.md`](./HA.md)；
+Web/Tauri 前端路线见 [`docs/WEB_FRONTEND.md`](./WEB_FRONTEND.md)。
 
 ### 源码地图
 
@@ -434,7 +441,7 @@ include/tqsdk/
 src/                        对应实现
 apps/                       gw_main.cpp / node_main.cpp
 config/                     gw.toml / node.toml
-tests/                      227 用例（CTP 构建 233；channel/data/gateway/ipc/serve/e2e/config）
+tests/                      229 用例（CTP 构建 242；channel/data/gateway/ipc/serve/e2e/config）
 examples/demo.cpp           实时行情示例
 scripts/                    两进程冒烟 / 协议探测 / soak / perf baseline
 ```

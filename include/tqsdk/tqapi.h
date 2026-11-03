@@ -43,6 +43,13 @@ public:
     // 关闭网关通道，令后台协程退出。幂等。
     void close();
 
+    // ---- 就绪/指标 ----
+    bool           md_ready() const;
+    bool           td_ready() const;
+    bool           ready() const;
+    nlohmann::json readiness_json() const;
+    nlohmann::json metrics_json() const;
+
     // 注册一个在 close() 时同步执行的清理钩子（按注册顺序调用）。
     // 用于关闭网关之外、TqApi 不直接持有的资源（例如远程模式下共享的
     // IpcClient 连接）。幂等：close() 已执行后再注册会立即调用一次。
@@ -107,10 +114,14 @@ private:
     DiffMergeEngine merger_;
     UpdateSignal    update_signal_;
 
-    bool                  started_      = false;
-    bool                  closed_       = false;
+    std::atomic<bool>     started_{false};
+    std::atomic<bool>     closed_{false};
     bool                  cleared_once_ = false; // 首轮 wait 前无需清位
     std::atomic<uint64_t> order_seq_{0};
+    std::atomic<bool>     md_ready_{false};
+    std::atomic<bool>     td_ready_{false};
+    std::atomic<bool>     md_connected_{false};
+    std::atomic<bool>     td_connected_{false};
 
     std::vector<std::function<void()>> close_hooks_;
 };

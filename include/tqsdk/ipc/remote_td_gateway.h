@@ -40,6 +40,8 @@ public:
     asio::awaitable<CommandAck> cancel_order(const CancelOrderReq& req) override;
 
     Channel<TradeEvent>& event_output() override { return ch_; }
+    nlohmann::json       metrics() const override;
+    bool requires_initial_trade_snapshot() const override { return true; }
 
     /// 供 IpcClient 调用：把一帧翻译成事件推入 event_output()。
     void on_frame(ReceivedFrame&& frame);

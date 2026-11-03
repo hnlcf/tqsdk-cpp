@@ -133,8 +133,11 @@ td 不允许静默丢事件。`RemoteTdGateway` 的 gap handler 会发送
   查询完成前保留上一份可用截面；
 - 命令重试已落地：`IpcClient` 超时后用同一 `rid` 重发，`GatewayIpcServer` 按
   `<op>:<rid>` 缓存首次 ack，命中时不再次调用网关；
-- 该缓存是**每连接**的；连接重建后的跨会话幂等仍要靠订单查询/人工对账，
-  不能简单重发报单。
+- 该缓存是**每连接**的；CTP gateway 另外把 `rid -> OrderRef/订单状态` 落盘到
+  `flow_path/ctp_orders_<user>.json`，网关重启后同一 rid 直接回放 ack；
+- 重启后仍以 CTP 查询为权威：登录/结算后 `ReqQryOrder` 刷新订单状态，
+  node 收到新的 `TradeSnapshot` 后再对账；
+- node `/readyz` 在快照完成前返回 503，调度器/前端不得在此窗口内下单。
 
 ## 6. 兼容性
 

@@ -62,8 +62,42 @@ node_alive,gw_alive,http_ok,http_err,order_ok,order_err,ws_messages,ws_err,recon
 }
 ```
 
-`order_err=4` 对应 gw 重启窗口内的命令失败，属于预期故障窗口。24h 运行由同一脚本
-直接执行：
+`order_err=4` 对应 gw 重启窗口内的命令失败，属于预期故障窗口。
+
+### 2026-11-03 最终回归（shared core + CTP 持久化/readyz）
+
+`build-package` Release，30s，8 HTTP 线程，1s 报单/撤单，10s 重启 gw：
+
+```json
+{
+  "duration_s": 30.0,
+  "http_ok": 227167,
+  "http_err": 0,
+  "order_ok": 27,
+  "order_err": 1,
+  "ws_messages": 29612,
+  "ws_err": 0,
+  "reconnects": 2,
+  "node_max_rss_kb": 26864,
+  "node_max_fds": 19,
+  "node_max_threads": 4,
+  "gw_max_rss_kb": 26092,
+  "gw_max_fds": 10,
+  "gw_max_threads": 4,
+  "fatal": ""
+}
+```
+
+同版本 perf（8s，16 HTTP，4 WS）：
+
+```text
+| workload | qps | p50 ms | p90 ms | p99 ms | max ms | errors |
+|---|---:|---:|---:|---:|---:|---:|
+| HTTP x16 | 7515.4 | 1.355 | 4.769 | 10.596 | 39.378 | 0 |
+| WS ping x4 | 14517.4 | 0.227 | 0.503 | 0.880 | 2.882 | 0 |
+```
+
+24h 运行由同一脚本直接执行：
 
 ```bash
 python3 scripts/soak_two_process.py --out artifacts/soak_24h.csv

@@ -15,6 +15,8 @@ struct CtpConfig {
     std::string md_front;
     /// CTP API 流文件目录；需可写。
     std::string flow_path = "/tmp/tqsdk_ctp";
+    /// 报单/撤单之间的最小间隔，防止触发柜台/交易所频率限制。
+    std::chrono::milliseconds order_interval{100};
 };
 
 } // namespace tqsdk

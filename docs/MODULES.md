@@ -390,14 +390,17 @@
 
 - **目标**：node 进程对外的只读 + 下单 REST 接口，并在同端口承载 WebSocket 升级。
 - **负责**：accept 循环、单请求会话、路由分发；路由见 `http_server.h` 头注释
-  （/healthz、/quote/{symbol}、/kline/{symbol}/{duration_ns}、/account、/orders、/trades、
-  /positions、POST /order、DELETE /order/{id}）。检测到 `Upgrade: websocket` 且路径匹配
+  （/healthz、/readyz、/metrics、/quote/{symbol}、/kline/{symbol}/{duration_ns}、
+  /account、/orders、/trades、/positions、POST /order、DELETE /order/{id}）。
+  检测到 `Upgrade: websocket` 且路径匹配
   `[serve.ws].path` 时，把 socket 交给 `WebSocketHub::accept()`；普通 GET /stream 返回 426。
 - **不负责**：IPC（serve 直接读 core 内存截面，同进程同线程）。
 - **关键约定**：
   - **同步读**：构造响应时同步读 DataManager 并立即拷贝成 JSON，不在 co_await 间持有内部引用。
   - 请求体上限 1MB；错误以 4xx/5xx + `{"error":...}` 返回，不抛到顶层。
   - GET /quote 首次访问触发订阅；建议 node 启动按配置预订阅（否则空占位）。
+  - `/readyz` 返回 ready/md/td 状态；交易快照未完成时返回 **503**，前端应禁用下单。
+  - `/metrics` 返回就绪状态及远端网关的 IPC 指标（seq gap/duplicate/resume 等）。
 - **关键文件**：`include/tqsdk/serve/http_server.h`、`src/serve/http_server.cpp`
 - **测试**：`tests/serve/ws_stream_test.cpp`（同时覆盖 HTTP 端口上的真实 WS 往返）
 

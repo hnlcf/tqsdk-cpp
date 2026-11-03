@@ -87,6 +87,7 @@ app_id = "your_app_id"         # 与 auth_code 配套
 td_front = "tcp://180.168.146.187:10130"
 md_front = "tcp://180.168.146.187:10131"
 flow_path = "/tmp/tqsdk_ctp"
+order_interval_ms = 100
 ```
 
 `flow_path` 必须是可写目录；CTP 会写流文件/私有流恢复数据。不同 broker 的前置地址
@@ -147,6 +148,10 @@ CtpTdGateway / CtpMdGateway 状态、Channel、IPC push
 
 - 一次只发一条查询，收到 `bIsLast` 后间隔 300ms 再发下一条；
 - 遇到 `-2/-3` 时同一查询退避 1s 重试，最多 8 次；
+- 每条查询记录 `request_id + QueryKind + generation`，非当前查询的**迟到回调
+  直接丢弃**，不会错误完成下一轮查询；
+- 单查询 10s watchdog 超时后跳过并继续后续查询，避免某条 CTP 回调丢失导致
+  整个快照永久卡住；
 - 查询失败时继续后续查询，最终仍发一次可用截面（不会卡死）；
 - CTP 回调队列区分优先级：报单/成交/错误回报优先于查询回调；单次 drain
   最多 256 条后让出 core strand，避免全量合约查询淹没交易回报。
@@ -157,6 +162,7 @@ CtpTdGateway / CtpMdGateway 状态、Channel、IPC push
 ### 5.2 报单/撤单
 
 - `insert_order`：
+  - 报单/撤单共用一个 100ms 令牌节流器，串行化并避免触发交易所/柜台频率限制；
   - 本地 `rid` 映射到 CTP `OrderRef`：**只使用十进制数字且保持递增**；
     非数字 rid 会生成纯数字序号，并检查历史 OrderRef 冲突；
     node 的 rid 计数器用启动时间（秒）播种，格式 `r<decimal>`，网关映射时去掉
@@ -174,6 +180,10 @@ CtpTdGateway / CtpMdGateway 状态、Channel、IPC push
   的 reject diff，保证上层能看到失败终态。
 - `OnRtnOrder` / `OnRtnTrade` 更新缓存并 200ms debounce 查询账户/持仓/订单/成交，
   推完整实体 diff。这样避免高频成交时每个事件都做一次全量查询。
+- 对 SHFE/INE/GFEX 的通用 `CLOSE`，若缓存显示有今仓，自动改用 `CLOSETODAY`；
+  避免 SimNow 实测中“平昨仓位不足”。
+- 订单身份/状态落盘到 `flow_path/ctp_orders_<user>.json`（原子写）；
+  网关重启后加载同一交易日的映射，重复 rid 直接回放 ack，不再次报单。
 
 命令幂等与重试：
 
@@ -181,8 +191,9 @@ CtpTdGateway / CtpMdGateway 状态、Channel、IPC push
   （`RemoteTdGateway` 最多 2 次）；会话关闭不重发；
 - `GatewayIpcServer` 按 `<op>:<rid>` 缓存首次 `CommandAck`；重复命令直接回放
   缓存 ack，**不会再次调用网关**，因此 CTP 报单不会被重复提交；
-- 缓存每连接最多 4096 条；连接重建后缓存丢失，跨连接的命令重放仍需依赖
-  订单查询/人工对账，不能把 `IpcClient` 超时重试等同于跨会话幂等；
+- 缓存每连接最多 4096 条；连接重建后内存缓存丢失，但 `CtpTdGateway` 会加载
+  持久化订单映射，同一 rid 直接回放 ack，**跨网关重启也不会再次报单**；
+- 查询/重启对账仍以 CTP 为权威：`ReqQryOrder` 刷新状态，成交/持仓随快照重建；
 - 订单最终状态仍以 `OnRtnOrder` / 查询结果为准，ack 只表示网关是否接受命令。
 
 ### 5.3 断线/重连
@@ -257,6 +268,12 @@ Market Front: tcp://182.254.243.31:30012
 - 发现 CTP 的 `OrderRef` 必须按**十进制数字且递增**处理；带 `r` 前缀或十六进制
   字符串会被判为“不允许重复报单”。实现已将内部 rid 映射为纯数字 OrderRef，
   并对柜台历史 OrderRef 做冲突/递增值维护；
+- 自动化平今验证：买入后仅传 `offset=CLOSE`，网关根据今仓自动发
+  `CLOSETODAY`，SimNow 成交且持仓归零；
+- 订单映射文件实测生成于 `/tmp/tqsdk_ctp_simnow/ctp_orders_259377.json`，
+  文件内含当日 rid/OrderRef/订单 JSON；网关重启会加载同一交易日映射；
+- 实盘就绪观测：node 启动后、行情未到时 `/readyz` 返回 503；订阅并收到
+  `SHFE.rb2701` tick 后返回 200，`/metrics` 显示 md_frames/td_frames/td_gaps；
 - 过期合约 `SHFE.rb2601` 返回“CTP:找不到合约”，验证了合约名校验/错误映射；
 - CTP 返回的 GBK 中文 `StatusMsg/ErrorMsg` 已转为 UTF-8，JSON 不再因
   `invalid UTF-8 byte` 中断；

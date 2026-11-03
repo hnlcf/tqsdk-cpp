@@ -116,7 +116,7 @@
 - Channel 家族：basic/bounded/multiplex/close 全覆盖测试。
 - UDS IPC 通道：帧编解码、大 payload(1MB)、对端关闭、非法帧、幂等 close、双向并发。
 - 日志分级与文件轮转；测试 `main()` 统一初始化。
-- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 227 项（CTP 构建 233 项）
+- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 229 项（CTP 构建 242 项）
   （其中 2 个联网行情测试默认跳过），TSan 并发用例全绿。
 
 ### 2.5 测试规模快照（阶段 3 历史快照；当前总数见上）
@@ -509,10 +509,10 @@ include/tqsdk/
     uds_channel.h         UDS 实现
   util/                   log / serde / async_mutex / spawn_logged / runtime
 src/                      对应实现
-tests/                    ~227 用例（CTP 构建 233）
+tests/                    ~229 用例（CTP 构建 242）
 examples/demo.cpp
 scripts/probe_*.py        协议探测
-third_party/ctp/          CTP SDK（有头与 so，网关未实现）
+third_party/ctp/          CTP SDK（有头与 so，网关已接入）
 ```
 
 ### 10.2 已定死的关键决策（沿用）
@@ -524,32 +524,32 @@ third_party/ctp/          CTP SDK（有头与 so，网关未实现）
 - 模拟器与真实网关同构（都通过 diff 推状态）。
 - IPC 帧 `[len u32 BE][type u8][encoding u8][payload]`，len=2+payload。
 
-### 10.3 新增/需创建的模块（拆分相关）
+### 10.3 已落地模块（拆分相关）
 
 ```text
 include/tqsdk/ipc/
-  ipc_session.h           会话（握手/心跳/seq/路由）          [待建]
-  protocol.h              各 FrameType 的 msgpack body         [待建]
-  remote_md_gateway.h     远程行情代理（实现 MarketDataGateway） [待建]
-  remote_td_gateway.h     远程交易代理（实现 TradingGateway）    [待建]
+  ipc_session.h           会话（握手/心跳/seq/路由）          [已落地]
+  protocol.h              各 FrameType 的 msgpack body         [已落地]
+  remote_md_gateway.h     远程行情代理（实现 MarketDataGateway） [已落地]
+  remote_td_gateway.h     远程交易代理（实现 TradingGateway）    [已落地]
 
 include/tqsdk/core/       node 进程内的 core 数据层
-  core_engine.h           核心（远程网关->合并->对外差分流）    [待建]
-  order_router.h          命令路由（serve->core->gw）           [待建]
+  core_engine.h           核心（远程网关->合并->对外差分流）    [已落地]
+  order_router.h          命令路由（serve->core->gw）           [已落地]
 
 include/tqsdk/serve/      node 进程内的 serve 服务层
-  api_server.h            HTTP/WS 服务（基于 core 差分流）       [待建]
-  subscription_mgr.h      下游订阅引用计数 -> core 订阅          [待建]
+  api_server.h            HTTP/WS 服务（基于 core 差分流）       [已落地]
+  subscription_mgr.h      下游订阅引用计数 -> core 订阅          [已落地]
 
 include/tqsdk/ctp/
-  ctp_task_queue.h        SPI 回调 -> Asio 桥接                [待建]
-  ctp_spi_impl.h          CThostFtdc Trader/Md Spi 实现        [待建]
-  ctp_td_gateway.h        CTP 交易网关                         [待建]
-  ctp_md_gateway.h        CTP 行情网关                         [待建]
+  ctp_task_queue.h        SPI 回调 -> Asio 桥接                [已落地]
+  ctp_spi_impl.h          CThostFtdc Trader/Md Spi 实现        [已落地]
+  ctp_td_gateway.h        CTP 交易网关                         [已落地]
+  ctp_md_gateway.h        CTP 行情网关                         [已落地]
 
 apps/
-  gw_main.cpp             tqsdk-gw 入口                        [待建]
-  node_main.cpp           tqsdk-node 入口（内含 core + serve）  [待建]
+  gw_main.cpp             tqsdk-gw 入口                        [已落地]
+  node_main.cpp           tqsdk-node 入口（内含 core + serve）  [已落地]
 ```
 
 ### 10.4 一句话优先级
@@ -557,3 +557,16 @@ apps/
 2. **并行推进 CTP 接入**（阶段 4）——补齐上层真实交易能力。
 3. **再落两进程（gw + node）+ node 内服务层**（阶段 6/7）。
 4. **最后做并发/容错/性能深化**（阶段 8/9）。
+
+
+## 11. 下一阶段路线（2026-11 起）
+
+1. **CTP 上线前硬化**：查询 watchdog/迟到回调隔离、订单幂等落盘、平今平昨自动选择、
+   交易日切换、`/readyz` 与指标；对应实现已进入 `CtpTdGateway`/`HttpServer`。
+2. **高可用**：单活 gateway + supervisor，冷备切换、lease、CTP 会话唯一写入者；
+   见 `docs/HA.md`。
+3. **长稳/性能**：继续跑 24h soak，建立 CTP 专项 tick/order/query 基线；
+   见 `docs/SOAK_PERF.md`。
+4. **Web 客户端**：React + Lightweight Charts 的只读行情 -> 交易面板 -> Tauri 桌面壳；
+   选型/目录/通信见 `docs/WEB_FRONTEND.md`。
+5. **后续架构**：Channel 多消费者、序列化下沉到 thread_pool、gateway 指标回传。

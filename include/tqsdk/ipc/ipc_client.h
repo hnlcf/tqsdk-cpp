@@ -99,6 +99,7 @@ public:
     const StreamTracker& md_tracker() const noexcept { return md_tracker_; }
     const StreamTracker& td_tracker() const noexcept { return td_tracker_; }
     Metrics              metrics() const noexcept { return metrics_; }
+    nlohmann::json       metrics_json() const;
 
     /// 发送一条命令并等待对端 CommandAck（按 rid 关联，带超时）。
     /// max_attempts > 1 时，超时后用**同一 rid** 重发；gw 端有命令幂等缓存，
