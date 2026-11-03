@@ -379,6 +379,16 @@ NodeConfig build_node_from_toml(const toml::table& root) {
                 }
             }
         }
+        if (auto* ws_tv = s.get("ws"); ws_tv && ws_tv->is_table()) {
+            const auto& w             = *ws_tv->as_table();
+            cfg.ws.path               = get_str(w, "path", cfg.ws.path);
+            cfg.ws.heartbeat_interval = std::chrono::milliseconds(
+                get_int(w, "heartbeat_interval_ms", cfg.ws.heartbeat_interval.count()));
+            cfg.ws.max_clients = static_cast<std::size_t>(
+                std::max<int64_t>(1, get_int(w, "max_clients", cfg.ws.max_clients)));
+            cfg.ws.max_queue = static_cast<std::size_t>(
+                std::max<int64_t>(1, get_int(w, "max_queue", cfg.ws.max_queue)));
+        }
     }
     return cfg;
 }

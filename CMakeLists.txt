@@ -38,6 +38,8 @@ add_library(tqsdk_core
     src/ipc/remote_td_gateway.cpp
     src/ipc/gateway_server.cpp
     src/serve/http_server.cpp
+    src/serve/ws_stream.cpp
+    src/serve/json_convert.cpp
     src/config/tqapi_factory.cpp
     src/data/diff_merge_engine.cpp
     src/gateway/sim/sim_td_gateway.cpp
@@ -179,6 +181,7 @@ if(TQSDK_BUILD_TESTS)
         tests/e2e/mock_e2e_edges_test.cpp
         tests/e2e/sim_td_e2e_test.cpp
         tests/gateway/tq_md_protocol_test.cpp
+        tests/serve/ws_stream_test.cpp
         tests/e2e/tq_md_network_test.cpp
     )
     target_include_directories(tqsdk_tests PRIVATE

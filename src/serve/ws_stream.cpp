@@ -1,0 +1,651 @@
+#include "tqsdk/serve/ws_stream.h"
+
+#include "tqsdk/serve/json_convert.h"
+#include "tqsdk/util/spawn_logged.h"
+
+#include <boost/asio/experimental/awaitable_operators.hpp>
+
+#include <variant>
+
+namespace tqsdk {
+namespace serve {
+
+namespace {
+
+using json = nlohmann::json;
+using namespace boost::asio::experimental::awaitable_operators;
+
+std::vector<std::string> parse_symbols(const json& j) {
+    std::vector<std::string> out;
+    if (auto it = j.find("symbols"); it != j.end() && it->is_array()) {
+        for (const auto& v : *it) {
+            if (v.is_string()) {
+                out.push_back(v.get<std::string>());
+            }
+        }
+    }
+    return out;
+}
+
+std::vector<KlineSubscription> parse_klines(const json& j) {
+    std::vector<KlineSubscription> out;
+    if (auto it = j.find("klines"); it != j.end() && it->is_array()) {
+        for (const auto& v : *it) {
+            if (!v.is_object()) {
+                continue;
+            }
+            KlineSubscription k;
+            k.symbol      = v.value("symbol", std::string{});
+            k.duration_ns = v.value("duration_ns", int64_t{0});
+            k.view_width  = v.value("view_width", 200);
+            if (!k.symbol.empty() && k.duration_ns > 0) {
+                if (k.view_width <= 0) {
+                    k.view_width = 200;
+                }
+                out.push_back(std::move(k));
+            }
+        }
+    }
+    return out;
+}
+
+std::vector<std::string> parse_topics(const json& j) {
+    std::vector<std::string> out;
+    if (auto it = j.find("topics"); it != j.end() && it->is_array()) {
+        for (const auto& v : *it) {
+            if (v.is_string()) {
+                out.push_back(v.get<std::string>());
+            }
+        }
+    }
+    return out;
+}
+
+json kline_request_json(const std::vector<KlineSubscription>& klines) {
+    json out = json::array();
+    for (const auto& k : klines) {
+        out.push_back(json{
+            {"symbol", k.symbol}, {"duration_ns", k.duration_ns}, {"view_width", k.view_width}});
+    }
+    return out;
+}
+
+} // namespace
+
+// ============================================================================
+// 单连接
+// ============================================================================
+struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client> {
+    using ws_t = beast::websocket::stream<beast::tcp_stream>;
+
+    Client(uint64_t                    id,
+           ws_t                        ws,
+           std::weak_ptr<WebSocketHub> hub,
+           asio::any_io_executor       ex,
+           WsOptions                   options)
+        : id_(id),
+          ws_(std::move(ws)),
+          hub_(std::move(hub)),
+          ex_(std::move(ex)),
+          wakeup_(ex_),
+          options_(std::move(options)) {}
+
+    void start() {
+        auto self = shared_from_this();
+        co_spawn_logged(
+            ex_, [self]() -> asio::awaitable<void> { co_await self->writer_loop(); }, "Ws.writer");
+        co_spawn_logged(
+            ex_, [self]() -> asio::awaitable<void> { co_await self->reader_loop(); }, "Ws.reader");
+    }
+
+    // 只允许在 io_context 线程调用。队列满时丢最旧消息，形成"行情可丢"的背压。
+    void enqueue(std::string msg) {
+        if (closed_.load(std::memory_order_relaxed)) {
+            return;
+        }
+        if (queue_.size() >= options_.max_queue) {
+            queue_.pop_front();
+            if (++dropped_ == 1 || dropped_ % 100 == 0) {
+                SPDLOG_WARN("[WsHub] client {} slow consumer, dropped={} messages", id_, dropped_);
+            }
+        }
+        queue_.push_back(std::move(msg));
+        wakeup_.cancel();
+    }
+
+    void shutdown() noexcept {
+        if (closed_.exchange(true, std::memory_order_acq_rel)) {
+            return;
+        }
+        wakeup_.cancel();
+        // basic_stream::close() 取消所有挂起读写，read/write 协程会以 operation_aborted 退出。
+        ws_.next_layer().close();
+    }
+
+    bool closed() const noexcept { return closed_.load(std::memory_order_acquire); }
+
+    uint64_t id() const noexcept { return id_; }
+
+    asio::awaitable<void> reader_loop() {
+        auto               self = shared_from_this();
+        beast::flat_buffer buffer;
+        while (!closed()) {
+            boost::system::error_code ec;
+            co_await ws_.async_read(buffer, asio::redirect_error(asio::use_awaitable, ec));
+            if (ec) {
+                break;
+            }
+            std::string msg = beast::buffers_to_string(buffer.data());
+            buffer.consume(buffer.size());
+            try {
+                co_await handle_message(std::move(msg));
+            } catch (const std::exception& e) {
+                enqueue(json{{"type", "error"}, {"error", e.what()}}.dump());
+            }
+        }
+        shutdown();
+        if (auto hub = hub_.lock()) {
+            co_await hub->remove_client(id_);
+        }
+    }
+
+    asio::awaitable<void> writer_loop() {
+        auto                      self = shared_from_this();
+        boost::system::error_code ec;
+        while (!closed()) {
+            if (!queue_.empty()) {
+                std::string msg = std::move(queue_.front());
+                queue_.pop_front();
+                ec.clear();
+                co_await ws_.async_write(asio::buffer(msg),
+                                         asio::redirect_error(asio::use_awaitable, ec));
+                if (ec) {
+                    break;
+                }
+                continue;
+            }
+
+            // 空闲：等待新消息或心跳到期。enqueue() 会 cancel 该 timer 唤醒 writer。
+            wakeup_.expires_after(options_.heartbeat_interval);
+            ec.clear();
+            co_await wakeup_.async_wait(asio::redirect_error(asio::use_awaitable, ec));
+            if (closed()) {
+                break;
+            }
+            if (ec == asio::error::operation_aborted) {
+                continue; // 有新消息
+            }
+            if (ec) {
+                break;
+            }
+
+            // 纯心跳 ping；对端 pong 由 reader 的 async_read 自动处理。
+            ec.clear();
+            co_await ws_.async_ping(beast::websocket::ping_data{},
+                                    asio::redirect_error(asio::use_awaitable, ec));
+            if (ec) {
+                break;
+            }
+        }
+        shutdown();
+    }
+
+    asio::awaitable<void> handle_message(std::string msg) {
+        json j = json::parse(msg, nullptr, false);
+        if (j.is_discarded() || !j.is_object()) {
+            enqueue(json{{"type", "error"}, {"error", "invalid json"}}.dump());
+            co_return;
+        }
+
+        const std::string op = j.value("op", std::string{});
+        if (op == "ping") {
+            enqueue(json{{"type", "pong"}}.dump());
+            co_return;
+        }
+        if (op == "subscribe" || op == "unsubscribe") {
+            auto hub = hub_.lock();
+            if (!hub) {
+                enqueue(json{{"type", "error"}, {"error", "server shutting down"}}.dump());
+                co_return;
+            }
+            if (op == "subscribe") {
+                co_await hub->add_subscriptions(
+                    shared_from_this(), parse_symbols(j), parse_klines(j), parse_topics(j));
+            } else {
+                co_await hub->remove_subscriptions(
+                    shared_from_this(), parse_symbols(j), parse_klines(j));
+            }
+            co_return;
+        }
+        enqueue(json{{"type", "error"}, {"error", "unknown op: " + op}}.dump());
+    }
+
+    // ---- 订阅状态（由 hub 在单一 io 线程内读写）----
+    std::set<std::string>                          symbols;
+    std::map<std::pair<std::string, int64_t>, int> klines; // key -> view_width
+    std::set<std::string>                          topics;
+    bool                                           topics_initialized = false;
+
+    uint64_t                    id_;
+    ws_t                        ws_;
+    std::weak_ptr<WebSocketHub> hub_;
+    asio::any_io_executor       ex_;
+    asio::steady_timer          wakeup_;
+    WsOptions                   options_;
+    std::deque<std::string>     queue_;
+    std::atomic<bool>           closed_{false};
+    uint64_t                    dropped_ = 0;
+};
+
+// ============================================================================
+// Hub
+// ============================================================================
+WebSocketHub::WebSocketHub(TqApi* api, asio::any_io_executor ex, WsOptions options)
+    : api_(api),
+      ex_(std::move(ex)),
+      stop_timer_(ex_),
+      options_(std::move(options)) {
+    if (options_.heartbeat_interval.count() <= 0) {
+        options_.heartbeat_interval = std::chrono::seconds(30);
+    }
+    if (options_.max_clients == 0) {
+        options_.max_clients = 1;
+    }
+    if (options_.max_queue == 0) {
+        options_.max_queue = 1;
+    }
+}
+
+WebSocketHub::~WebSocketHub() {
+    stop();
+}
+
+void WebSocketHub::start() {
+    if (started_ || stopped_.load()) {
+        return;
+    }
+    started_  = true;
+    auto self = shared_from_this();
+    co_spawn_logged(
+        ex_, [self]() -> asio::awaitable<void> { co_await self->push_loop(); }, "WsHub.push");
+}
+
+void WebSocketHub::stop() noexcept {
+    if (stopped_.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
+    stop_timer_.cancel();
+    for (auto& [id, client] : clients_) {
+        (void)id;
+        if (client) {
+            client->shutdown();
+        }
+    }
+}
+
+asio::awaitable<void> WebSocketHub::accept(asio::ip::tcp::socket            socket,
+                                           http::request<http::string_body> req) {
+    using ws_t = Client::ws_t;
+
+    ws_t ws(std::move(socket));
+    ws.read_message_max(1u << 20); // 客户端命令上限 1MB，防止恶意大包
+    boost::system::error_code ec;
+    co_await ws.async_accept(req, asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
+        throw boost::system::system_error(ec, "WebSocketHub: handshake failed");
+    }
+
+    if (stopped_.load() || full()) {
+        co_await ws.async_close(
+            beast::websocket::close_reason(beast::websocket::close_code::try_again_later),
+            asio::redirect_error(asio::use_awaitable, ec));
+        co_return;
+    }
+
+    const uint64_t id = next_client_id_++;
+    auto client = std::make_shared<Client>(id, std::move(ws), shared_from_this(), ex_, options_);
+    clients_.emplace(id, client);
+
+    client->enqueue(json{{"type", "welcome"},
+                         {"protocol", 1},
+                         {"heartbeat_interval_ms", options_.heartbeat_interval.count()}}
+                        .dump());
+    client->start();
+    SPDLOG_INFO("[WsHub] client {} connected (total={})", id, clients_.size());
+    co_return;
+}
+
+asio::awaitable<void> WebSocketHub::wait_stop() {
+    stop_timer_.expires_at(std::chrono::steady_clock::time_point::max());
+    boost::system::error_code ec;
+    co_await stop_timer_.async_wait(asio::redirect_error(asio::use_awaitable, ec));
+    co_return;
+}
+
+asio::awaitable<void> WebSocketHub::push_loop() {
+    while (!stopped_.load()) {
+        // race：数据更新 vs stop()。停止信号获胜时取消 wait_update，后者内部
+        // 已处理 operation_aborted，不会留下悬垂 waiter。
+        std::variant<bool, std::monostate> raced;
+        try {
+            raced = co_await (api_->wait_update() || wait_stop());
+        } catch (const boost::system::system_error& e) {
+            if (e.code() == asio::error::operation_aborted) {
+                break;
+            }
+            throw;
+        }
+        if (std::holds_alternative<std::monostate>(raced)) {
+            break; // stop()
+        }
+        if (!std::get<0>(raced) || stopped_.load()) {
+            break;
+        }
+        json diff = build_diff();
+        if (!diff.empty()) {
+            broadcast(diff);
+        }
+    }
+    SPDLOG_DEBUG("[WsHub] push loop exited");
+    co_return;
+}
+
+asio::awaitable<void> WebSocketHub::add_subscriptions(std::shared_ptr<Client>        client,
+                                                      std::vector<std::string>       symbols,
+                                                      std::vector<KlineSubscription> klines,
+                                                      std::vector<std::string>       topics) {
+    if (!client || client->closed()) {
+        co_return;
+    }
+
+    // topics：首次订阅未显式给出时默认全开；显式给出则整体替换。
+    if (!topics.empty()) {
+        client->topics             = std::set<std::string>(topics.begin(), topics.end());
+        client->topics_initialized = true;
+    } else if (!client->topics_initialized) {
+        client->topics             = {"account", "orders", "trades", "positions"};
+        client->topics_initialized = true;
+    }
+
+    std::vector<std::string>       new_symbols;
+    std::vector<KlineSubscription> new_klines;
+
+    for (const auto& sym : symbols) {
+        if (!client->symbols.insert(sym).second) {
+            continue;
+        }
+        auto& refs = quote_refs_[sym];
+        if (refs++ == 0) {
+            new_symbols.push_back(sym);
+        }
+    }
+
+    for (const auto& k : klines) {
+        const auto key = std::make_pair(k.symbol, k.duration_ns);
+        if (!client->klines.emplace(key, k.view_width).second) {
+            continue;
+        }
+        auto& ref = kline_refs_[key];
+        if (ref.refs++ == 0) {
+            ref.view_width = k.view_width;
+            new_klines.push_back(k);
+        } else if (k.view_width > ref.view_width) {
+            // 已有订阅时首个宽度说了算：改本地容量不重发 subscribe_kline，
+            // 否则会破坏网关侧 chart 引用计数。
+            ref.view_width = k.view_width;
+            if (auto* s = api_->get_kline(k.symbol, k.duration_ns)) {
+                if (static_cast<int>(s->capacity) < k.view_width) {
+                    s->capacity = static_cast<uint64_t>(k.view_width);
+                }
+            }
+        }
+    }
+
+    // 先触达上游（TqApi 会创建本地占位实体），再回执 + 快照；
+    // 这样客户端拿到 snapshot 时订阅实体一定存在。
+    if (!new_symbols.empty()) {
+        co_await api_->subscribe_quotes(std::move(new_symbols));
+    }
+    for (const auto& k : new_klines) {
+        co_await api_->subscribe_kline(k.symbol, k.duration_ns, k.view_width);
+    }
+
+    client->enqueue(
+        json{{"type", "subscribed"},
+             {"symbols", symbols},
+             {"klines", kline_request_json(klines)},
+             {"topics", std::vector<std::string>(client->topics.begin(), client->topics.end())}}
+            .dump());
+    client->enqueue(json{{"type", "snapshot"}, {"data", snapshot_for(*client)}}.dump());
+    co_return;
+}
+
+asio::awaitable<void> WebSocketHub::remove_subscriptions(std::shared_ptr<Client>        client,
+                                                         std::vector<std::string>       symbols,
+                                                         std::vector<KlineSubscription> klines) {
+    if (!client) {
+        co_return;
+    }
+
+    std::vector<std::string>                     release_symbols;
+    std::vector<std::pair<std::string, int64_t>> release_klines;
+
+    for (const auto& sym : symbols) {
+        if (client->symbols.erase(sym) == 0) {
+            continue;
+        }
+        auto it = quote_refs_.find(sym);
+        if (it != quote_refs_.end() && --it->second <= 0) {
+            quote_refs_.erase(it);
+            release_symbols.push_back(sym);
+        }
+    }
+    for (const auto& k : klines) {
+        const auto key = std::make_pair(k.symbol, k.duration_ns);
+        if (client->klines.erase(key) == 0) {
+            continue;
+        }
+        auto it = kline_refs_.find(key);
+        if (it != kline_refs_.end() && --it->second.refs <= 0) {
+            kline_refs_.erase(it);
+            release_klines.emplace_back(k.symbol, k.duration_ns);
+        }
+    }
+
+    client->enqueue(
+        json{{"type", "unsubscribed"}, {"symbols", symbols}, {"klines", kline_request_json(klines)}}
+            .dump());
+
+    if (!release_symbols.empty() || !release_klines.empty()) {
+        co_await api_->release(std::move(release_symbols), std::move(release_klines));
+    }
+    co_return;
+}
+
+asio::awaitable<void> WebSocketHub::remove_client(uint64_t id) {
+    auto it = clients_.find(id);
+    if (it == clients_.end()) {
+        co_return;
+    }
+    auto client = std::move(it->second);
+    clients_.erase(it);
+
+    std::vector<std::string>                     release_symbols;
+    std::vector<std::pair<std::string, int64_t>> release_klines;
+
+    for (const auto& sym : client->symbols) {
+        auto rit = quote_refs_.find(sym);
+        if (rit != quote_refs_.end() && --rit->second <= 0) {
+            quote_refs_.erase(rit);
+            release_symbols.push_back(sym);
+        }
+    }
+    for (const auto& [key, width] : client->klines) {
+        (void)width;
+        auto rit = kline_refs_.find(key);
+        if (rit != kline_refs_.end() && --rit->second.refs <= 0) {
+            kline_refs_.erase(rit);
+            release_klines.push_back(key);
+        }
+    }
+
+    SPDLOG_INFO("[WsHub] client {} disconnected (total={})", id, clients_.size());
+    if (!release_symbols.empty() || !release_klines.empty()) {
+        co_await api_->release(std::move(release_symbols), std::move(release_klines));
+    }
+    co_return;
+}
+
+nlohmann::json WebSocketHub::snapshot_for(const Client& client) const {
+    json data = json::object();
+
+    for (const auto& sym : client.symbols) {
+        if (const Quote* q = api_->data().quotes.find(sym)) {
+            data["quotes"][sym] = quote_to_json(*q);
+        }
+    }
+    for (const auto& [key, width] : client.klines) {
+        (void)width;
+        if (const KlineStream* s = api_->data().klines.find(key.first, key.second)) {
+            json one = kline_ws_json(*s, true);
+            for (auto& [sym, durs] : one["klines"].items()) {
+                for (auto& [dur, node] : durs.items()) {
+                    data["klines"][sym][dur] = std::move(node);
+                }
+            }
+        }
+    }
+
+    // 交易类快照只发给显式订阅了对应 topic 的客户端。
+    if (client.topics.count("account") != 0) {
+        data["account"] = account_to_json(api_->data().account);
+    }
+    if (client.topics.count("orders") != 0) {
+        data["orders"] = json::object();
+        for (const auto& [oid, o] : api_->data().orders) {
+            data["orders"][oid] = order_to_json(o);
+        }
+    }
+    if (client.topics.count("trades") != 0) {
+        data["trades"] = json::object();
+        for (const auto& [tid, t] : api_->data().trades) {
+            data["trades"][tid] = trade_to_json(t);
+        }
+    }
+    if (client.topics.count("positions") != 0) {
+        data["positions"] = json::object();
+        for (const auto& [sym, p] : api_->data().positions) {
+            data["positions"][sym] = position_to_json(p);
+        }
+    }
+    return data;
+}
+
+nlohmann::json WebSocketHub::build_diff() const {
+    json data = json::object();
+
+    for (const auto& [sym, refs] : quote_refs_) {
+        if (refs <= 0) {
+            continue;
+        }
+        if (const Quote* q = api_->data().quotes.find(sym); q && q->changed_fields != 0) {
+            data["quotes"][sym] = quote_diff_to_json(*q);
+        }
+    }
+    for (const auto& [key, ref] : kline_refs_) {
+        if (ref.refs <= 0) {
+            continue;
+        }
+        if (const KlineStream* s = api_->data().klines.find(key.first, key.second);
+            s && s->changed_fields != 0) {
+            json one = kline_ws_json(*s);
+            for (auto& [sym, durs] : one["klines"].items()) {
+                for (auto& [dur, node] : durs.items()) {
+                    data["klines"][sym][dur] = std::move(node);
+                }
+            }
+        }
+    }
+
+    const auto& dm = api_->data();
+    if (dm.account.changed_fields != 0) {
+        data["account"] = account_to_json(dm.account);
+    }
+    for (const auto& [oid, o] : dm.orders) {
+        if (o.changed_fields != 0) {
+            data["orders"][oid] = order_to_json(o);
+        }
+    }
+    for (const auto& [tid, t] : dm.trades) {
+        if (t.changed_fields != 0) {
+            data["trades"][tid] = trade_to_json(t);
+        }
+    }
+    for (const auto& [sym, p] : dm.positions) {
+        if (p.changed_fields != 0) {
+            data["positions"][sym] = position_to_json(p);
+        }
+    }
+    return data;
+}
+
+nlohmann::json WebSocketHub::filter_diff(const Client& client, const nlohmann::json& diff) const {
+    json out = json::object();
+
+    if (auto it = diff.find("quotes"); it != diff.end()) {
+        for (const auto& sym : client.symbols) {
+            if (auto q = it->find(sym); q != it->end()) {
+                out["quotes"][sym] = *q;
+            }
+        }
+    }
+    if (auto it = diff.find("klines"); it != diff.end()) {
+        for (const auto& [key, width] : client.klines) {
+            (void)width;
+            auto sit = it->find(key.first);
+            if (sit == it->end()) {
+                continue;
+            }
+            auto dit = sit->find(std::to_string(key.second));
+            if (dit != sit->end()) {
+                out["klines"][key.first][std::to_string(key.second)] = *dit;
+            }
+        }
+    }
+    for (const char* topic : {"account", "orders", "trades", "positions"}) {
+        if (client.topics.count(topic) != 0) {
+            if (auto it = diff.find(topic); it != diff.end()) {
+                out[topic] = *it;
+            }
+        }
+    }
+    return out;
+}
+
+void WebSocketHub::broadcast(const nlohmann::json& diff) {
+    if (clients_.empty()) {
+        return;
+    }
+    const auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            std::chrono::system_clock::now().time_since_epoch())
+                            .count();
+
+    for (auto& [id, client] : clients_) {
+        (void)id;
+        if (!client || client->closed()) {
+            continue;
+        }
+        json data = filter_diff(*client, diff);
+        if (data.empty()) {
+            continue;
+        }
+        json msg{{"type", "diff"},
+                 {"seq", seq_.fetch_add(1, std::memory_order_relaxed) + 1},
+                 {"timestamp_ns", now_ns},
+                 {"data", std::move(data)}};
+        client->enqueue(msg.dump());
+    }
+}
+
+} // namespace serve
+} // namespace tqsdk

@@ -45,6 +45,30 @@ public:
     asio::awaitable<void> subscribe(const std::vector<std::string>& symbols) override {
         for (const auto& s : symbols) {
             subscribed_.insert(s);
+            ++subscribe_events_;
+        }
+        co_return;
+    }
+
+    asio::awaitable<void>
+    subscribe_kline(const std::string& symbol, int64_t duration_ns, int view_width) override {
+        subscribed_klines_.insert(std::make_pair(symbol, duration_ns));
+        (void)view_width;
+        co_return;
+    }
+
+    asio::awaitable<void>
+    release(const std::vector<std::string>&                     symbols,
+            const std::vector<std::pair<std::string, int64_t>>& klines) override {
+        for (const auto& s : symbols) {
+            subscribed_.erase(s);
+            released_.insert(s);
+            ++release_events_;
+        }
+        for (const auto& k : klines) {
+            subscribed_klines_.erase(k);
+            released_klines_.insert(k);
+            ++release_events_;
         }
         co_return;
     }
@@ -55,10 +79,28 @@ public:
         return subscribed_.count(std::string(sym)) > 0;
     }
 
+    bool is_kline_subscribed(std::string_view sym, int64_t duration_ns) const {
+        return subscribed_klines_.count(std::make_pair(std::string(sym), duration_ns)) > 0;
+    }
+
+    bool was_released(std::string_view sym) const { return released_.count(std::string(sym)) > 0; }
+
+    bool was_kline_released(std::string_view sym, int64_t duration_ns) const {
+        return released_klines_.count(std::make_pair(std::string(sym), duration_ns)) > 0;
+    }
+
+    int subscribe_events() const noexcept { return subscribe_events_; }
+    int release_events() const noexcept { return release_events_; }
+
 private:
-    asio::any_io_executor           ex_;
-    Channel<MarketDataEvent>        ch_;
-    std::unordered_set<std::string> subscribed_;
+    asio::any_io_executor                     ex_;
+    Channel<MarketDataEvent>                  ch_;
+    std::unordered_set<std::string>           subscribed_;
+    std::set<std::pair<std::string, int64_t>> subscribed_klines_;
+    std::unordered_set<std::string>           released_;
+    std::set<std::pair<std::string, int64_t>> released_klines_;
+    int                                       subscribe_events_ = 0;
+    int                                       release_events_   = 0;
 };
 
 } // namespace tqsdk

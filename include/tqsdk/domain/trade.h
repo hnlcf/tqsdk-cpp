@@ -48,10 +48,10 @@ struct Trade {
     double price = kUnknownDouble;
 
     /// 成交时间
-    TimeStamp trade_date_time;
+    TimeStamp trade_date_time = 0;
 
     /// 交易手续费
-    double commission;
+    double commission = kUnknownDouble;
 
     /// 字段更新标志位图
     uint64_t changed_fields = 0;

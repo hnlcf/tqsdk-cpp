@@ -224,6 +224,44 @@ KlineStream* TqApi::get_kline_serial(std::string_view symbol, int64_t duration_n
     return &k;
 }
 
+// ---------- 显式订阅管理（serve 层引用计数聚合）----------
+asio::awaitable<void> TqApi::subscribe_quotes(std::vector<std::string> symbols) {
+    // 先建占位，保证订阅结果/首帧 diff 有实体可落；已有实体不动。
+    for (const auto& sym : symbols) {
+        auto& q = data_.quotes.get_or_create(sym);
+        if (q.instrument_id.empty()) {
+            q.instrument_id = sym;
+        }
+    }
+    if (md_ && !symbols.empty()) {
+        co_await md_->subscribe(symbols);
+    }
+    co_return;
+}
+
+asio::awaitable<void>
+TqApi::subscribe_kline(std::string symbol, int64_t duration_ns, int view_width) {
+    if (view_width <= 0) {
+        view_width = 200;
+    }
+    auto& k = data_.klines.get_or_create(symbol, duration_ns, view_width);
+    if (static_cast<int>(k.capacity) < view_width) {
+        k.capacity = static_cast<uint64_t>(view_width);
+    }
+    if (md_) {
+        co_await md_->subscribe_kline(symbol, duration_ns, view_width);
+    }
+    co_return;
+}
+
+asio::awaitable<void> TqApi::release(std::vector<std::string>                     symbols,
+                                     std::vector<std::pair<std::string, int64_t>> klines) {
+    if (md_ && (!symbols.empty() || !klines.empty())) {
+        co_await md_->release(symbols, klines);
+    }
+    co_return;
+}
+
 bool TqApi::is_changing(const Quote& q, uint64_t field_bits) const noexcept {
     return (q.changed_fields & field_bits) != 0;
 }

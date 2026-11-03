@@ -116,13 +116,17 @@ inline void from_json(const json& j, KlineSub& m) {
 struct SubscribeBody {
     std::vector<InstrumentId> symbols; ///< 盘口订阅
     std::vector<KlineSub>     klines;  ///< K 线订阅
+    /// false=订阅（默认，兼容旧帧）；true=退订 symbols/klines。
+    /// 退订用于 WebSocket 下游引用计数归零时向远端网关释放订阅。
+    bool release = false;
 };
 inline void to_json(json& j, const SubscribeBody& m) {
-    j = json{{"symbols", m.symbols}, {"klines", m.klines}};
+    j = json{{"symbols", m.symbols}, {"klines", m.klines}, {"release", m.release}};
 }
 inline void from_json(const json& j, SubscribeBody& m) {
     m.symbols = j.value("symbols", std::vector<InstrumentId>{});
     m.klines  = j.value("klines", std::vector<KlineSub>{});
+    m.release = j.value("release", false);
 }
 
 struct SubscribeAckBody {

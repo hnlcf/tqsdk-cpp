@@ -18,7 +18,9 @@
   统一配置与 `make_tqapi`。多 node 共享 gw 网关 + 引用计数退订 + peek 闸门（见 MODULES §3.5）。
 - ✅ **阶段 7 基础 REST**：`serve/router`（类型化路由）、`serve/http_server`（quote/kline/account/orders/trades/
   positions/下单/撤单）。
-- ⬜ 未完成：CTP（阶段4）、seq/gap 检测与断线补发（4.6）、共享内存快通道、多线程/strand、WS 推送、soak。
+- ✅ **阶段 7 WebSocket 推送**：`serve/ws_stream`（`/stream` 升级、welcome/subscribe/snapshot/diff/ping、
+  每连接单写者 + 有界队列、订阅引用计数）、`serve/json_convert`（REST/WS 共用字段映射）。
+- ⬜ 未完成：CTP（阶段4）、seq/gap 检测与断线补发（4.6）、共享内存快通道、多线程/strand、soak。
 
 > 下方 4~10 章保留为**设计意图与原始规划**，与已实现代码若有出入，以 `docs/MODULES.md` 为准。
 
@@ -94,9 +96,10 @@
 - Channel 家族：basic/bounded/multiplex/close 全覆盖测试。
 - UDS IPC 通道：帧编解码、大 payload(1MB)、对端关闭、非法帧、幂等 close、双向并发。
 - 日志分级与文件轮转；测试 `main()` 统一初始化。
-- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；128 测试通过（含 2 个联网）。
+- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 198 项
+  （其中 2 个联网行情测试默认跳过）。
 
-### 2.5 测试规模快照
+### 2.5 测试规模快照（阶段 3 历史快照；当前总数见上）
 
 | 文件 | 用例数 | 重点 |
 |---|---:|---|
@@ -336,9 +339,10 @@
 **工作项**：
 - [ ] 选型 HTTP 框架（建议 Boost.Beast 自带 HTTP/WS，避免新依赖；或 Drogon/Crow 视需求）。
 - [ ] REST：`GET /quote/{symbol}`、`GET /kline/{symbol}/{dur}`、`GET /account`、`POST /order`、`DELETE /order/{id}`。
-- [ ] WS：`/stream` 推送 diff + 心跳；前端订阅任意标的。
+- [x] WS：`/stream` 推送 diff + 心跳；前端订阅任意标的（`serve/ws_stream`）。
 - [ ] 鉴权（token）、限流、CORS（图表场景）。
-- [ ] 订阅管理：serve 层维护"下游订阅"引用计数，聚合后向 core 发起/退订。
+- [x] 订阅管理：serve 层维护"下游订阅"引用计数，聚合后向 core 发起/退订
+  （`WebSocketHub::quote_refs_` / `kline_refs_`）。
 - [ ] serve 层直接读 core 内存截面（进程内），不引入额外 IPC。
 
 **验收**：curl / wscat 能拿到行情、下单；一个最小网页图表 demo 能实时刷新。
@@ -387,7 +391,7 @@ config/
 | core.data | snapshot_on_subscribe(bool) / kline_default_width / max_symbols / seq_check | 截面策略 | true |
 | core.router | order_seq_prefix / command_timeout_ms / retry | 命令路由 | rid_ |
 | serve.http | bind / port / auth_token / rate_limit_qps / cors_origin | HTTP 服务 | 127.0.0.1:8080 |
-| serve.ws | path / heartbeat_sec / max_clients | WebSocket | /stream |
+| serve.ws | path / heartbeat_interval_ms / max_clients / max_queue | WebSocket | /stream, 30s, 256, 1024 |
 
 ### 7.3 配置实现建议
 - 引入 TOML 解析（`toml++`，轻量、header-only）或继续 JSON（已有 nlohmann）。**优先 toml++**（可读性好，适合运维）。
@@ -475,7 +479,7 @@ include/tqsdk/
     uds_channel.h         UDS 实现
   util/                   log / serde / async_mutex / spawn_logged
 src/                      对应实现
-tests/                    ~128 用例
+tests/                    ~198 用例
 examples/demo.cpp
 scripts/probe_*.py        协议探测
 third_party/ctp/          CTP SDK（有头与 so，网关未实现）

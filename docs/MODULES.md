@@ -36,6 +36,7 @@
 5. 服务层（node 进程内 serve）
    1. Router（类型化路由）
    2. HttpServer（REST 服务）
+   3. WebSocketHub（实时 diff 推送）
 6. 配置与入口
    1. TqApiConfig / GwConfig / NodeConfig
    2. tqsdk-gw / tqsdk-node 两个进程
@@ -223,16 +224,18 @@
   3. **peek 闸门**：`read_loop` 在**无任何订阅**时不发 `peek_message`，挂在 `peek_wakeup_` 定时器上；
      订阅到来时 `cancel()` 唤醒。无 node -> 不 peek -> 服务器停推 -> 零入队。
 - **计数对称性（易错点）**：
-  - `GatewayIpcServer::handle_subscribe` 计算本连接**真正新增**的去重合约集合
-    （显式 symbols ∪ 各 kline 的 symbol），只对新增部分 `md_->subscribe()`，保证"每连接每 symbol 恰好 +1"。
+  - `GatewayIpcServer::handle_subscribe` 用 `symbol_use_` 做**连接内**计数：
+    显式 symbol +1，kline 依赖再 +1；只有 0->1 才 `md_->subscribe()`。
   - `subscribe_kline` **不再**自行增加 `quote_ref_`（合约行情由上面的统一 subscribe 驱动），
     否则 `release` 永远减不到 0。
-  - `release` 对 `subscribed_symbols_`（含 kline 符号）逐个减；断联时 `GatewayIpcServer::close()`
-    一次性把所有订阅 release 给网关。
+  - `SubscribeBody.release=true` 按同样规则 -1；归零才 `md_->release()`。
+    断联时 `GatewayIpcServer::close()` 一次性释放剩余订阅。
+  - 同一连接重复订阅同一 kline（`sym|dur`）只计一次，避免 chart_ref 虚高。
 - **兜底**：`ch_` 设容量上界 `kOutputCapacity=8192`，`async_send` 满时阻塞形成背压。
 - **关键文件**：`src/gateway/tq/tq_md_gateway.cpp`（subscribe/release/filter_merged/read_loop）、
   `src/ipc/gateway_server.cpp`（handle_subscribe/close）。
-- **测试**：`tests/ipc/gateway_server_test.cpp::DisconnectReleasesSubscriptions`。
+- **测试**：`tests/ipc/gateway_server_test.cpp::DisconnectReleasesSubscriptions`、
+  `ReleaseFrameUpdatesConnectionRefCounts`。
 
 ---
 
@@ -278,6 +281,8 @@
   `encode_body`/`decode_body<Body>`/`decode_as<T>`/`encode_frame<T>` 辅助。
 - **关键约定**：body 间通过 `FrameBody` variant 与 `BodyFor<T>` trait 关联；
   编解码始终经 `codec_for(frame.encoding)`，不硬编码 JSON。
+  `SubscribeBody.release=false` 表示订阅（默认，旧帧兼容），`true` 表示退订
+  symbols/klines；用于把 WebSocket 下游引用计数归零事件转发给远端 gw。
 - **关键文件**：`include/tqsdk/ipc/protocol.h`
 - **测试**：`tests/ipc/protocol_test.cpp`、`protocol_e2e_test.cpp`。
 
@@ -315,12 +320,15 @@
 - **目标**：把**真实网关**桥接成一条 IPC 连接（生产端）。
 - **负责**：`md_pump`/`td_pump` 把网关 output 编码成 MarketDataPush/TradePush/GatewayEvent 上推；
   `control_loop` 消费 Subscribe/Command 驱动真实网关并回 ack；
-  **记录本连接订阅**，`close()` 时向 md 网关 `release`。
+  **记录本连接订阅**（`symbol_use_` 计数 = 显式 symbols + kline 依赖），
+  处理 `SubscribeBody.release=true`，并在 `close()` 时向 md 网关释放剩余订阅。
 - **不负责**：合并（node 侧 TqApi 做）。
 - **关键约定**：
   - 每个后台循环持 `shared_from_this()`，循环退出前本对象不析构。
   - md/td 各用一个停止 timer（`md_stop_timer_`/`td_stop_timer_`），避免互相取消挂起等待。
   - `close()` 幂等：cancel 停止 timer、关 session、`co_spawn` release 订阅（按值捕获快照）。
+  - 同一 symbol 被显式订阅且被 K 线依赖时计数为 2；只退订行情不会提前释放合约行情。
+  - 同连接重复订阅同一 kline 不重复计数（按 `sym|dur` 去重）。
   - td 的 Ack **不上推**（已作为 CommandAck 同步返回）。
 - **关键文件**：`include/tqsdk/ipc/gateway_server.h`、`src/ipc/gateway_server.cpp`
 - **测试**：`tests/ipc/gateway_server_test.cpp`。
@@ -328,7 +336,8 @@
 ### 4.8 RemoteMdGateway / RemoteTdGateway（node 侧代理）
 
 - **目标**：把远端 gw 的网关"代理"成本地 `MarketDataGateway`/`TradingGateway`。
-- **负责**：`subscribe/subscribe_kline` -> 发 Subscribe 帧；`insert_order/cancel_order`
+- **负责**：`subscribe/subscribe_kline` -> 发 Subscribe 帧（`release=false`）；
+  `release` -> 发 Subscribe 帧（`release=true`）；`insert_order/cancel_order`
   -> 经 IpcClient 发 Command 并等待 CommandAck；把远端推送解码成 `MarketDataEvent`/
   `TradeEvent` 推入本地通道。
 - **不负责**：连接管理（由 IpcClient/session）。
@@ -353,16 +362,40 @@
 
 ### 5.2 HttpServer（REST 服务）
 
-- **目标**：node 进程对外的只读 + 下单 REST 接口。
+- **目标**：node 进程对外的只读 + 下单 REST 接口，并在同端口承载 WebSocket 升级。
 - **负责**：accept 循环、单请求会话、路由分发；路由见 `http_server.h` 头注释
   （/healthz、/quote/{symbol}、/kline/{symbol}/{duration_ns}、/account、/orders、/trades、
-  /positions、POST /order、DELETE /order/{id}）。
+  /positions、POST /order、DELETE /order/{id}）。检测到 `Upgrade: websocket` 且路径匹配
+  `[serve.ws].path` 时，把 socket 交给 `WebSocketHub::accept()`；普通 GET /stream 返回 426。
 - **不负责**：IPC（serve 直接读 core 内存截面，同进程同线程）。
 - **关键约定**：
   - **同步读**：构造响应时同步读 DataManager 并立即拷贝成 JSON，不在 co_await 间持有内部引用。
   - 请求体上限 1MB；错误以 4xx/5xx + `{"error":...}` 返回，不抛到顶层。
   - GET /quote 首次访问触发订阅；建议 node 启动按配置预订阅（否则空占位）。
 - **关键文件**：`include/tqsdk/serve/http_server.h`、`src/serve/http_server.cpp`
+- **测试**：`tests/serve/ws_stream_test.cpp`（同时覆盖 HTTP 端口上的真实 WS 往返）
+
+### 5.3 WebSocketHub（实时 diff 推送）
+
+- **目标**：把 core 数据截面的本轮变化按客户端订阅过滤后，通过 `/stream` 增量推送。
+- **负责**：
+  - HTTP Upgrade（Beast）后接管 socket；每连接 reader + writer 两条协程。
+  - **writer 独占写**：JSON 消息与服务端 WebSocket ping 都由 writer 发出；
+    每连接有界待写队列（默认 1024），满时丢最旧消息，慢客户端不拖垮进程。
+  - **单一 `wait_update` 消费者**：`push_loop` 是 serve 层唯一等待 TqApi 更新的协程，
+    `build_diff()` 读取 `changed_fields` 并生成全局 diff，`filter_diff()` 按连接过滤后广播。
+  - **订阅引用计数**：`quote_refs_` / `kline_refs_` 聚合多客户端订阅；0->1 调
+    `TqApi::subscribe_quotes/subscribe_kline`，1->0 调 `TqApi::release`；断连时统一回收。
+  - `welcome` / `subscribed` / `snapshot` / `diff` / `pong` / `error` 消息协议。
+- **不负责**：合并、下单（仍经 HTTP 路由）。
+- **关键约定**：
+  - quote diff 只含变化字段；K 线 `{"reset":bool,"bars":[...]}`，reset=false 时仅最后一根。
+  - 交易类 topic（account/orders/trades/positions）首次订阅未显式给出 `topics` 时默认全开。
+  - 单 io_context 线程，订阅表/队列不加锁。
+  - 后台 `push_loop` 与客户端协程都用 `co_spawn_logged`，异常不静默吞掉。
+- **关键文件**：`include/tqsdk/serve/ws_stream.h`、`src/serve/ws_stream.cpp`、
+  `include/tqsdk/serve/json_convert.h`、`src/serve/json_convert.cpp`
+- **测试**：`tests/serve/ws_stream_test.cpp`（快照/部分 diff/K 线 reset/退订 release/ping/config）。
 
 ---
 
@@ -380,7 +413,8 @@
   - 缺必填项/语法错误 fail-fast 抛 `std::runtime_error`。
 - **关键文件**：`include/tqsdk/config/tqapi_factory.h`、`src/config/tqapi_factory.cpp`、
   `config/gw.toml`、`config/node.toml`
-- **测试**：`tests/config/tqapi_factory_test.cpp`。
+- **测试**：`tests/config/tqapi_factory_test.cpp`、`tests/serve/ws_stream_test.cpp`
+  （`[serve.ws]` 解析）。
 
 ### 6.2 tqsdk-gw / tqsdk-node 两个进程
 
@@ -388,7 +422,7 @@
   （`GatewayIpcServer` 桥接）。支持多 node 同时连接（共享同一 md 网关，见 §3.5）。
   收到 SIGINT/SIGTERM 优雅退出（`md->stop()`/`td->stop()` + 关闭所有连接）。
 - **tqsdk-node（数据服务进程）**：作为 `IpcRole::Node` 连 gw，进程内 `TqApi` 合并成权威截面，
-  再经 `HttpServer` 对外暴露。
+  再经 `HttpServer` 对外暴露 REST，并在同一端口用 `WebSocketHub` 提供 `/stream` 增量推送。
 - **关键文件**：`apps/gw_main.cpp`、`apps/node_main.cpp`
 - **运维脚本**：`scripts/smoke_two_process.sh`（两进程冒烟）、`debug_smoke.sh`、
   `probe_md.py`/`probe_kline.py`（协议探测）。
@@ -458,4 +492,9 @@
 - **seq / gap 检测**：帧 body 尚无单调 seq；断线补发/重放未实现（roadmap 4.6）。
 - **CTP 网关**：未实现（roadmap 阶段4）。
 - **共享内存快通道**：未实现（性能阶段可选项）。
+- **WebSocket 与 wait_update**：`HttpServer` 内的 `WebSocketHub::push_loop` 是 serve 层
+  唯一的 `wait_update()` 消费者；同一进程内不要再启动第二个等待者（会破坏清位语义）。
+- **WebSocket 退订与直连订阅**：hub 只对自己经 `subscribe_quotes` 建立的引用计数负责；
+  若同进程其它代码先用 `get_quote()` 订阅、随后经 WS 退订，网关可能提前失去该订阅。
+  生产环境建议行情订阅统一走 hub（或 node 启动预订阅后不再释放）。
 - **测试**：2 个联网行情测试默认跳过（无网络环境安全）。

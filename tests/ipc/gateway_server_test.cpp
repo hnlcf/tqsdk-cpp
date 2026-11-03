@@ -246,13 +246,15 @@ public:
         released_syms_   = symbols;
         released_klines_ = klines;
         released_        = true;
+        ++release_calls_;
         co_return;
     }
     Channel<MarketDataEvent>& output() override { return ch_; }
 
     std::set<std::string>                        subscribed_syms_;
     std::vector<std::pair<std::string, int64_t>> subscribed_klines_;
-    bool                                         released_ = false;
+    bool                                         released_      = false;
+    int                                          release_calls_ = 0;
     std::vector<std::string>                     released_syms_;
     std::vector<std::pair<std::string, int64_t>> released_klines_;
 
@@ -319,6 +321,84 @@ TEST(GatewayIpcServerTest, DisconnectReleasesSubscriptions) {
         EXPECT_EQ(md.released_klines_[0].first, "SHFE.rb2610");
         EXPECT_EQ(md.released_klines_[0].second, 3'600'000'000'000LL);
     }
+
+    client.stop();
+    test::drive_for(io, std::chrono::milliseconds(50));
+    ::unlink(path.c_str());
+}
+
+// SubscribeBody.release=true：显式退订行情不应误伤 kline 依赖的合约行情，
+// K 线退订后 symbol 使用计数归零才真正 release；重复 kline 订阅不重复计数。
+TEST(GatewayIpcServerTest, ReleaseFrameUpdatesConnectionRefCounts) {
+    const std::string path = make_uds_path("release_frame");
+    asio::io_context  io;
+    auto              pair = make_uds_pair(io, path);
+
+    RecordingMdGateway md(io.get_executor());
+
+    auto gw_sess = std::make_unique<IpcSession>(
+        std::move(pair.srv), io.get_executor(), opt(IpcRole::Gateway, "gw"));
+    auto gw_start =
+        test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await gw_sess->start(); });
+
+    auto node_sess = std::make_unique<IpcSession>(
+        std::move(pair.cli), io.get_executor(), opt(IpcRole::Node, "node"));
+    auto node_start =
+        test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await node_sess->start(); });
+
+    test::wait_all(io, std::chrono::seconds(2), gw_start, node_start);
+    gw_start.get();
+    node_start.get();
+
+    auto gw_server =
+        std::make_shared<GatewayIpcServer>(std::move(gw_sess), &md, nullptr, io.get_executor());
+    gw_server->start();
+
+    IpcClient       client(std::move(node_sess), io.get_executor());
+    RemoteMdGateway rmd(client, io.get_executor());
+    client.start();
+
+    constexpr int64_t kDur = 3'600'000'000'000LL;
+
+    auto sub_task = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
+        co_await rmd.subscribe({"SHFE.rb2610"});
+        co_await rmd.subscribe_kline("SHFE.rb2610", kDur, 200);
+        co_await rmd.subscribe_kline("SHFE.rb2610", kDur, 200); // 重复：应被去重
+    });
+    test::wait_all(io, std::chrono::seconds(2), sub_task);
+    sub_task.rethrow_if_error();
+    test::drive_for(io, std::chrono::milliseconds(50));
+
+    EXPECT_EQ(md.subscribed_syms_.count("SHFE.rb2610"), 1u);
+    EXPECT_EQ(md.subscribed_klines_.size(), 1u);
+    EXPECT_EQ(md.release_calls_, 0);
+
+    // 只退订显式行情：kline 仍依赖该 symbol，不能 release。
+    auto rel_quote = test::spawn_joined(
+        io, [&]() -> asio::awaitable<void> { co_await rmd.release({"SHFE.rb2610"}, {}); });
+    test::wait_all(io, std::chrono::seconds(2), rel_quote);
+    rel_quote.rethrow_if_error();
+    test::drive_for(io, std::chrono::milliseconds(50));
+    EXPECT_EQ(md.release_calls_, 0) << "symbol still used by kline subscription";
+
+    // 退订 kline：依赖计数归零，symbol + kline 一起释放。
+    auto rel_kline = test::spawn_joined(
+        io, [&]() -> asio::awaitable<void> { co_await rmd.release({}, {{"SHFE.rb2610", kDur}}); });
+    test::wait_all(io, std::chrono::seconds(2), rel_kline);
+    rel_kline.rethrow_if_error();
+    test::drive_until(io, [&]() { return md.release_calls_ == 1; }, std::chrono::seconds(1));
+
+    EXPECT_EQ(md.release_calls_, 1);
+    ASSERT_EQ(md.released_syms_.size(), 1u);
+    EXPECT_EQ(md.released_syms_[0], "SHFE.rb2610");
+    ASSERT_EQ(md.released_klines_.size(), 1u);
+    EXPECT_EQ(md.released_klines_[0].first, "SHFE.rb2610");
+    EXPECT_EQ(md.released_klines_[0].second, kDur);
+
+    // 已全部退订，断联不应再次 release。
+    gw_server->close();
+    test::drive_for(io, std::chrono::milliseconds(100));
+    EXPECT_EQ(md.release_calls_, 1);
 
     client.stop();
     test::drive_for(io, std::chrono::milliseconds(50));

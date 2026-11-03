@@ -36,3 +36,11 @@ bind = "127.0.0.1"
 port = 8080
 # 启动即预订阅的合约（便于直接 curl 到数据）
 symbols = []
+
+# 同一端口上的 WebSocket 实时推送（ws://host:port/stream）
+[serve.ws]
+path = "/stream"
+heartbeat_interval_ms = 30000
+max_clients = 256
+# 单连接待发送队列上限；慢消费者丢最旧行情
+max_queue = 1024

@@ -50,6 +50,21 @@ RemoteMdGateway::subscribe_kline(const std::string& symbol, int64_t duration_ns,
     co_await client_.subscribe(body);
 }
 
+asio::awaitable<void>
+RemoteMdGateway::release(const std::vector<std::string>&                     symbols,
+                         const std::vector<std::pair<std::string, int64_t>>& klines) {
+    SubscribeBody body;
+    body.release = true;
+    body.symbols = symbols;
+    body.klines.reserve(klines.size());
+    for (const auto& [symbol, duration_ns] : klines) {
+        body.klines.push_back(KlineSub{symbol, duration_ns, 0});
+    }
+    if (!body.symbols.empty() || !body.klines.empty()) {
+        co_await client_.subscribe(body);
+    }
+}
+
 void RemoteMdGateway::push(MarketDataEvent ev) {
     co_spawn_logged(
         ex_,

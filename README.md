@@ -280,6 +280,49 @@ curl -s -XPOST localhost:8080/order -d '{"instrument_id":"SHFE.rb2610","directio
 - 两个进程均响应 SIGINT/SIGTERM 优雅退出（关闭网关/连接、排空 io、释放订阅）。
 - `scripts/smoke_two_process.sh` 提供一键冒烟。
 
+### WebSocket 实时推送（`/stream`）
+
+node 的 serve 层在同一 HTTP 端口上提供 WebSocket 升级入口，把 core 的
+`changed_fields` 增量按客户端订阅过滤后推送。适合图表前端/策略进程订阅任意标的。
+
+```bash
+# 终端 3：订阅 rb2610 行情 + 60s K 线 + 交易账户
+websocat -t ws://127.0.0.1:8080/stream
+> {"op":"subscribe","symbols":["SHFE.rb2610"],
+   "klines":[{"symbol":"SHFE.rb2610","duration_ns":60000000000,"view_width":200}],
+   "topics":["account","orders","trades","positions"]}
+```
+
+消息（文本帧，UTF-8 JSON）：
+
+| 方向 | 消息 |
+|---|---|
+| 服务端 | `{"type":"welcome","protocol":1,"heartbeat_interval_ms":30000}` |
+| 客户端 | `{"op":"subscribe","symbols":[...],"klines":[...],"topics":[...]}` |
+| 客户端 | `{"op":"unsubscribe","symbols":[...],"klines":[...]}` |
+| 客户端 | `{"op":"ping"}` -> 服务端 `{"type":"pong"}` |
+| 服务端 | `{"type":"subscribed",...}` / `{"type":"unsubscribed",...}` |
+| 服务端 | `{"type":"snapshot","data":{...}}`（订阅成功后的首帧全量） |
+| 服务端 | `{"type":"diff","seq":N,"timestamp_ns":...,"data":{...}}`（增量） |
+
+`diff.data` 形态：
+
+- `quotes`: 只含 `changed_fields` 置位的字段；首次快照为完整实体，未知 double 为 `null`。
+- `klines`: `{"SYM":{"DUR":{"reset":bool,"bars":[...]}}}`；`reset=true` 时 bars 为全量，
+  否则只含最后一根（客户端按 `datetime` 判断替换还是追加）。
+- `account` / `orders` / `trades` / `positions`: 仅在变化时出现，内容为完整实体。
+
+实现约定：
+
+- **单一 wait_update 消费者**：`WebSocketHub` 的后台 `push_loop` 是 serve 层唯一调用
+  `TqApi::wait_update()` 的协程，避免多客户端抢事件；HTTP 路由不等待更新。
+- **引用计数订阅**：多客户端订阅同一 symbol/kline 只向上游订阅一次，
+  最后一个客户端退订/断开时才 `release`（与网关引用计数语义对称）。
+- **每连接单写者 + 有界队列**：writer 协程独占 socket 写（消息与心跳 ping），
+  慢消费者队列满时丢最旧消息；服务端按 `heartbeat_interval_ms` 发 WebSocket ping。
+- 配置见 `config/node.toml` 的 `[serve.ws]`。
+- 单测：`tests/serve/ws_stream_test.cpp`（真实 TCP + WebSocket 往返）。
+
 ### IPC 帧协议（跨语言契约，勿改）
 
 ```text
@@ -291,6 +334,8 @@ length = 2 + payload.size()          # 含 type+encoding
   帧头 `encoding` 字节选择编解码器 —— 消息体不耦合具体线格式。
 - 帧类型：Hello/HelloAck/Heartbeat/HeartbeatAck/Goodbye/Subscribe/SubscribeAck/
   MarketDataPush/TradePush/Command/CommandAck/GatewayEvent。
+- `SubscribeBody.release=false` 为订阅（默认）；`true` 表示退订 symbols/klines
+  （WebSocket 下游引用计数归零时用，网关按连接内计数释放真实订阅）。
 
 ## 模块文档
 
@@ -327,12 +372,14 @@ include/tqsdk/
   serve/
     router.h                类型化路由（axum 风格）
     http_server.h           REST 服务（node serve 层）
+    ws_stream.h             WebSocketHub：/stream 增量推送 + 订阅引用计数
+    json_convert.h          DataManager 实体 -> JSON（REST/WS 共用）
   config/tqapi_factory.h    配置解析 + make_tqapi + 两进程配置
   util/                     spawn_logged / async_mutex / serde / log
 src/                        对应实现
 apps/                       gw_main.cpp / node_main.cpp
 config/                     gw.toml / node.toml
-tests/                      ~190 用例（channel/data/gateway/ipc/serve/e2e/config）
+tests/                      ~198 用例（channel/data/gateway/ipc/serve/e2e/config）
 examples/demo.cpp           实时行情示例
 scripts/                    两进程冒烟 / 协议探测
 ```

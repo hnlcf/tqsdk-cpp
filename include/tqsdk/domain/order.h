@@ -36,7 +36,7 @@ struct Order {
     OrderId order_id;
 
     /// 指令类型
-    OrderType order_type;
+    OrderType order_type = OrderType::TRADE;
 
     /// 交易所代码
     ExchangeId exchange_id;
@@ -57,10 +57,10 @@ struct Order {
     uint64_t volume_left = 0;
 
     /// 指令类型
-    TradeType trade_type;
+    TradeType trade_type = TradeType::STOPLOSS;
 
     /// 指令类型
-    PriceType price_type;
+    PriceType price_type = PriceType::LIMIT;
 
     /// 委托价格, 仅当 price_type = LIMIT 时有效
     double limit_price = kUnknownDouble;
@@ -83,7 +83,7 @@ struct Order {
     std::string last_msg;
 
     /// 下单时间
-    TimeStamp insert_date_time;
+    TimeStamp insert_date_time = 0;
 
     /// 交易所单号
     ExchangeOrderId exchange_order_id;

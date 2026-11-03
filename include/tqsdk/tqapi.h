@@ -70,6 +70,16 @@ public:
     KlineStream*
     get_kline_serial(std::string_view symbol, int64_t duration_ns, int view_width = 200);
 
+    // ---- 显式订阅管理（供 serve 层做多客户端引用计数聚合）----
+    // 与 get_quote/get_kline_serial 的"首次创建才订阅"不同，这些接口每次调用都
+    // 会把订阅意图交给网关；调用方（如 WebSocket hub）负责保证同一 symbol 只在
+    // 全局引用计数 0->1 时调用一次、归零时 release 一次，从而与网关的引用计数对称。
+    // 本地实体不存在时会先创建占位，保证后续 diff 能落库。
+    asio::awaitable<void> subscribe_quotes(std::vector<std::string> symbols);
+    asio::awaitable<void> subscribe_kline(std::string symbol, int64_t duration_ns, int view_width);
+    asio::awaitable<void> release(std::vector<std::string>                     symbols,
+                                  std::vector<std::pair<std::string, int64_t>> klines);
+
     // 判断某实体本轮的某字段是否变化。
     bool is_changing(const Quote& q, uint64_t field_bits) const noexcept;
     bool is_changing(const Order& o, uint64_t field_bits) const noexcept;

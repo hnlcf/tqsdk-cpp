@@ -34,6 +34,9 @@ public:
     asio::awaitable<void> subscribe(const std::vector<std::string>& symbols) override;
     asio::awaitable<void>
     subscribe_kline(const std::string& symbol, int64_t duration_ns, int view_width) override;
+    asio::awaitable<void>
+    release(const std::vector<std::string>&                     symbols,
+            const std::vector<std::pair<std::string, int64_t>>& klines) override;
 
     Channel<MarketDataEvent>& output() override { return ch_; }
 

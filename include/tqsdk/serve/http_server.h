@@ -3,6 +3,7 @@
 #include "tqsdk/pch.h"
 
 #include "tqsdk/serve/router.h"
+#include "tqsdk/serve/ws_stream.h"
 #include "tqsdk/tqapi.h"
 
 #include <boost/beast/core.hpp>
@@ -33,6 +34,7 @@ using tcp       = boost::asio::ip::tcp;
 ///   GET    /positions                     -> {"positions":{symbol: Position,...}}
 ///   POST   /order   (body: InsertOrderReq JSON)  -> {"success","order_id","error"}
 ///   DELETE /order/{id}                    -> {"success","order_id","error"}
+///   GET    /stream (WebSocket upgrade)    -> 实时 diff 推送（见 WebSocketHub）
 ///
 /// 关键约定与易忽视细节：
 ///   - **单 io_context 线程**：处理协程与 TqApi 的 md_loop/td_loop 同线程。
@@ -47,7 +49,8 @@ using tcp       = boost::asio::ip::tcp;
 class HttpServer {
 public:
     /// api 与 executor 均由调用方持有，生命周期需覆盖本对象。
-    HttpServer(TqApi* api, asio::any_io_executor ex);
+    /// ws_options 控制同一端口上的 WebSocket `/stream` 升级路由。
+    HttpServer(TqApi* api, asio::any_io_executor ex, WsOptions ws_options = {});
 
     /// 绑定并监听 addr:port；开始 accept 循环（后台协程）。失败抛 system_error。
     /// 需在 io_context.run() 之前调用。
@@ -73,12 +76,13 @@ private:
     /// 注册全部路由（构造时调用一次）。
     void setup_routes();
 
-    TqApi*                api_;
-    asio::any_io_executor ex_;
-    tcp::acceptor         acceptor_;
-    uint16_t              port_{0};
-    bool                  stopped_{false};
-    Router                router_;
+    TqApi*                        api_;
+    asio::any_io_executor         ex_;
+    tcp::acceptor                 acceptor_;
+    uint16_t                      port_{0};
+    bool                          stopped_{false};
+    Router                        router_;
+    std::shared_ptr<WebSocketHub> ws_;
 
     static constexpr std::size_t kMaxBody = 1u << 20; // 1MB
 };

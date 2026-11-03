@@ -1,0 +1,140 @@
+#pragma once
+
+#include "tqsdk/pch.h"
+
+#include "tqsdk/tqapi.h"
+
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/websocket.hpp>
+
+namespace tqsdk {
+namespace serve {
+
+namespace beast = boost::beast;
+namespace http  = boost::beast::http;
+namespace asio  = boost::asio;
+
+/// WebSocket `/stream` 的可调参数。
+struct WsOptions {
+    /// 升级路由；与 HTTP 共用同一个监听端口。
+    std::string path = "/stream";
+
+    /// 服务端 WebSocket ping 间隔（前端应据此设置 pong 超时）。
+    std::chrono::milliseconds heartbeat_interval{std::chrono::seconds(30)};
+
+    /// 同时在线连接上限；超过后升级请求返回 503。
+    std::size_t max_clients = 256;
+
+    /// 单连接待发送队列上限；慢消费者丢最旧消息（行情可丢，避免拖垮进程）。
+    std::size_t max_queue = 1024;
+};
+
+/// 一条 K 线订阅请求。
+struct KlineSubscription {
+    std::string symbol;
+    int64_t     duration_ns = 0;
+    int         view_width  = 200;
+};
+
+/// WebSocketHub —— node serve 层的实时推送中心。
+///
+/// 设计：
+///   - **单一 wait_update 消费者**：hub 的后台 push_loop 是进程内唯一调用
+///     TqApi::wait_update() 的协程；每次返回后把本轮 changed_fields 翻译成
+///     JSON diff，再按客户端订阅过滤后广播。避免多客户端各自 wait_update 抢事件。
+///   - **引用计数订阅**：多个客户端订阅同一 symbol / kline 时只向上游订阅一次；
+///     最后一个客户端取消/断开时才 release，与网关引用计数语义对称。
+///   - **每连接单写者**：每个连接仅 writer 协程写 socket（消息 + 心跳 ping），
+///     reader 只处理入站命令并投递到该连接的待写队列，避免并发 async_write。
+///   - 单 io_context 线程；队列/订阅表不加锁。
+///
+/// 客户端协议（文本帧，UTF-8 JSON）：
+///   服务端欢迎：  {"type":"welcome","protocol":1,"heartbeat_interval_ms":30000}
+///   订阅：        {"op":"subscribe","symbols":["SHFE.rb2610"],
+///                  "klines":[{"symbol":"SHFE.rb2610","duration_ns":60000000000,
+///                             "view_width":200}],
+///                  "topics":["account","orders","trades","positions"]}
+///   取消订阅：    {"op":"unsubscribe","symbols":[...],"klines":[...]}
+///   应用层探活：  {"op":"ping"}  ->  {"type":"pong"}
+///   订阅回执：    {"type":"subscribed",...} / {"type":"unsubscribed",...}
+///   首帧快照：    {"type":"snapshot","data":{"quotes":{...},"klines":{...},
+///                  "account":{...},"orders":{...},"trades":{...},"positions":{...}}}
+///   增量推送：    {"type":"diff","seq":N,"data":{...}}
+///   错误：        {"type":"error","error":"..."}
+///
+/// diff.data 中：
+///   quotes   完整/部分字段（只含 changed_fields 置位字段）
+///   klines   {"sym":{"dur":{"reset":bool,"bars":[...]}}}；reset=false 时只含最后一根
+///   account/orders/trades/positions 仅在该实体有变化时出现（完整实体）。
+class WebSocketHub : public std::enable_shared_from_this<WebSocketHub> {
+public:
+    WebSocketHub(TqApi* api, asio::any_io_executor ex, WsOptions options = {});
+    ~WebSocketHub();
+
+    WebSocketHub(const WebSocketHub&)            = delete;
+    WebSocketHub& operator=(const WebSocketHub&) = delete;
+
+    /// 启动后台 push_loop（幂等）。须在 io_context.run() 之前调用。
+    void start();
+
+    /// 完成 HTTP -> WebSocket 升级并接管连接。失败抛异常（由 session 记录）。
+    asio::awaitable<void> accept(asio::ip::tcp::socket            socket,
+                                 http::request<http::string_body> req);
+
+    /// 停止接收/关闭所有客户端，并唤醒后台 push_loop 退出（可独立于 TqApi::close 调用）。
+    void stop() noexcept;
+
+    bool             full() const noexcept { return clients_.size() >= options_.max_clients; }
+    std::size_t      client_count() const noexcept { return clients_.size(); }
+    const WsOptions& options() const noexcept { return options_; }
+
+private:
+    struct Client;
+
+    asio::awaitable<void> push_loop();
+    asio::awaitable<void> wait_stop();
+
+    asio::awaitable<void> add_subscriptions(std::shared_ptr<Client>        client,
+                                            std::vector<std::string>       symbols,
+                                            std::vector<KlineSubscription> klines,
+                                            std::vector<std::string>       topics);
+
+    asio::awaitable<void> remove_subscriptions(std::shared_ptr<Client>        client,
+                                               std::vector<std::string>       symbols,
+                                               std::vector<KlineSubscription> klines);
+
+    /// reader 退出时调用：从 clients_ 摘除并把该连接独占的订阅 release 给 TqApi。
+    asio::awaitable<void> remove_client(uint64_t id);
+
+    /// 当前订阅集合的完整快照（用于订阅成功后的首帧）。
+    nlohmann::json snapshot_for(const Client& client) const;
+
+    /// 把 DataManager 本轮 changed_fields 翻译成全局 diff。
+    nlohmann::json build_diff() const;
+
+    /// 按客户端 symbols/klines/topics 过滤全局 diff；无相关内容返回空 object。
+    nlohmann::json filter_diff(const Client& client, const nlohmann::json& diff) const;
+
+    void broadcast(const nlohmann::json& diff);
+
+    TqApi*                                                api_;
+    asio::any_io_executor                                 ex_;
+    asio::steady_timer                                    stop_timer_;
+    WsOptions                                             options_;
+    bool                                                  started_ = false;
+    std::atomic<bool>                                     stopped_{false};
+    uint64_t                                              next_client_id_ = 1;
+    std::atomic<uint64_t>                                 seq_{0};
+    std::unordered_map<uint64_t, std::shared_ptr<Client>> clients_;
+    std::unordered_map<std::string, int>                  quote_refs_;
+    struct KlineRef {
+        int refs       = 0;
+        int view_width = 200;
+    };
+    std::map<std::pair<std::string, int64_t>, KlineRef> kline_refs_;
+};
+
+} // namespace serve
+} // namespace tqsdk

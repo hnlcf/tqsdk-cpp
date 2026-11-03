@@ -73,31 +73,31 @@ struct Quote {
     InstrumentId instrument_id;
 
     /// 合约乘数
-    uint64_t volume_multiple;
+    uint64_t volume_multiple = 0;
 
     /// 合约价格单位
-    double price_tick;
+    double price_tick = kUnknownDouble;
 
     /// 合约价格小数位数
-    uint64_t price_decs;
+    uint64_t price_decs = 0;
 
     /// 市价单最大下单手数
-    uint64_t max_market_order_volume;
+    uint64_t max_market_order_volume = 0;
 
     /// 市价单最小下单手数
-    uint64_t min_market_order_volume;
+    uint64_t min_market_order_volume = 0;
 
     /// 限价单最大下单手数
-    uint64_t max_limit_order_volume;
+    uint64_t max_limit_order_volume = 0;
 
     /// 限价单最小下单手数
-    uint64_t min_limit_order_volume;
+    uint64_t min_limit_order_volume = 0;
 
     /// 每手保证金
-    double margin;
+    double margin = kUnknownDouble;
 
     /// 每手手续费
-    double commission;
+    double commission = kUnknownDouble;
 
     /// 最新价
     double last_price = kUnknownDouble;

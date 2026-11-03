@@ -1,7 +1,7 @@
 #include "tqsdk/serve/http_server.h"
 
-#include "tqsdk/domain/enum_util.h"
 #include "tqsdk/domain/sentinel.h"
+#include "tqsdk/serve/json_convert.h"
 #include "tqsdk/util/spawn_logged.h"
 
 namespace tqsdk {
@@ -11,135 +11,16 @@ namespace {
 
 using json = nlohmann::json;
 
-// NaN 无法被 JSON 序列化（nlohmann 会抛/输出 null 取决于配置）；统一映射为 null，
-// 让"未知值"在 HTTP 层表现为 null 而非崩溃。
-json jnum(double v) {
-    return std::isfinite(v) ? json(v) : json(nullptr);
-}
-
-json enum_str(auto&& e) {
-    // 注意：不能写 json{std::string(...)}——花括号初始化会被当成单元素数组，
-    // 必须用括号构造得到字符串。
-    return json(std::string(magic_enum::enum_name(e)));
-}
-
-json quote_to_json(const Quote& q) {
-    json j;
-    j["instrument_id"]   = q.instrument_id;
-    j["datetime"]        = q.datetime;
-    j["last_price"]      = jnum(q.last_price);
-    j["pre_close"]       = jnum(q.pre_close);
-    j["pre_settlement"]  = jnum(q.pre_settlement);
-    j["open"]            = jnum(q.open);
-    j["highest"]         = jnum(q.highest);
-    j["lowest"]          = jnum(q.lowest);
-    j["volume"]          = q.volume;
-    j["turnover"]        = jnum(q.turnover);
-    j["open_interest"]   = jnum(q.open_interest);
-    j["close"]           = jnum(q.close);
-    j["upper_limit"]     = jnum(q.upper_limit);
-    j["lower_limit"]     = jnum(q.lower_limit);
-    j["volume_multiple"] = q.volume_multiple;
-    j["price_tick"]      = jnum(q.price_tick);
-    j["bid_price1"]      = jnum(q.bid_price1);
-    j["ask_price1"]      = jnum(q.ask_price1);
-    j["bid_volume1"]     = q.bid_volume1;
-    j["ask_volume1"]     = q.ask_volume1;
-    return j;
-}
-
-json kline_to_json(const KlineStream& s) {
-    json j;
-    j["symbol"]      = s.instrumnet_id;
-    j["duration_ns"] = s.duration_ns;
-    j["bars"]        = json::array();
-    for (const auto& b : s.bars) {
-        j["bars"].push_back(json{{"datetime", b.datetime},
-                                 {"open", jnum(b.open)},
-                                 {"high", jnum(b.high)},
-                                 {"low", jnum(b.low)},
-                                 {"close", jnum(b.close)},
-                                 {"volume", b.volume},
-                                 {"open_oi", b.open_oi},
-                                 {"close_oi", b.close_oi}});
-    }
-    return j;
-}
-
-json account_to_json(const Account& a) {
-    json j;
-    j["currency"]        = enum_str(a.currency);
-    j["balance"]         = jnum(a.balance);
-    j["available"]       = jnum(a.available);
-    j["margin"]          = jnum(a.margin);
-    j["frozen_margin"]   = jnum(a.frozen_margin);
-    j["risk_ratio"]      = jnum(a.risk_ratio);
-    j["pre_balance"]     = jnum(a.pre_balance);
-    j["close_profit"]    = jnum(a.close_profit);
-    j["commission"]      = jnum(a.commission);
-    j["float_profit"]    = jnum(a.float_profit);
-    j["position_profit"] = jnum(a.position_profit);
-    return j;
-}
-
-json order_to_json(const Order& o) {
-    json j;
-    j["order_id"]      = o.order_id;
-    j["instrument_id"] = o.instrument_id;
-    j["exchange_id"]   = o.exchange_id;
-    j["direction"]     = enum_str(o.direction);
-    j["offset"]        = enum_str(o.offset);
-    j["volume_orign"]  = o.volume_orign;
-    j["volume_left"]   = o.volume_left;
-    j["price_type"]    = enum_str(o.price_type);
-    j["limit_price"]   = jnum(o.limit_price);
-    j["trade_price"]   = jnum(o.trade_price);
-    j["status"]        = enum_str(o.status);
-    j["last_msg"]      = o.last_msg;
-    j["is_dead"]       = o.is_dead;
-    j["is_error"]      = o.is_error;
-    return j;
-}
-
-json trade_to_json(const Trade& t) {
-    json j;
-    j["trade_id"]        = t.trade_id;
-    j["order_id"]        = t.order_id;
-    j["instrument_id"]   = t.instrument_id;
-    j["direction"]       = enum_str(t.direction);
-    j["offset"]          = enum_str(t.offset);
-    j["volume"]          = t.volume;
-    j["price"]           = jnum(t.price);
-    j["trade_date_time"] = t.trade_date_time;
-    return j;
-}
-
-json position_to_json(const Position& p) {
-    json j;
-    j["instrument_id"]        = p.instrument_id;
-    j["volume_long"]          = p.volume_long;
-    j["volume_short"]         = p.volume_short;
-    j["volume_long_today"]    = p.volume_long_today;
-    j["volume_short_today"]   = p.volume_short_today;
-    j["open_price_long"]      = jnum(p.open_price_long);
-    j["open_price_short"]     = jnum(p.open_price_short);
-    j["position_price_long"]  = jnum(p.position_price_long);
-    j["position_price_short"] = jnum(p.position_price_short);
-    j["last_price"]           = jnum(p.last_price);
-    j["float_profit"]         = jnum(p.float_profit);
-    j["position_profit"]      = jnum(p.position_profit);
-    j["margin"]               = jnum(p.margin);
-    return j;
-}
-
+// JSON 字段映射统一放在 serve/json_convert.h，REST 与 WebSocket 共用。
 // 路由路径解析 / URL 解码 / 参数提取均已下沉到 serve/router.h。
 
 } // namespace
 
-HttpServer::HttpServer(TqApi* api, asio::any_io_executor ex)
+HttpServer::HttpServer(TqApi* api, asio::any_io_executor ex, WsOptions ws_options)
     : api_(api),
       ex_(std::move(ex)),
-      acceptor_(ex_) {
+      acceptor_(ex_),
+      ws_(std::make_shared<WebSocketHub>(api_, ex_, std::move(ws_options))) {
     setup_routes();
 }
 
@@ -205,6 +86,12 @@ void HttpServer::setup_routes() {
              co_return json{
                  {"success", ack.success}, {"order_id", ack.order_id}, {"error", ack.error_msg}};
          })},
+
+        // ---- WebSocket 入口：普通 GET 给 426，提示必须走 Upgrade ----
+        {http::verb::get, ws_->options().path, make_entry([]() -> asio::awaitable<Response> {
+             co_return Response{
+                 http::status::upgrade_required, json{{"error", "websocket upgrade required"}}, {}};
+         })},
     });
 }
 
@@ -229,7 +116,8 @@ void HttpServer::listen(const std::string& address, uint16_t port) {
 
     co_spawn_logged(
         ex_, [this]() -> asio::awaitable<void> { co_await accept_loop(); }, "Http.accept");
-    SPDLOG_INFO("[HttpServer] listening on {}:{}", address, port_);
+    ws_->start();
+    SPDLOG_INFO("[HttpServer] listening on {}:{} (ws: {})", address, port_, ws_->options().path);
 }
 
 void HttpServer::stop() noexcept {
@@ -237,6 +125,9 @@ void HttpServer::stop() noexcept {
         return;
     }
     stopped_ = true;
+    if (ws_) {
+        ws_->stop();
+    }
     boost::system::error_code ec;
     auto                      _ = acceptor_.close(ec);
 }
@@ -277,6 +168,31 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
         }
         if (ec) {
             break;
+        }
+
+        // ---- WebSocket 升级：在路由分发前拦截 ----
+        if (beast::websocket::is_upgrade(req)) {
+            std::string_view target = req.target();
+            if (auto qpos = target.find('?'); qpos != std::string_view::npos) {
+                target = target.substr(0, qpos);
+            }
+
+            http::response<http::string_body> res;
+            if (target != ws_->options().path) {
+                res = make_json_response(
+                    http::status::not_found, json{{"error", "not found"}}, req.version());
+            } else if (ws_->full()) {
+                res = make_json_response(http::status::service_unavailable,
+                                         json{{"error", "too many websocket clients"}},
+                                         req.version());
+            } else {
+                // 交给 WebSocketHub 完成握手并接管 socket；本 session 结束。
+                co_await ws_->accept(std::move(sock), std::move(req));
+                co_return;
+            }
+            res.keep_alive(false);
+            co_await http::async_write(sock, res, asio::redirect_error(asio::use_awaitable, ec));
+            co_return;
         }
 
         // keep-alive 支持：根据请求决定是否关闭。

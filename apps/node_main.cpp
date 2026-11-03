@@ -6,8 +6,8 @@
 #include "tqsdk/util/log.h"
 #include "tqsdk/util/spawn_logged.h"
 
-#include <CLI/CLI.hpp>
 #include <boost/asio/signal_set.hpp>
+#include <CLI/CLI.hpp>
 
 // ============================================================================
 // tqsdk-node —— 数据服务进程
@@ -34,14 +34,14 @@ using namespace tqsdk;
 
 // 持有运行期全部对象，保证生命周期覆盖 io.run()。
 struct NodeRuntime {
-    std::unique_ptr<TqApi>        api;
+    std::unique_ptr<TqApi>             api;
     std::unique_ptr<serve::HttpServer> http;
 };
 
 } // namespace
 
 int main(int argc, char** argv) {
-    CLI::App app{"tqsdk-node: data service process (gw proxy + HTTP serve)"};
+    CLI::App    app{"tqsdk-node: data service process (gw proxy + HTTP serve)"};
     std::string config_path;
     std::string log_level;
     app.add_option("-c,--config", config_path, "Path to node config TOML")->required();
@@ -58,9 +58,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    asio::io_context    io;
-    auto                ex = io.get_executor();
-    auto                rt = std::make_shared<NodeRuntime>();
+    asio::io_context io;
+    auto             ex = io.get_executor();
+    auto             rt = std::make_shared<NodeRuntime>();
 
     // 引导协程：建连 gw -> 建 TqApi -> 预订阅 -> 起 HTTP serve。
     // 失败（gw 未就绪/握手失败）记错误并停止 io。
@@ -80,7 +80,13 @@ int main(int argc, char** argv) {
             SPDLOG_INFO("[node] pre-subscribed quote {}", sym);
         }
 
-        rt->http = std::make_unique<serve::HttpServer>(rt->api.get(), ex);
+        serve::WsOptions ws_opts;
+        ws_opts.path               = cfg.ws.path;
+        ws_opts.heartbeat_interval = cfg.ws.heartbeat_interval;
+        ws_opts.max_clients        = cfg.ws.max_clients;
+        ws_opts.max_queue          = cfg.ws.max_queue;
+
+        rt->http = std::make_unique<serve::HttpServer>(rt->api.get(), ex, ws_opts);
         try {
             rt->http->listen(cfg.serve_bind, cfg.serve_port);
         } catch (const std::exception& e) {
@@ -88,7 +94,10 @@ int main(int argc, char** argv) {
             io.stop();
             co_return;
         }
-        SPDLOG_INFO("[node] HTTP serve on http://{}:{}/", cfg.serve_bind, rt->http->port());
+        SPDLOG_INFO("[node] HTTP serve on http://{}:{}/ (ws {})",
+                    cfg.serve_bind,
+                    rt->http->port(),
+                    cfg.ws.path);
         co_return;
     };
 

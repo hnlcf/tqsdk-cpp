@@ -47,9 +47,11 @@ TEST(ProtocolCodec, SubscribeRoundtrip) {
     SubscribeBody in;
     in.symbols = {"SHFE.rb2610", "DCE.i2601"};
     in.klines  = {{"SHFE.rb2610", 60'000'000'000LL, 200}, {"DCE.i2601", 300'000'000'000LL, 50}};
+    in.release = true;
     auto out   = roundtrip_json(in);
     ASSERT_EQ(out.symbols.size(), 2u);
     EXPECT_EQ(out.symbols, in.symbols);
+    EXPECT_TRUE(out.release);
     ASSERT_EQ(out.klines.size(), 2u);
     EXPECT_EQ(out.klines[0].symbol, "SHFE.rb2610");
     EXPECT_EQ(out.klines[0].duration_ns, 60'000'000'000LL);

@@ -150,6 +150,14 @@ struct NodeConfig {
     std::string               serve_bind = "127.0.0.1";
     uint16_t                  serve_port = 8080;
     std::vector<InstrumentId> symbols; ///< 启动即预订阅的合约（便于直接 curl 到数据）
+
+    /// [serve.ws]：同一 HTTP 端口上的 WebSocket 实时推送。
+    struct Ws {
+        std::string               path = "/stream";
+        std::chrono::milliseconds heartbeat_interval{std::chrono::seconds(30)};
+        std::size_t               max_clients = 256;
+        std::size_t               max_queue   = 1024;
+    } ws;
 };
 
 /// 解析 gw 配置（TOML 文本）。
