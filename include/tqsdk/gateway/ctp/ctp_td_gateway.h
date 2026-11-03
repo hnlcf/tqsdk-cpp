@@ -91,6 +91,20 @@ private:
         std::string    instrument_id;
     };
 
+    enum class QueryKind {
+        Account,
+        Position,
+        Order,
+        Trade,
+        InstrumentSymbol, ///< 仅按持仓合约查询规格，避免全市场合约洪峰
+    };
+
+    struct QueryJob {
+        QueryKind   kind;
+        std::string symbol;
+        int         attempts = 0;
+    };
+
     void        install_callbacks();
     void        stop_impl() noexcept;
     void        do_login();
@@ -99,6 +113,12 @@ private:
     void        schedule_refresh();
     void        start_queries(bool initial);
     void        finish_queries();
+    void        pump_queries();
+    void        schedule_query_after(std::chrono::milliseconds delay);
+    int         send_query(const QueryJob& job);
+    void        query_failed();
+    void        finish_instrument_query();
+    void        complete_queries();
     std::string make_order_ref(const OrderId& rid);
     std::string rid_for_ref(std::string_view ref) const;
     CommandAck  send_insert(const InsertOrderReq& req, const OrderId& rid);
@@ -136,13 +156,18 @@ private:
     std::map<std::string, std::string> ref_to_rid_;
     std::map<std::string, std::string> rid_to_ref_;
 
-    int                       pending_queries_   = 0;
-    bool                      query_in_flight_   = false;
-    bool                      query_initial_     = false;
-    bool                      refresh_pending_   = false;
-    bool                      positions_ready_   = false;
-    bool                      instruments_ready_ = false;
+    int                       pending_queries_            = 0;
+    bool                      query_in_flight_            = false;
+    bool                      query_waiting_              = false;
+    bool                      query_initial_              = false;
+    bool                      refresh_pending_            = false;
+    bool                      positions_ready_            = false;
+    bool                      instruments_ready_          = false;
+    int                       pending_instrument_queries_ = 0;
+    QueryKind                 active_query_kind_          = QueryKind::Account;
+    std::deque<QueryJob>      query_queue_;
     boost::asio::steady_timer refresh_timer_;
+    boost::asio::steady_timer query_timer_;
 };
 
 } // namespace tqsdk

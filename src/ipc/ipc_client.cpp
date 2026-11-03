@@ -96,6 +96,7 @@ asio::awaitable<void> IpcClient::send_resume_if_possible() {
 asio::awaitable<void> IpcClient::run_loop() {
     auto delay          = reconnect_opts_.initial_delay;
     bool had_connection = session_ != nullptr;
+    bool resumed        = false;
 
     while (!stopped_) {
         if (!session_) {
@@ -116,17 +117,22 @@ asio::awaitable<void> IpcClient::run_loop() {
                 continue;
             }
 
-            if (had_connection) {
-                if (reconnect_handler_) {
-                    reconnect_handler_();
-                }
-                try {
-                    co_await send_resume_if_possible();
-                } catch (const std::exception& e) {
-                    SPDLOG_WARN("[IpcClient] send Resume failed: {}", e.what());
-                }
+            if (had_connection && reconnect_handler_) {
+                reconnect_handler_();
             }
             had_connection = true;
+        }
+
+        // 首连也发 Resume：td_next_seq=1 会让 gw 返回 TradeSnapshot，
+        // 否则 node 启动较晚时拿不到柜台已有账户/持仓/订单。
+        // 注意 connect() 已经建立好 session 时也必须走这里。
+        if (!resumed) {
+            try {
+                co_await send_resume_if_possible();
+            } catch (const std::exception& e) {
+                SPDLOG_WARN("[IpcClient] send Resume failed: {}", e.what());
+            }
+            resumed = true;
         }
 
         co_await read_loop();
@@ -134,6 +140,7 @@ asio::awaitable<void> IpcClient::run_loop() {
             session_->close();
             retired_sessions_.push_back(std::move(session_));
         }
+        resumed = false;
 
         if (stopped_ || !reconnect_opts_.enabled) {
             break;

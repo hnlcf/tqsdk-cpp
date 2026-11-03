@@ -25,7 +25,7 @@ void CtpMdSpi::OnFrontConnected() {
         return;
     }
     auto state = state_;
-    state->queue->push([state, cb]() {
+    state->queue->push_high([state, cb]() {
         if (state->alive.load(std::memory_order_acquire) && cb->front_connected) {
             cb->front_connected();
         }
@@ -38,7 +38,7 @@ void CtpMdSpi::OnFrontDisconnected(int nReason) {
         return;
     }
     auto state = state_;
-    state->queue->push([state, cb, nReason]() {
+    state->queue->push_high([state, cb, nReason]() {
         if (state->alive.load(std::memory_order_acquire) && cb->front_disconnected) {
             cb->front_disconnected(nReason);
         }
@@ -56,7 +56,7 @@ void CtpMdSpi::OnRspUserLogin(CThostFtdcRspUserLoginField* pRspUserLogin,
     auto state = state_;
     auto login = copy_opt(pRspUserLogin);
     auto info  = copy_opt(pRspInfo);
-    state->queue->push([state, cb, login, info, nRequestID, bIsLast]() {
+    state->queue->push_high([state, cb, login, info, nRequestID, bIsLast]() {
         if (state->alive.load(std::memory_order_acquire) && cb->login && login) {
             cb->login(*login, info.get(), nRequestID, bIsLast);
         }
@@ -74,7 +74,7 @@ void CtpMdSpi::OnRspSubMarketData(CThostFtdcSpecificInstrumentField* pSpecificIn
     auto state = state_;
     auto spec  = copy_opt(pSpecificInstrument);
     auto info  = copy_opt(pRspInfo);
-    state->queue->push([state, cb, spec, info, nRequestID, bIsLast]() {
+    state->queue->push_high([state, cb, spec, info, nRequestID, bIsLast]() {
         if (state->alive.load(std::memory_order_acquire) && cb->sub_market) {
             cb->sub_market(spec.get(), info.get(), nRequestID, bIsLast);
         }
@@ -88,7 +88,7 @@ void CtpMdSpi::OnRtnDepthMarketData(CThostFtdcDepthMarketDataField* pDepthMarket
     }
     auto state = state_;
     auto data  = std::make_shared<CThostFtdcDepthMarketDataField>(*pDepthMarketData);
-    state->queue->push([state, cb, data]() {
+    state->queue->push_high([state, cb, data]() {
         if (state->alive.load(std::memory_order_acquire) && cb->depth) {
             cb->depth(*data);
         }
@@ -110,7 +110,7 @@ void CtpTdSpi::OnFrontConnected() {
         return;
     }
     auto state = state_;
-    state->queue->push([state, cb]() {
+    state->queue->push_high([state, cb]() {
         if (state->alive.load(std::memory_order_acquire) && cb->front_connected) {
             cb->front_connected();
         }
@@ -123,7 +123,7 @@ void CtpTdSpi::OnFrontDisconnected(int nReason) {
         return;
     }
     auto state = state_;
-    state->queue->push([state, cb, nReason]() {
+    state->queue->push_high([state, cb, nReason]() {
         if (state->alive.load(std::memory_order_acquire) && cb->front_disconnected) {
             cb->front_disconnected(nReason);
         }
@@ -141,7 +141,7 @@ void CtpTdSpi::OnRspAuthenticate(CThostFtdcRspAuthenticateField* pRspAuthenticat
     auto state = state_;
     auto rsp   = copy_opt(pRspAuthenticateField);
     auto info  = copy_opt(pRspInfo);
-    state->queue->push([state, cb, rsp, info, nRequestID, bIsLast]() {
+    state->queue->push_high([state, cb, rsp, info, nRequestID, bIsLast]() {
         if (state->alive.load(std::memory_order_acquire) && cb->authenticate) {
             cb->authenticate(rsp.get(), info.get(), nRequestID, bIsLast);
         }
@@ -159,7 +159,7 @@ void CtpTdSpi::OnRspUserLogin(CThostFtdcRspUserLoginField* pRspUserLogin,
     auto state = state_;
     auto login = copy_opt(pRspUserLogin);
     auto info  = copy_opt(pRspInfo);
-    state->queue->push([state, cb, login, info, nRequestID, bIsLast]() {
+    state->queue->push_high([state, cb, login, info, nRequestID, bIsLast]() {
         if (state->alive.load(std::memory_order_acquire) && cb->login && login) {
             cb->login(*login, info.get(), nRequestID, bIsLast);
         }
@@ -178,7 +178,7 @@ void CtpTdSpi::OnRspSettlementInfoConfirm(
     auto state = state_;
     auto rsp   = copy_opt(pSettlementInfoConfirm);
     auto info  = copy_opt(pRspInfo);
-    state->queue->push([state, cb, rsp, info, nRequestID, bIsLast]() {
+    state->queue->push_high([state, cb, rsp, info, nRequestID, bIsLast]() {
         if (state->alive.load(std::memory_order_acquire) && cb->settlement) {
             cb->settlement(rsp.get(), info.get(), nRequestID, bIsLast);
         }
@@ -196,7 +196,7 @@ void CtpTdSpi::OnRspOrderInsert(CThostFtdcInputOrderField* pInputOrder,
     auto state = state_;
     auto input = copy_opt(pInputOrder);
     auto info  = copy_opt(pRspInfo);
-    state->queue->push([state, cb, input, info, nRequestID, bIsLast]() {
+    state->queue->push_high([state, cb, input, info, nRequestID, bIsLast]() {
         if (state->alive.load(std::memory_order_acquire) && cb->order_insert && input) {
             cb->order_insert(*input, info.get(), nRequestID, bIsLast);
         }
@@ -214,7 +214,7 @@ void CtpTdSpi::OnRspOrderAction(CThostFtdcInputOrderActionField* pInputOrderActi
     auto state = state_;
     auto input = copy_opt(pInputOrderAction);
     auto info  = copy_opt(pRspInfo);
-    state->queue->push([state, cb, input, info, nRequestID, bIsLast]() {
+    state->queue->push_high([state, cb, input, info, nRequestID, bIsLast]() {
         if (state->alive.load(std::memory_order_acquire) && cb->order_action && input) {
             cb->order_action(*input, info.get(), nRequestID, bIsLast);
         }
@@ -230,7 +230,7 @@ void CtpTdSpi::OnErrRtnOrderInsert(CThostFtdcInputOrderField* pInputOrder,
     auto state = state_;
     auto input = std::make_shared<CThostFtdcInputOrderField>(*pInputOrder);
     auto info  = std::make_shared<CThostFtdcRspInfoField>(*pRspInfo);
-    state->queue->push([state, cb, input, info]() {
+    state->queue->push_high([state, cb, input, info]() {
         if (state->alive.load(std::memory_order_acquire) && cb->err_order_insert) {
             cb->err_order_insert(*input, *info);
         }
@@ -246,7 +246,7 @@ void CtpTdSpi::OnErrRtnOrderAction(CThostFtdcOrderActionField* pOrderAction,
     auto state  = state_;
     auto action = std::make_shared<CThostFtdcOrderActionField>(*pOrderAction);
     auto info   = std::make_shared<CThostFtdcRspInfoField>(*pRspInfo);
-    state->queue->push([state, cb, action, info]() {
+    state->queue->push_high([state, cb, action, info]() {
         if (state->alive.load(std::memory_order_acquire) && cb->err_order_action) {
             cb->err_order_action(*action, *info);
         }
@@ -260,7 +260,7 @@ void CtpTdSpi::OnRtnOrder(CThostFtdcOrderField* pOrder) {
     }
     auto state = state_;
     auto order = std::make_shared<CThostFtdcOrderField>(*pOrder);
-    state->queue->push([state, cb, order]() {
+    state->queue->push_high([state, cb, order]() {
         if (state->alive.load(std::memory_order_acquire) && cb->rtn_order) {
             cb->rtn_order(*order);
         }
@@ -274,7 +274,7 @@ void CtpTdSpi::OnRtnTrade(CThostFtdcTradeField* pTrade) {
     }
     auto state = state_;
     auto trade = std::make_shared<CThostFtdcTradeField>(*pTrade);
-    state->queue->push([state, cb, trade]() {
+    state->queue->push_high([state, cb, trade]() {
         if (state->alive.load(std::memory_order_acquire) && cb->rtn_trade) {
             cb->rtn_trade(*trade);
         }

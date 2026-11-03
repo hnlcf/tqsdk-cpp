@@ -459,9 +459,12 @@
   - `CtpTaskQueue`：SPI 线程只拷贝 struct + push，core executor 串行消费；
   - `CtpMdSpi`/`CtpTdSpi`：登录、认证、订阅、报单/撤单、成交、查询回调；
   - `CtpMdGateway`：订阅引用计数、断线重登录/重订阅、depth -> quote diff；
-  - `CtpTdGateway`：OrderRef<->rid、查询快照、200ms debounce 刷新、reject 终态。
+    `EXCHANGE.instrument` 与 CTP `InstrumentID` 自动转换；
+  - `CtpTdGateway`：OrderRef<->rid、查询快照、查询串行化 + `-2/-3` 退避、
+    200ms debounce 刷新、reject 终态、GBK 消息转 UTF-8。
 - **边界**：不实现 CTP 柜台风控/K 线序列；不替代 node 的 seq/Resume 恢复。
-- **构建**：`-DTQSDK_ENABLE_CTP=ON`；未开启时 `kind=ctp` 会显式报错。
+- **构建/打包**：`-DTQSDK_ENABLE_CTP=ON` 时 CTP 直接编入 `tqsdk_core.so`，
+  CPack 同时打包 `libthost*.so`；未开启时 `kind=ctp` 会显式报错。
 - **详细文档**：[`CTP.md`](./CTP.md)。
 
 ---

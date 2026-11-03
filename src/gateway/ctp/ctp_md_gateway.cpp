@@ -109,16 +109,23 @@ void CtpMdGateway::resubscribe_desired() {
     if (!logged_in_ || api_ == nullptr || desired_.empty()) {
         return;
     }
-    std::vector<char*> ptrs;
-    ptrs.reserve(desired_.size());
+    // CTP SubscribeMarketData 只接受不带交易所前缀的 InstrumentID。
+    std::set<std::string> names;
     for (const auto& [sym, refs] : desired_) {
         if (refs > 0) {
-            ptrs.push_back(const_cast<char*>(sym.c_str()));
+            names.insert(split_tq_symbol(sym).second);
         }
+    }
+    std::vector<std::string> stable_names(names.begin(), names.end());
+    std::vector<char*>       ptrs;
+    ptrs.reserve(stable_names.size());
+    for (auto& name : stable_names) {
+        ptrs.push_back(name.data());
     }
     if (ptrs.empty()) {
         return;
     }
+    SPDLOG_INFO("[CtpMd] SubscribeMarketData: {} instrument(s)", ptrs.size());
     int ret = api_->SubscribeMarketData(ptrs.data(), static_cast<int>(ptrs.size()));
     if (ret != 0) {
         emit(MarketDataEvent{MarketDataEvent::Kind::Error,
@@ -192,6 +199,8 @@ void CtpMdGateway::handle_sub_market(const CThostFtdcSpecificInstrumentField* sp
                              std::string{"CTP subscribe "} +
                                  (spec ? cstr(spec->InstrumentID) : "") +
                                  " failed: " + cstr(info->ErrorMsg)});
+    } else if (spec != nullptr) {
+        SPDLOG_INFO("[CtpMd] subscribe ok: {}", cstr(spec->InstrumentID));
     }
 }
 
@@ -199,12 +208,31 @@ void CtpMdGateway::handle_depth(const CThostFtdcDepthMarketDataField& depth) {
     if (stopped_ || !logged_in_) {
         return;
     }
-    const std::string symbol = cstr(depth.InstrumentID);
-    auto              it     = desired_.find(symbol);
+    SPDLOG_DEBUG("[CtpMd] depth exchange={} instrument={}",
+                 cstr(depth.ExchangeID),
+                 cstr(depth.InstrumentID));
+    const std::string full_symbol = tq_symbol(cstr(depth.ExchangeID), cstr(depth.InstrumentID));
+    auto              it          = desired_.find(full_symbol);
+    if (it == desired_.end()) {
+        // 兼容调用方直接订阅 CTP InstrumentID 的情况。
+        it = desired_.find(cstr(depth.InstrumentID));
+    }
+    if (it == desired_.end()) {
+        // 部分行情前置的 ExchangeID 为空；按 InstrumentID 后缀匹配完整订阅键。
+        const std::string suffix = "." + cstr(depth.InstrumentID);
+        for (auto i = desired_.begin(); i != desired_.end(); ++i) {
+            if (i->first.size() >= suffix.size() &&
+                i->first.compare(i->first.size() - suffix.size(), suffix.size(), suffix) == 0) {
+                it = i;
+                break;
+            }
+        }
+    }
     if (it == desired_.end() || it->second <= 0) {
         return;
     }
-    nlohmann::json diff{{"quotes", {{symbol, depth_json(depth)}}}};
+    SPDLOG_DEBUG("[CtpMd] emit quote key={}", it->first);
+    nlohmann::json diff{{"quotes", {{it->first, depth_json(depth)}}}};
     emit(MarketDataEvent{MarketDataEvent::Kind::Diff, std::move(diff), {}});
 }
 
@@ -212,6 +240,7 @@ asio::awaitable<void> CtpMdGateway::subscribe(const std::vector<std::string>& sy
     bool changed = false;
     for (const auto& s : symbols) {
         if (!s.empty() && desired_[s]++ == 0) {
+            SPDLOG_INFO("[CtpMd] subscribe requested: {}", s);
             changed = true;
         }
     }
@@ -233,7 +262,7 @@ CtpMdGateway::release(const std::vector<std::string>&                     symbol
             continue;
         }
         if (--it->second <= 0) {
-            unsub_names.push_back(it->first);
+            unsub_names.push_back(split_tq_symbol(it->first).second);
             desired_.erase(it);
         }
     }

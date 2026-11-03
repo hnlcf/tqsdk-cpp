@@ -139,8 +139,9 @@ td 不允许静默丢事件。`RemoteTdGateway` 的 gap handler 会发送
 ## 6. 兼容性
 
 - 旧 peer 不发送 `meta`：`StreamMeta` 的 `from_json` 默认 `seq=0`，接收端 `Ignored`；
-- 旧 peer 不认识 `Resume/ResumeAck/TradeSnapshot`：新代码只在重连/缺口时发送，
-  正常首连不会主动发 `Resume`；
+- 新代码**首连也会发送 `Resume`**（`td_next_seq=1`），用于获取 gw 侧已有交易
+  快照，解决 node 晚于 gw 启动时账户/持仓为空的问题；
+- 旧 peer 不认识 `Resume/ResumeAck/TradeSnapshot`：需要先升级 gw，再升级 node；
 - `TradeSnapshot` 是 `TradePushBody` 之外的独立帧类型，旧 peer 会按未知帧忽略/报错，
   因此跨版本混跑时应先升级 gw。
 

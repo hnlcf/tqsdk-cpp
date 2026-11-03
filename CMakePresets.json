@@ -20,18 +20,18 @@
         {
             "name": "package",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build",
+            "binaryDir": "${sourceDir}/build-package",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
                 "CMAKE_CXX_COMPILER": "clang++",
-                "VCPKG_TARGET_TRIPLET": "x64-linux-release",
-                "VCPKG_HOST_TRIPLET": "x64-linux-release",
+                "VCPKG_TARGET_TRIPLET": "x64-linux",
+                "VCPKG_HOST_TRIPLET": "x64-linux",
                 "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=mold",
                 "CMAKE_SHARED_LINKER_FLAGS": "-fuse-ld=mold",
                 "TQSDK_ENABLE_CTP": "ON",
-                "TQSDK_BUILD_EXAMPLES": "ON",
-                "TQSDK_BUILD_TESTS": "ON"
+                "TQSDK_BUILD_EXAMPLES": "OFF",
+                "TQSDK_BUILD_TESTS": "OFF"
             }
         }
     ]

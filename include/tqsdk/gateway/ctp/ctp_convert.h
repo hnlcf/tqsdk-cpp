@@ -9,14 +9,120 @@
 #include <ThostFtdcUserApiDataType.h>
 #include <ThostFtdcUserApiStruct.h>
 
+#include <iconv.h>
+
 #include <cmath>
 #include <cstring>
 
 namespace tqsdk {
 namespace ctp {
 
+namespace detail {
+
+inline bool is_valid_utf8(std::string_view s) {
+    std::size_t i = 0;
+    while (i < s.size()) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        if (c < 0x80) {
+            ++i;
+            continue;
+        }
+        std::size_t n = 0;
+        if ((c & 0xE0) == 0xC0) {
+            n = 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            n = 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            n = 4;
+        } else {
+            return false;
+        }
+        if (i + n > s.size()) {
+            return false;
+        }
+        for (std::size_t k = 1; k < n; ++k) {
+            if ((static_cast<unsigned char>(s[i + k]) & 0xC0) != 0x80) {
+                return false;
+            }
+        }
+        i += n;
+    }
+    return true;
+}
+
+inline std::string ascii_or_question(const char* p, std::size_t n) {
+    std::string out;
+    out.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto c = static_cast<unsigned char>(p[i]);
+        out.push_back(c < 0x80 ? static_cast<char>(c) : '?');
+    }
+    return out;
+}
+
+/// CTP 的文本字段通常是 GBK/GB18030；统一转成合法 UTF-8，避免 json::dump
+/// 因中文 StatusMsg/ErrorMsg 抛 type_error.316。
+inline std::string gb18030_to_utf8(const char* p, std::size_t n) {
+    iconv_t cd = iconv_open("UTF-8", "GB18030");
+    if (cd == reinterpret_cast<iconv_t>(-1)) {
+        return ascii_or_question(p, n);
+    }
+    std::string out(n * 4 + 8, '\0');
+    char*       in_ptr   = const_cast<char*>(p);
+    std::size_t in_left  = n;
+    char*       out_ptr  = out.data();
+    std::size_t out_left = out.size();
+
+    const std::size_t rc = iconv(cd, &in_ptr, &in_left, &out_ptr, &out_left);
+    iconv_close(cd);
+    if (rc == static_cast<std::size_t>(-1) && in_left != 0) {
+        return ascii_or_question(p, n);
+    }
+    out.resize(out.size() - out_left);
+    return out;
+}
+
+} // namespace detail
+
 inline std::string cstr(const char* p) {
-    return p == nullptr ? std::string{} : std::string{p};
+    if (p == nullptr) {
+        return {};
+    }
+    const std::size_t n     = std::strlen(p);
+    bool              ascii = true;
+    for (std::size_t i = 0; i < n; ++i) {
+        if (static_cast<unsigned char>(p[i]) >= 0x80) {
+            ascii = false;
+            break;
+        }
+    }
+    if (ascii) {
+        return std::string{p, n};
+    }
+    const std::string_view view{p, n};
+    if (detail::is_valid_utf8(view)) {
+        return std::string{view};
+    }
+    return detail::gb18030_to_utf8(p, n);
+}
+
+/// CTP 的 InstrumentID 通常不带交易所前缀；node 侧统一使用 "SHFE.rb2601"。
+inline std::string tq_symbol(std::string_view exchange, std::string_view instrument) {
+    if (instrument.find('.') != std::string_view::npos) {
+        return std::string{instrument};
+    }
+    if (exchange.empty()) {
+        return std::string{instrument};
+    }
+    return std::string{exchange} + "." + std::string{instrument};
+}
+
+inline std::pair<std::string, std::string> split_tq_symbol(std::string_view symbol) {
+    const auto dot = symbol.find('.');
+    if (dot == std::string_view::npos) {
+        return {std::string{}, std::string{symbol}};
+    }
+    return {std::string{symbol.substr(0, dot)}, std::string{symbol.substr(dot + 1)}};
 }
 
 inline double finite_price(double v) {
@@ -208,7 +314,7 @@ inline nlohmann::json order_json(const CThostFtdcOrderField& o, std::string_view
         {"order_id", std::string{rid}},
         {"exchange_order_id", cstr(o.OrderSysID)},
         {"exchange_id", cstr(o.ExchangeID)},
-        {"instrument_id", cstr(o.InstrumentID)},
+        {"instrument_id", tq_symbol(cstr(o.ExchangeID), cstr(o.InstrumentID))},
         {"direction", direction_str(o.Direction)},
         {"offset", offset_str(offset)},
         {"volume_orign", o.VolumeTotalOriginal},
@@ -234,7 +340,7 @@ inline nlohmann::json trade_json(const CThostFtdcTradeField& t, std::string_view
         {"trade_id", cstr(t.TradeID)},
         {"exchange_trade_id", cstr(t.TradeID)},
         {"exchange_id", cstr(t.ExchangeID)},
-        {"instrument_id", cstr(t.InstrumentID)},
+        {"instrument_id", tq_symbol(cstr(t.ExchangeID), cstr(t.InstrumentID))},
         {"direction", direction_str(t.Direction)},
         {"offset", offset_str(t.OffsetFlag)},
         {"volume", t.Volume},
@@ -363,7 +469,7 @@ inline nlohmann::json user_diff(nlohmann::json orders,
 inline nlohmann::json depth_json(const CThostFtdcDepthMarketDataField& d) {
     auto px = [](double v) { return finite_price(v); };
     return nlohmann::json{
-        {"instrument_id", cstr(d.InstrumentID)},
+        {"instrument_id", tq_symbol(cstr(d.ExchangeID), cstr(d.InstrumentID))},
         {"datetime", cstr(d.UpdateTime)},
         {"last_price", px(d.LastPrice)},
         {"pre_close", px(d.PreClosePrice)},

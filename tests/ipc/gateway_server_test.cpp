@@ -685,6 +685,10 @@ TEST(IpcClientTest, ReconnectsAndResumes) {
                         {"quotes", {{"SHFE.rb2610", {{"last_price", 3800.0 + seq}}}}}};
                     co_await s1->send_body<FrameType::MarketDataPush>(p);
                 }
+                // 给客户端读循环一点时间消费 seq=1/2，避免 close 与 TCP 读取竞态。
+                asio::steady_timer drain_timer(io);
+                drain_timer.expires_after(std::chrono::milliseconds(100));
+                co_await drain_timer.async_wait(asio::use_awaitable);
                 s1->close(); // 模拟 gw 断线
 
                 auto s2_sock = co_await acc.async_accept(asio::use_awaitable);

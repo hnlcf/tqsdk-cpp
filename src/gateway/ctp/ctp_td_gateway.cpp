@@ -16,7 +16,8 @@ CtpTdGateway::CtpTdGateway(asio::any_io_executor ex, CtpConfig cfg)
       cfg_(std::move(cfg)),
       ch_(ex_),
       state_(std::make_shared<TdState>(ex_)),
-      refresh_timer_(ex_) {}
+      refresh_timer_(ex_),
+      query_timer_(ex_) {}
 
 CtpTdGateway::~CtpTdGateway() {
     stop_impl();
@@ -121,6 +122,8 @@ void CtpTdGateway::stop_impl() noexcept {
     }
     state_->queue->stop();
     refresh_timer_.cancel();
+    query_timer_.cancel();
+    query_queue_.clear();
     if (api_ != nullptr) {
         api_->RegisterSpi(nullptr);
         api_->Release();
@@ -212,8 +215,11 @@ void CtpTdGateway::handle_front_disconnected(int reason) {
     logged_in_       = false;
     authenticated_   = false;
     query_in_flight_ = false;
+    query_waiting_   = false;
     pending_queries_ = 0;
     refresh_pending_ = false;
+    query_queue_.clear();
+    query_timer_.cancel();
     if (stopped_) {
         return;
     }
@@ -291,8 +297,11 @@ void CtpTdGateway::handle_settlement(const CThostFtdcSettlementInfoConfirmField*
     }
     SPDLOG_INFO("[CtpTd] settlement confirmed");
     query_in_flight_ = false;
+    query_waiting_   = false;
     pending_queries_ = 0;
     refresh_pending_ = false;
+    query_queue_.clear();
+    query_timer_.cancel();
     start_queries(true);
 }
 
@@ -300,15 +309,50 @@ std::string CtpTdGateway::make_order_ref(const OrderId& rid) {
     if (auto it = rid_to_ref_.find(rid); it != rid_to_ref_.end()) {
         return it->second;
     }
-    std::string ref;
-    if (rid.size() <= 12) {
-        ref = rid;
-        if (auto it = ref_to_rid_.find(ref); it != ref_to_rid_.end() && it->second != rid) {
-            ref = "r" + std::to_string(++ref_seq_);
+
+    auto digits = [](std::string_view s) {
+        if (s.empty()) {
+            return false;
         }
-    } else {
-        ref = "r" + std::to_string(++ref_seq_);
+        for (char c : s) {
+            if (c < '0' || c > '9') {
+                return false;
+            }
+        }
+        return true;
+    };
+    auto numeric_value = [&](std::string_view s) -> std::optional<int64_t> {
+        if (!digits(s) || s.size() > 10) {
+            return std::nullopt;
+        }
+        try {
+            return std::stoll(std::string{s});
+        } catch (...) {
+            return std::nullopt;
+        }
+    };
+
+    // CTP 的 OrderRef 会被按 int32 解析并做递增检查；只发十进制数字。
+    std::string ref;
+    if (rid.size() <= 12 && digits(rid)) {
+        ref = rid;
+    } else if (rid.size() <= 12 && rid[0] == 'r' && digits(std::string_view{rid}.substr(1))) {
+        ref = rid.substr(1);
     }
+
+    auto collision = [&](const std::string& candidate) {
+        auto it = ref_to_rid_.find(candidate);
+        return it != ref_to_rid_.end() && it->second != rid;
+    };
+    if (ref.empty() || collision(ref)) {
+        do {
+            ref = std::to_string(++ref_seq_);
+        } while (collision(ref));
+    }
+    if (auto n = numeric_value(ref); n.has_value()) {
+        ref_seq_ = std::max(ref_seq_, static_cast<int>(std::min<int64_t>(*n, 2'000'000'000LL)));
+    }
+
     ref_to_rid_[ref] = rid;
     rid_to_ref_[rid] = ref;
     return ref;
@@ -323,12 +367,17 @@ CommandAck CtpTdGateway::send_insert(const InsertOrderReq& req, const OrderId& r
     if (!logged_in_ || api_ == nullptr) {
         return CommandAck{false, rid, "CTP not logged in"};
     }
+    // node 使用 "SHFE.rb2601"；CTP 报单字段拆成 ExchangeID/InstrumentID。
+    auto [exchange, instrument] = split_tq_symbol(req.instrument_id);
+    if (!req.exchange_id.empty()) {
+        exchange = req.exchange_id;
+    }
     CThostFtdcInputOrderField field{};
     set_field(field.BrokerID, sizeof(field.BrokerID), cfg_.broker_id);
     set_field(field.InvestorID, sizeof(field.InvestorID), cfg_.user_id);
     set_field(field.UserID, sizeof(field.UserID), cfg_.user_id);
-    set_field(field.InstrumentID, sizeof(field.InstrumentID), req.instrument_id);
-    set_field(field.ExchangeID, sizeof(field.ExchangeID), req.exchange_id);
+    set_field(field.InstrumentID, sizeof(field.InstrumentID), instrument);
+    set_field(field.ExchangeID, sizeof(field.ExchangeID), exchange);
     set_field(field.OrderRef, sizeof(field.OrderRef), make_order_ref(rid));
     field.OrderPriceType      = ctp_price_type(req.price_type);
     field.Direction           = ctp_direction(req.direction);
@@ -347,6 +396,12 @@ CommandAck CtpTdGateway::send_insert(const InsertOrderReq& req, const OrderId& r
     field.RequestID           = req_id;
     field.UserForceClose      = 0;
 
+    SPDLOG_INFO("[CtpTd] insert rid='{}' {} {} vol={} price={}",
+                rid,
+                instrument,
+                exchange,
+                req.volume,
+                req.limit_price);
     int ret = api_->ReqOrderInsert(&field, req_id);
     if (ret != 0) {
         return CommandAck{false, rid, "CTP ReqOrderInsert ret=" + std::to_string(ret)};
@@ -418,6 +473,8 @@ void CtpTdGateway::handle_order_insert(const CThostFtdcInputOrderField& input,
     (void)request_id;
     (void)is_last;
     if (info != nullptr && info->ErrorID != 0) {
+        SPDLOG_WARN(
+            "[CtpTd] insert rejected ref={} err={}", cstr(input.OrderRef), cstr(info->ErrorMsg));
         reject_order(cstr(input.OrderRef), cstr(info->ErrorMsg));
     }
 }
@@ -453,9 +510,23 @@ void CtpTdGateway::handle_rtn_order(const CThostFtdcOrderField& order) {
     if (stopped_) {
         return;
     }
+    SPDLOG_INFO("[CtpTd] rtn order ref={} status={} exch_order={} msg={}",
+                cstr(order.OrderRef),
+                order.OrderStatus,
+                cstr(order.OrderSysID),
+                cstr(order.StatusMsg));
     const std::string ref = cstr(order.OrderRef);
     const std::string rid = rid_for_ref(ref);
-    CachedOrder       c;
+    // 记录柜台历史 OrderRef，防止新 rid 生成 rN 时与历史订单撞号。
+    if (!ref.empty()) {
+        if (!ref_to_rid_.count(ref)) {
+            ref_to_rid_[ref] = rid;
+        }
+        if (!rid_to_ref_.count(rid)) {
+            rid_to_ref_[rid] = ref;
+        }
+    }
+    CachedOrder c;
     c.json          = order_json(order, rid);
     c.front_id      = order.FrontID;
     c.session_id    = order.SessionID;
@@ -470,7 +541,16 @@ void CtpTdGateway::handle_rtn_trade(const CThostFtdcTradeField& trade) {
     if (stopped_) {
         return;
     }
-    const std::string rid = rid_for_ref(cstr(trade.OrderRef));
+    const std::string ref = cstr(trade.OrderRef);
+    const std::string rid = rid_for_ref(ref);
+    if (!ref.empty()) {
+        if (!ref_to_rid_.count(ref)) {
+            ref_to_rid_[ref] = rid;
+        }
+        if (!rid_to_ref_.count(rid)) {
+            rid_to_ref_[rid] = ref;
+        }
+    }
     const std::string tid = cstr(trade.TradeID);
     trades_[tid]          = trade_json(trade, rid);
     schedule_refresh();
@@ -482,8 +562,17 @@ void CtpTdGateway::handle_qry_order(const CThostFtdcOrderField*   order,
                                     bool                          is_last) {
     (void)request_id;
     if (order != nullptr) {
-        const std::string rid = rid_for_ref(cstr(order->OrderRef));
-        CachedOrder       c;
+        const std::string ref = cstr(order->OrderRef);
+        const std::string rid = rid_for_ref(ref);
+        if (!ref.empty()) {
+            if (!ref_to_rid_.count(ref)) {
+                ref_to_rid_[ref] = rid;
+            }
+            if (!rid_to_ref_.count(rid)) {
+                rid_to_ref_[rid] = ref;
+            }
+        }
+        CachedOrder c;
         c.json          = order_json(*order, rid);
         c.front_id      = order->FrontID;
         c.session_id    = order->SessionID;
@@ -493,6 +582,7 @@ void CtpTdGateway::handle_qry_order(const CThostFtdcOrderField*   order,
         orders_[rid]    = std::move(c);
     }
     if (is_last) {
+        SPDLOG_DEBUG("[CtpTd] qry order done (info={})", info ? info->ErrorID : 0);
         finish_queries();
     }
 }
@@ -504,10 +594,20 @@ void CtpTdGateway::handle_qry_trade(const CThostFtdcTradeField*   trade,
     (void)info;
     (void)request_id;
     if (trade != nullptr) {
-        const std::string rid         = rid_for_ref(cstr(trade->OrderRef));
+        const std::string ref = cstr(trade->OrderRef);
+        const std::string rid = rid_for_ref(ref);
+        if (!ref.empty()) {
+            if (!ref_to_rid_.count(ref)) {
+                ref_to_rid_[ref] = rid;
+            }
+            if (!rid_to_ref_.count(rid)) {
+                rid_to_ref_[rid] = ref;
+            }
+        }
         trades_[cstr(trade->TradeID)] = trade_json(*trade, rid);
     }
     if (is_last) {
+        SPDLOG_DEBUG("[CtpTd] qry trade done (info={})", info ? info->ErrorID : 0);
         finish_queries();
     }
 }
@@ -519,15 +619,34 @@ void CtpTdGateway::handle_qry_position(const CThostFtdcInvestorPositionField* po
     (void)info;
     (void)request_id;
     if (position != nullptr) {
-        const std::string    symbol  = cstr(position->InstrumentID);
+        const std::string symbol =
+            tq_symbol(cstr(position->ExchangeID), cstr(position->InstrumentID));
         auto                 spec_it = instruments_.find(symbol);
         const InstrumentSpec spec =
             spec_it == instruments_.end() ? InstrumentSpec{} : spec_it->second;
         add_position(pos_agg_[symbol], *position, spec);
     }
     if (is_last) {
+        SPDLOG_DEBUG("[CtpTd] qry position done (info={})", info ? info->ErrorID : 0);
         positions_ready_ = true;
-        if (instruments_ready_) {
+
+        // 只为实际持仓合约查规格，避免全市场合约查询把报单/成交回调挤到后面。
+        std::set<std::string> missing_specs;
+        for (const auto& [symbol, agg] : pos_agg_) {
+            (void)agg;
+            if (instruments_.find(symbol) == instruments_.end()) {
+                missing_specs.insert(symbol);
+            }
+        }
+        if (!missing_specs.empty()) {
+            instruments_ready_ = false;
+            pending_instrument_queries_ += static_cast<int>(missing_specs.size());
+            pending_queries_ += static_cast<int>(missing_specs.size());
+            for (const auto& symbol : missing_specs) {
+                query_queue_.push_back(QueryJob{QueryKind::InstrumentSymbol, symbol});
+            }
+        } else {
+            instruments_ready_ = true;
             rebuild_positions();
         }
         finish_queries();
@@ -542,8 +661,13 @@ void CtpTdGateway::handle_qry_account(const CThostFtdcTradingAccountField* accou
     (void)request_id;
     if (account != nullptr) {
         account_ = account_json(*account);
+        SPDLOG_DEBUG(
+            "[CtpTd] account balance={} available={}", account->Balance, account->Available);
     }
     if (is_last) {
+        SPDLOG_DEBUG("[CtpTd] qry account done (info={}, record={})",
+                     info ? info->ErrorID : 0,
+                     account != nullptr);
         finish_queries();
     }
 }
@@ -555,14 +679,27 @@ void CtpTdGateway::handle_qry_instrument(const CThostFtdcInstrumentField* instru
     (void)info;
     (void)request_id;
     if (instrument != nullptr) {
-        instruments_[cstr(instrument->InstrumentID)] = parse_instrument(*instrument);
+        instruments_[tq_symbol(cstr(instrument->ExchangeID), cstr(instrument->InstrumentID))] =
+            parse_instrument(*instrument);
     }
     if (is_last) {
+        SPDLOG_DEBUG("[CtpTd] qry instrument done (info={}, loaded={})",
+                     info ? info->ErrorID : 0,
+                     instruments_.size());
+        finish_instrument_query();
+        finish_queries();
+    }
+}
+
+void CtpTdGateway::finish_instrument_query() {
+    if (pending_instrument_queries_ > 0) {
+        --pending_instrument_queries_;
+    }
+    if (pending_instrument_queries_ == 0) {
         instruments_ready_ = true;
         if (positions_ready_) {
             rebuild_positions();
         }
-        finish_queries();
     }
 }
 
@@ -584,60 +721,132 @@ void CtpTdGateway::start_queries(bool initial) {
         refresh_pending_ = !initial;
         return;
     }
+
     query_in_flight_ = true;
     query_initial_   = initial;
-    pending_queries_ = 0;
+    query_waiting_   = false;
+    query_queue_.clear();
+    pending_instrument_queries_ = 0;
 
     // 不先清空缓存：查询完成前 snapshot() 仍返回上一份可用截面，
     // 避免 node 在 CTP 重连/查询窗口内被空快照清空交易状态。
-    if (initial) {
-        instruments_ready_ = false;
-    } else {
-        instruments_ready_ = true;
-    }
-    positions_ready_ = false;
+    // 不再一次性查询全市场合约（1.7 万条回调会淹没报单/成交回调）；
+    // 仅在有持仓时按合约逐个查规格。
+    instruments_ready_ = true;
+    positions_ready_   = false;
     pos_agg_.clear();
 
-    auto count = [this](int ret) {
-        if (ret == 0) {
-            ++pending_queries_;
-        } else {
-            SPDLOG_WARN("[CtpTd] query request ret={}", ret);
-        }
-    };
+    query_queue_.push_back(QueryJob{QueryKind::Account});
+    query_queue_.push_back(QueryJob{QueryKind::Position});
+    query_queue_.push_back(QueryJob{QueryKind::Order});
+    query_queue_.push_back(QueryJob{QueryKind::Trade});
+    pending_queries_ = static_cast<int>(query_queue_.size());
 
     if (initial) {
-        CThostFtdcQryInstrumentField q{};
-        count(api_->ReqQryInstrument(&q, ++request_id_));
+        SPDLOG_INFO("[CtpTd] query snapshot: {} request(s)", pending_queries_);
+    } else {
+        SPDLOG_DEBUG("[CtpTd] refresh snapshot: {} request(s)", pending_queries_);
     }
-    {
+    pump_queries();
+}
+
+int CtpTdGateway::send_query(const QueryJob& job) {
+    const int req_id = ++request_id_;
+    switch (job.kind) {
+    case QueryKind::InstrumentSymbol: {
+        CThostFtdcQryInstrumentField q{};
+        auto [exchange, instrument] = split_tq_symbol(job.symbol);
+        (void)exchange;
+        set_field(q.InstrumentID, sizeof(q.InstrumentID), instrument);
+        return api_->ReqQryInstrument(&q, req_id);
+    }
+    case QueryKind::Account: {
         CThostFtdcQryTradingAccountField q{};
         set_field(q.BrokerID, sizeof(q.BrokerID), cfg_.broker_id);
         set_field(q.InvestorID, sizeof(q.InvestorID), cfg_.user_id);
-        count(api_->ReqQryTradingAccount(&q, ++request_id_));
+        return api_->ReqQryTradingAccount(&q, req_id);
     }
-    {
+    case QueryKind::Position: {
         CThostFtdcQryInvestorPositionField q{};
         set_field(q.BrokerID, sizeof(q.BrokerID), cfg_.broker_id);
         set_field(q.InvestorID, sizeof(q.InvestorID), cfg_.user_id);
-        count(api_->ReqQryInvestorPosition(&q, ++request_id_));
+        return api_->ReqQryInvestorPosition(&q, req_id);
     }
-    {
+    case QueryKind::Order: {
         CThostFtdcQryOrderField q{};
         set_field(q.BrokerID, sizeof(q.BrokerID), cfg_.broker_id);
         set_field(q.InvestorID, sizeof(q.InvestorID), cfg_.user_id);
-        count(api_->ReqQryOrder(&q, ++request_id_));
+        return api_->ReqQryOrder(&q, req_id);
     }
-    {
+    case QueryKind::Trade: {
         CThostFtdcQryTradeField q{};
         set_field(q.BrokerID, sizeof(q.BrokerID), cfg_.broker_id);
         set_field(q.InvestorID, sizeof(q.InvestorID), cfg_.user_id);
-        count(api_->ReqQryTrade(&q, ++request_id_));
+        return api_->ReqQryTrade(&q, req_id);
+    }
+    }
+    return -1;
+}
+
+void CtpTdGateway::pump_queries() {
+    if (!query_in_flight_ || query_waiting_ || stopped_ || !logged_in_) {
+        return;
+    }
+    if (query_queue_.empty()) {
+        return;
     }
 
+    QueryJob job = query_queue_.front();
+    query_queue_.pop_front();
+    active_query_kind_ = job.kind;
+    const int ret      = send_query(job);
+    SPDLOG_DEBUG("[CtpTd] query send kind={} ret={}", static_cast<int>(job.kind), ret);
+    if (ret == 0) {
+        query_waiting_ = true;
+        return;
+    }
+
+    // -2/-3: 未处理请求超过许可数 / 每秒请求数超过许可数。
+    // 保持同一 job 重排队，退避后再发；绝不并发轰炸 CTP 查询接口。
+    if ((ret == -2 || ret == -3) && job.attempts < 8) {
+        ++job.attempts;
+        SPDLOG_WARN("[CtpTd] query kind={} throttled ret={}, retry {}/8",
+                    static_cast<int>(job.kind),
+                    ret,
+                    job.attempts);
+        query_queue_.push_front(job);
+        schedule_query_after(std::chrono::seconds(1));
+        return;
+    }
+
+    SPDLOG_WARN("[CtpTd] query kind={} failed ret={}", static_cast<int>(job.kind), ret);
+    query_failed();
+}
+
+void CtpTdGateway::schedule_query_after(std::chrono::milliseconds delay) {
+    if (!query_in_flight_ || stopped_) {
+        return;
+    }
+    query_timer_.expires_after(delay);
+    query_timer_.async_wait([this](boost::system::error_code ec) {
+        if (!ec && !stopped_ && query_in_flight_) {
+            pump_queries();
+        }
+    });
+}
+
+void CtpTdGateway::query_failed() {
+    if (active_query_kind_ == QueryKind::InstrumentSymbol) {
+        finish_instrument_query();
+    }
+    if (pending_queries_ > 0) {
+        --pending_queries_;
+    }
     if (pending_queries_ == 0) {
-        query_in_flight_ = false;
-        emit_diff(initial);
+        complete_queries();
+    } else {
+        // 给 CTP 一点喘息时间，再发下一条查询。
+        schedule_query_after(std::chrono::milliseconds(300));
     }
 }
 
@@ -645,18 +854,32 @@ void CtpTdGateway::finish_queries() {
     if (!query_in_flight_) {
         return;
     }
+    query_waiting_ = false;
     if (pending_queries_ > 0) {
         --pending_queries_;
     }
     if (pending_queries_ == 0) {
-        const bool initial = query_initial_;
-        query_in_flight_   = false;
-        query_initial_     = false;
-        emit_diff(initial);
-        if (refresh_pending_) {
-            refresh_pending_ = false;
-            schedule_refresh();
-        }
+        complete_queries();
+    } else {
+        schedule_query_after(std::chrono::milliseconds(300));
+    }
+}
+
+void CtpTdGateway::complete_queries() {
+    const bool initial = query_initial_;
+    if (initial) {
+        SPDLOG_INFO("[CtpTd] initial query snapshot complete");
+    } else {
+        SPDLOG_DEBUG("[CtpTd] refresh query snapshot complete");
+    }
+    query_in_flight_ = false;
+    query_initial_   = false;
+    query_waiting_   = false;
+    query_queue_.clear();
+    emit_diff(initial);
+    if (refresh_pending_) {
+        refresh_pending_ = false;
+        schedule_refresh();
     }
 }
 

@@ -11,7 +11,10 @@ TqApi::TqApi(asio::any_io_executor              ex,
       md_(std::move(md)),
       td_(std::move(td)),
       merger_(data_),
-      update_signal_(ex_) {}
+      update_signal_(ex_),
+      order_seq_(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(
+                                           std::chrono::system_clock::now().time_since_epoch())
+                                           .count())) {}
 
 TqApi::~TqApi() {
     close();
@@ -282,7 +285,10 @@ bool TqApi::is_changing(const Account& a, uint64_t field_bits) const noexcept {
 
 // ---------- 交易 ----------
 std::string TqApi::next_order_id() {
-    return "rid_" + std::to_string(order_seq_.fetch_add(1, std::memory_order_relaxed));
+    // CTP OrderRef 本质是递增的 int32；用 epoch 秒播种，格式为 r<十进制>。
+    // 12 字符以内，可原样作为 CTP OrderRef，且重启后新号大于柜台历史号。
+    const uint64_t seq = order_seq_.fetch_add(1, std::memory_order_relaxed) % 2'000'000'000ULL;
+    return "r" + std::to_string(seq);
 }
 
 asio::awaitable<Order*> TqApi::insert_order(const InsertOrderReq& req) {

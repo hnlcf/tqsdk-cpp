@@ -27,8 +27,8 @@ if(TQSDK_BUILD_TESTS)
     find_package(GTest CONFIG REQUIRED)
 endif()
 
-# ---------- 核心库 (不依赖 CTP) ----------
-add_library(tqsdk_core
+# ---------- 核心动态库（CTP 开启时直接并入同一 .so） ----------
+add_library(tqsdk_core SHARED
     src/api/tq_api.cpp
     src/ipc/uds_channel.cpp
     src/ipc/tcp_channel.cpp
@@ -110,33 +110,62 @@ if(TQSDK_ENABLE_CTP)
         endif()
     endif()
 
+    # CTP SDK 的 .so 没有 SONAME，且文件名没有 lib 前缀。若按绝对路径链接，
+    # DT_NEEDED 会写入构建机路径；若直接 -l 又找不到文件。
+    # 解决：在构建目录生成 lib 前缀的符号链接用于链接，安装时也用同名文件，
+    # 这样 DT_NEEDED 只保留文件名，运行时由 $ORIGIN 找到同目录的 CTP 库。
+    function(tq_ctp_lib_name out_var lib_path)
+        get_filename_component(name "${lib_path}" NAME)
+        if(name MATCHES "^lib")
+            set("${out_var}" "${name}" PARENT_SCOPE)
+        else()
+            set("${out_var}" "lib${name}" PARENT_SCOPE)
+        endif()
+    endfunction()
+
+    tq_ctp_lib_name(CTP_TRADER_SONAME "${CTP_TRADER_LIB}")
+    tq_ctp_lib_name(CTP_MD_SONAME "${CTP_MD_LIB}")
+
+    set(CTP_LINK_DIR "${CMAKE_CURRENT_BINARY_DIR}/ctp-libs")
+    file(MAKE_DIRECTORY "${CTP_LINK_DIR}")
+    set(CTP_TRADER_LINK "${CTP_LINK_DIR}/${CTP_TRADER_SONAME}")
+    set(CTP_MD_LINK "${CTP_LINK_DIR}/${CTP_MD_SONAME}")
+    if(NOT EXISTS "${CTP_TRADER_LINK}")
+        file(CREATE_LINK "${CTP_TRADER_LIB}" "${CTP_TRADER_LINK}" SYMBOLIC)
+    endif()
+    if(NOT EXISTS "${CTP_MD_LINK}")
+        file(CREATE_LINK "${CTP_MD_LIB}" "${CTP_MD_LINK}" SYMBOLIC)
+    endif()
+
     add_library(ctp_trader SHARED IMPORTED)
     set_target_properties(ctp_trader PROPERTIES
-        IMPORTED_LOCATION "${CTP_TRADER_LIB}"
+        IMPORTED_LOCATION "${CTP_TRADER_LINK}"
+        IMPORTED_NO_SONAME TRUE
+        IMPORTED_SONAME "${CTP_TRADER_SONAME}"
         INTERFACE_INCLUDE_DIRECTORIES "${CTP_INCLUDE_DIR}"
     )
 
     add_library(ctp_md SHARED IMPORTED)
     set_target_properties(ctp_md PROPERTIES
-        IMPORTED_LOCATION "${CTP_MD_LIB}"
+        IMPORTED_LOCATION "${CTP_MD_LINK}"
+        IMPORTED_NO_SONAME TRUE
+        IMPORTED_SONAME "${CTP_MD_SONAME}"
         INTERFACE_INCLUDE_DIRECTORIES "${CTP_INCLUDE_DIR}"
     )
 
-    add_library(tqsdk_ctp_gateway
+    # CTP 源文件直接编译进唯一的 tqsdk_core 动态库，不再生成第二个库。
+    target_sources(tqsdk_core PRIVATE
         src/gateway/ctp/ctp_td_gateway.cpp
         src/gateway/ctp/ctp_md_gateway.cpp
         src/gateway/ctp/ctp_task_queue.cpp
         src/gateway/ctp/ctp_spi_impl.cpp
     )
 
-    target_link_libraries(tqsdk_ctp_gateway PUBLIC
-        tqsdk_core
-        ctp_trader
-        ctp_md
-    )
-
-    target_include_directories(tqsdk_ctp_gateway PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    target_link_libraries(tqsdk_core PRIVATE ctp_trader ctp_md)
+    target_compile_definitions(tqsdk_core PUBLIC TQSDK_ENABLE_CTP=1)
+    target_include_directories(tqsdk_core PUBLIC
+        $<BUILD_INTERFACE:${CTP_INCLUDE_DIR}>
+        $<INSTALL_INTERFACE:include>
     )
 endif()
 
@@ -149,11 +178,6 @@ if(TQSDK_BUILD_APPS)
 
     add_executable(tqsdk-node apps/node_main.cpp)
     target_link_libraries(tqsdk-node PRIVATE tqsdk_core)
-
-    if(TQSDK_ENABLE_CTP)
-        target_link_libraries(tqsdk-gw PRIVATE tqsdk_ctp_gateway)
-        target_compile_definitions(tqsdk-gw PRIVATE TQSDK_ENABLE_CTP=1)
-    endif()
 endif()
 
 # ---------- 示例可执行文件 ----------
@@ -162,10 +186,6 @@ option(TQSDK_BUILD_EXAMPLES "Build example executables" OFF)
 if (TQSDK_BUILD_EXAMPLES)
     add_executable(tqsdk_demo examples/demo.cpp)
     target_link_libraries(tqsdk_demo PRIVATE tqsdk_core)
-
-    if(TQSDK_ENABLE_CTP)
-        target_link_libraries(tqsdk_demo PRIVATE tqsdk_ctp_gateway)
-    endif()
 endif()
 
 # ---------- 测试 ----------
@@ -211,8 +231,6 @@ if(TQSDK_BUILD_TESTS)
 
     if(TQSDK_ENABLE_CTP)
         target_sources(tqsdk_tests PRIVATE tests/gateway/ctp_mapping_test.cpp)
-        target_link_libraries(tqsdk_tests PRIVATE tqsdk_ctp_gateway)
-        target_compile_definitions(tqsdk_tests PRIVATE TQSDK_ENABLE_CTP=1)
     endif()
 
     include(GoogleTest)
@@ -222,13 +240,21 @@ endif()
 # ==========================================================
 # 安装规则
 # ==========================================================
+# 让安装后的 bin 能找到 ../lib 下的 libtqsdk_core.so，
+# 让 lib 下的 libtqsdk_core.so 能找到同目录的 CTP SDK 动态库。
+if(UNIX)
+    set_target_properties(tqsdk_core PROPERTIES INSTALL_RPATH "$ORIGIN")
+    if(TQSDK_BUILD_APPS)
+        set_target_properties(tqsdk-gw tqsdk-node PROPERTIES INSTALL_RPATH "$ORIGIN/../lib")
+    endif()
+endif()
+
 if(TQSDK_BUILD_APPS)
     install(TARGETS tqsdk-gw tqsdk-node
             RUNTIME DESTINATION bin)
 endif()
 
-# tqsdk_core：默认是静态库(ARCHIVE)；若以后 BUILD_SHARED_LIBS=ON，
-# 则 .so/.dll 分别走 LIBRARY / RUNTIME，所以三种都写上最稳。
+# 唯一的核心动态库（CTP 开启时 CTP 目标文件已编入本库）。
 install(TARGETS tqsdk_core
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
@@ -239,17 +265,26 @@ install(DIRECTORY include/
         DESTINATION include
         FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
 
-# CTP 网关（可选）
+# CTP 是唯一需要随包分发的第三方运行时库；其头文件也一并安装，
+# 这样安装后的 tqsdk/gateway/ctp/*.h 仍可被下游编译。
 if(TQSDK_ENABLE_CTP)
-    install(TARGETS tqsdk_ctp_gateway
-            ARCHIVE DESTINATION lib
-            LIBRARY DESTINATION lib
-            RUNTIME DESTINATION bin)
-    # IMPORTED 目标不能被 install(TARGETS)，必须手动拷 CTP 自带的动态库，
-    # 否则用户解压后 tqsdk-gw 运行时会找不到 libthost*_se.so
-    install(FILES "${CTP_TRADER_LIB}" "${CTP_MD_LIB}" DESTINATION lib)
-    # Windows 上还需把 thosttraderapi_se.dll / thostmduserapi_se.dll 一起装进来
+    if(WIN32)
+        install(FILES "${CTP_TRADER_LIB}" "${CTP_MD_LIB}" DESTINATION bin)
+    else()
+        # 安装为带 lib 前缀的名字；与 tqsdk_core.so 的 DT_NEEDED 一致。
+        install(FILES "${CTP_TRADER_LIB}" DESTINATION lib RENAME "${CTP_TRADER_SONAME}")
+        install(FILES "${CTP_MD_LIB}" DESTINATION lib RENAME "${CTP_MD_SONAME}")
+    endif()
+    install(DIRECTORY "${CTP_INCLUDE_DIR}/"
+            DESTINATION include
+            FILES_MATCHING PATTERN "*.h")
 endif()
+
+# 示例配置与文档；brokers.json 可能含柜台信息，不随包强制分发。
+install(FILES config/gw.toml config/node.toml
+        DESTINATION share/tqsdk/config)
+install(FILES README.md docs/CTP.md docs/SOAK_PERF.md docs/THREADING.md
+        DESTINATION share/doc/tqsdk)
 
 # ==========================================================
 # CPack：生成 .tar.gz
@@ -264,9 +299,9 @@ set(CPACK_GENERATOR "TGZ")
 set(CPACK_PACKAGE_FILE_NAME
     "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
 
-# 包内前缀：解压后得到 <包名>/opt/tqsdk/{bin,lib,include}
-# 若想解压出来直接是 bin/lib/include，把它设为 "/"（绿色分发常用）
+# 绿色分发：包内直接是 bin/lib/include，不再套一层 <包名>/ 目录。
 set(CPACK_PACKAGING_INSTALL_PREFIX "/")
+set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
 
 # 源码包先关掉，避免 cpack --config 时额外生成 source tarball
 set(CPACK_SOURCE_GENERATOR "")

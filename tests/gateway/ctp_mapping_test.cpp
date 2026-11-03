@@ -28,7 +28,7 @@ TEST(CtpConvert, OrderAndTradeJson) {
     auto oj = order_json(order, "rid_7");
     EXPECT_EQ(oj["order_id"], "rid_7");
     EXPECT_EQ(oj["exchange_order_id"], "sys_7");
-    EXPECT_EQ(oj["instrument_id"], "rb2610");
+    EXPECT_EQ(oj["instrument_id"], "SHFE.rb2610");
     EXPECT_EQ(oj["direction"], "BUY");
     EXPECT_EQ(oj["offset"], "OPEN");
     EXPECT_EQ(oj["volume_orign"], 2);
@@ -49,7 +49,22 @@ TEST(CtpConvert, OrderAndTradeJson) {
     EXPECT_EQ(tj["trade_id"], "trade_9");
     EXPECT_EQ(tj["order_id"], "rid_7");
     EXPECT_EQ(tj["volume"], 1);
+    EXPECT_EQ(tj["instrument_id"], "SHFE.rb2610");
     EXPECT_DOUBLE_EQ(tj["price"], 3799.0);
+}
+
+TEST(CtpConvert, SymbolNormalization) {
+    EXPECT_EQ(tq_symbol("SHFE", "rb2701"), "SHFE.rb2701");
+    EXPECT_EQ(tq_symbol("", "rb2701"), "rb2701");
+    auto [exchange, instrument] = split_tq_symbol("SHFE.rb2701");
+    EXPECT_EQ(exchange, "SHFE");
+    EXPECT_EQ(instrument, "rb2701");
+}
+
+TEST(CtpConvert, ConvertsGbkStatusMessageToUtf8) {
+    // "部分成交" 的 GBK 编码；CTP StatusMsg/ErrorMsg 是 GBK。
+    const char gbk[] = "\xb2\xbf\xb7\xd6\xb3\xc9\xbd\xbb";
+    EXPECT_EQ(cstr(gbk), "部分成交");
 }
 
 TEST(CtpConvert, AccountPositionDepth) {
@@ -83,15 +98,31 @@ TEST(CtpConvert, AccountPositionDepth) {
     EXPECT_DOUBLE_EQ(pj["margin_long"], 7600.0);
 
     CThostFtdcDepthMarketDataField depth{};
+    set_field(depth.ExchangeID, sizeof(depth.ExchangeID), "SHFE");
     set_field(depth.InstrumentID, sizeof(depth.InstrumentID), "rb2610");
     depth.LastPrice = 3800.0;
     depth.BidPrice1 = DBL_MAX;
     depth.AskPrice1 = 3801.0;
     depth.Volume    = 123;
     auto dj         = depth_json(depth);
+    EXPECT_EQ(dj["instrument_id"], "SHFE.rb2610");
     EXPECT_DOUBLE_EQ(dj["last_price"], 3800.0);
     EXPECT_FALSE(std::isfinite(dj["bid_price1"].get<double>()));
     EXPECT_DOUBLE_EQ(dj["ask_price1"], 3801.0);
+}
+
+TEST(CtpTaskQueue, HighPriorityRunsBeforeQueuedQueries) {
+    asio::io_context         ctx;
+    auto                     queue = std::make_shared<CtpTaskQueue>(ctx.get_executor());
+    std::vector<std::string> order;
+    queue->push([&] { order.push_back("query1"); });
+    queue->push([&] { order.push_back("query2"); });
+    queue->push_high([&] { order.push_back("trade"); });
+
+    tqsdk::test::drive_until(ctx, [&]() { return order.size() == 3; }, std::chrono::seconds(2));
+    ASSERT_EQ(order.size(), 3u);
+    EXPECT_EQ(order[0], "trade");
+    queue->stop();
 }
 
 TEST(CtpTaskQueue, RunsOnTargetExecutorAndDropsAfterStop) {

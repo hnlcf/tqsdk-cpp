@@ -32,7 +32,11 @@
   有界 sink；`GatewayIpcServer::attach_buses()` 在 gw_main 统一挂接，双连接广播有测。
 - ✅ **阶段 4 CTP 网关**：可选构建 `-DTQSDK_ENABLE_CTP=ON`；`CtpTaskQueue` 桥接
   SPI 线程，Md/Td 登录/订阅/报单/撤单/查询快照/断线重查；映射与队列有单测，
-  进程启动/停止有 smoke。详见 [`CTP.md`](./CTP.md)。
+  进程启动/停止有 smoke。已在 SimNow 实测登录、查询、账户快照、订阅、报单错误链路，
+  详见 [`CTP.md`](./CTP.md)。
+- ✅ **构建/打包**：`tqsdk_core` 改为唯一的 SHARED 核心库，CTP 源文件直接编入；
+  CPack 包内包含 `libtqsdk_core.so`、`libthost*.so`、头文件/配置/文档，并设置
+  `$ORIGIN` RPATH。
 - ✅ **soak / perf 工具**：`scripts/soak_two_process.py`（默认 24h）与
   `scripts/perf_baseline.py`；Release 30s soak、HTTP/WS 基线已归档到
   [`SOAK_PERF.md`](./SOAK_PERF.md)。
@@ -112,7 +116,7 @@
 - Channel 家族：basic/bounded/multiplex/close 全覆盖测试。
 - UDS IPC 通道：帧编解码、大 payload(1MB)、对端关闭、非法帧、幂等 close、双向并发。
 - 日志分级与文件轮转；测试 `main()` 统一初始化。
-- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 227 项（CTP 构建 230 项）
+- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 227 项（CTP 构建 233 项）
   （其中 2 个联网行情测试默认跳过），TSan 并发用例全绿。
 
 ### 2.5 测试规模快照（阶段 3 历史快照；当前总数见上）
@@ -505,7 +509,7 @@ include/tqsdk/
     uds_channel.h         UDS 实现
   util/                   log / serde / async_mutex / spawn_logged / runtime
 src/                      对应实现
-tests/                    ~227 用例（CTP 构建 230）
+tests/                    ~227 用例（CTP 构建 233）
 examples/demo.cpp
 scripts/probe_*.py        协议探测
 third_party/ctp/          CTP SDK（有头与 so，网关未实现）

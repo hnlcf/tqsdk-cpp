@@ -172,14 +172,27 @@ Gateway 内部处理 → 写入 Channel<TradeEvent> / Channel<MarketDataDiff>
 ### 构建
 
 ```bash
-# 测试（默认）
+# 测试（默认 preset；build/libtqsdk_core.so 是唯一核心动态库）
 cmake --preset default
 cmake --build build -j
 
 # 同时构建示例程序
 cmake -S . -B build -DTQSDK_BUILD_EXAMPLES=ON
 cmake --build build -j --target tqsdk_demo
+
+# 打包（Release/CTP 示例）
+cmake -S . -B build-pkg -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+  -DVCPKG_INSTALLED_DIR="$PWD/build/vcpkg_installed" \
+  -DVCPKG_MANIFEST_INSTALL=OFF \
+  -DTQSDK_ENABLE_CTP=ON
+cmake --build build-pkg -j
+cmake --build build-pkg --target package
+# build-pkg/tqsdk_cpp-<version>-Linux-<arch>.tar.gz
 ```
+
+包内是 `bin/`、`lib/`、`include/`、`share/`；CTP 开启时 `lib/` 同时带
+`libtqsdk_core.so` 和 `libthost*.so`，核心库已设置 `$ORIGIN` RPATH。
 
 ### 日志
 
@@ -421,7 +434,7 @@ include/tqsdk/
 src/                        对应实现
 apps/                       gw_main.cpp / node_main.cpp
 config/                     gw.toml / node.toml
-tests/                      227 用例（CTP 构建 230；channel/data/gateway/ipc/serve/e2e/config）
+tests/                      227 用例（CTP 构建 233；channel/data/gateway/ipc/serve/e2e/config）
 examples/demo.cpp           实时行情示例
 scripts/                    两进程冒烟 / 协议探测 / soak / perf baseline
 ```
