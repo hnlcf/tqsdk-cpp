@@ -67,7 +67,8 @@
             "targets": [
                 "tqsdk-ui",
                 "tqsdk-ui-tests",
-                "tqsdk_tests"
+                "tqsdk_tests",
+                "tqsdk-ui-model-tests"
             ]
         }
     ],

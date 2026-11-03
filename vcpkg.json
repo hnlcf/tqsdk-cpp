@@ -11,7 +11,13 @@
     "spdlog",
     "sqlitecpp",
     "tomlplusplus",
-    "qtbase",
+    {
+      "name": "qtbase",
+      "features": [
+        "wayland"
+      ]
+    },
+    "qtwayland",
     "qtwebsockets"
   ]
 }

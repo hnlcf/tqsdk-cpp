@@ -312,11 +312,25 @@ ui-package   Release，TQSDK_BUILD_UI=ON，TQSDK_BUILD_TESTS=OFF
 vcpkg 需要 Qt 6：
 
 ```json
-"qtbase",
+{
+  "name": "qtbase",
+  "features": ["wayland"]
+},
+"qtwayland",
 "qtwebsockets"
 ```
 
-如果 `qt` metaport 已包含所需组件，可只保留 metaport；至少需要：
+`qtwayland` 提供 Wayland QPA/client 模块；`qtbase[wayland]` 是其构建前提。
+`qtbase` 默认仍保留 XCB，因此 Wayland/XWayland 可以共存。
+
+静态 Qt 不会自动把 Wayland platform plugin 链入可执行文件，`ui/CMakeLists.txt`
+显式导入：
+
+```cmake
+qt_import_plugins(tqsdk-ui INCLUDE Qt6::QWaylandIntegrationPlugin)
+```
+
+至少需要：
 
 ```text
 Qt6::Core
@@ -326,25 +340,29 @@ Qt6::Network
 Qt6::WebSockets
 ```
 
-`qtwebsockets` 不是 `qtbase` 的必然子模块，配置阶段需要确认。
+配置阶段需要确认 `qtwebsockets` 和 Wayland plugin 都存在。
 
 ## 6. 实施阶段
 
-### Phase 0：骨架（当前）
+### Phase 0：骨架（已完成）
 
 - `ui/` 目录和最小 `QMainWindow`；
 - `NodeClient` 传输无关接口；
 - `HttpWsNodeClient` 的 HTTP/WS 基础实现；
 - CMake 子目录和 preset；
 - 文档、目录约定；
-- 页面暂不绑定数据，先确认 Qt 可编译启动。
+- Qt 6.11.2 + Wayland 静态链接验证通过。
 
-### Phase 1：只读行情
+### Phase 1：只读行情（已完成，2026-11）
 
-- NodeRestClient / NodeStreamClient；
-- 合约目录表和自选列表；
-- quote 合并、K 线 REST + WS；
-- 连接状态、重连、主题。
+- 自选/最近行情表和 `QuoteTableModel`；
+- `InstrumentTableModel` 合约目录表，支持搜索和双击切换；
+- `MarketStore` 合并 quote 和 K 线，支持 reset/append/update/裁剪；
+- `KLineChartWidget`：QPainter 蜡烛、成交量、坐标、当前价和十字光标；
+- 周期切换（1m/5m/15m/1h/1d）及 REST 历史 + WS 增量；
+- 深色/浅色主题；
+- Wayland 原生运行，XCB fallback；
+- QtTest 协议和模型测试。
 
 ### Phase 2：期权与交易
 

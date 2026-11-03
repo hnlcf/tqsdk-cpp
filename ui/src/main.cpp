@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
     app.setFont(font);
 
     tqsdk::ui::HttpWsNodeClient nodeClient;
-    MainWindow                  window(&nodeClient);
+    tqsdk::ui::MainWindow       window(&nodeClient);
     window.show();
     nodeClient.connectToNode(QUrl(parser.value(nodeUrlOption)));
     return app.exec();

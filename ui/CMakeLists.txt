@@ -21,6 +21,14 @@ set(TQSDK_UI_SOURCES
     src/net/Protocol.h
     src/net/HttpWsNodeClient.cpp
     src/net/HttpWsNodeClient.h
+    src/model/MarketStore.cpp
+    src/model/MarketStore.h
+    src/model/QuoteTableModel.cpp
+    src/model/QuoteTableModel.h
+    src/model/InstrumentTableModel.cpp
+    src/model/InstrumentTableModel.h
+    src/chart/KLineChartWidget.cpp
+    src/chart/KLineChartWidget.h
 )
 
 qt_add_executable(tqsdk-ui ${TQSDK_UI_SOURCES})
@@ -38,6 +46,10 @@ target_link_libraries(tqsdk-ui PRIVATE
 )
 
 target_compile_features(tqsdk-ui PRIVATE cxx_std_20)
+
+# Static vcpkg Qt does not automatically link the Wayland platform plugin.
+# Keep XCB for XWayland fallback and explicitly import the native Wayland QPA.
+qt_import_plugins(tqsdk-ui INCLUDE Qt6::QWaylandIntegrationPlugin)
 
 set_target_properties(tqsdk-ui PROPERTIES
     WIN32_EXECUTABLE TRUE
@@ -67,4 +79,25 @@ if(TQSDK_BUILD_UI_TESTS)
         Qt6::Test
     )
     add_test(NAME tqsdk-ui-protocol COMMAND tqsdk-ui-tests)
+
+    qt_add_executable(tqsdk-ui-model-tests
+        tests/ModelTest.cpp
+        src/net/Protocol.cpp
+        src/net/Protocol.h
+        src/model/MarketStore.cpp
+        src/model/MarketStore.h
+        src/model/QuoteTableModel.cpp
+        src/model/QuoteTableModel.h
+        src/model/InstrumentTableModel.cpp
+        src/model/InstrumentTableModel.h
+    )
+    target_include_directories(tqsdk-ui-model-tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(tqsdk-ui-model-tests PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Test
+    )
+    add_test(NAME tqsdk-ui-models COMMAND tqsdk-ui-model-tests)
 endif()

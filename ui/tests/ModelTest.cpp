@@ -1,0 +1,102 @@
+#include "model/InstrumentTableModel.h"
+#include "model/MarketStore.h"
+#include "model/QuoteTableModel.h"
+
+#include <QtTest>
+
+using namespace tqsdk::ui;
+
+class ModelTest : public QObject {
+    Q_OBJECT
+
+private slots:
+    void marketStoreQuotesAndKlines();
+    void quoteModelFormatsRows();
+    void instrumentModelFormatsRows();
+};
+
+void ModelTest::marketStoreQuotesAndKlines() {
+    MarketStore store;
+    QSignalSpy  quoteSpy(&store, &MarketStore::quotesChanged);
+
+    Quote quote;
+    quote.instrumentId  = "SHFE.rb2701";
+    quote.lastPrice     = 3010.5;
+    quote.preSettlement = 3000.0;
+    quote.bidPrice1     = 3010.0;
+    quote.askPrice1     = 3011.0;
+    quote.volume        = 123;
+    store.applyQuotes({quote});
+    QCOMPARE(quoteSpy.count(), 1);
+    QVERIFY(store.quote("SHFE.rb2701") != nullptr);
+    QCOMPARE(store.quote("SHFE.rb2701")->lastPrice, 3010.5);
+
+    KlineFrame reset;
+    reset.reset = true;
+    reset.bars  = {{1'000'000'000LL, 10.0, 12.0, 9.0, 11.0, 5, 1, 2}};
+    store.applyKline("SHFE.rb2701", 60'000'000'000LL, reset);
+    QCOMPARE(store.bars("SHFE.rb2701", 60'000'000'000LL).size(), 1);
+
+    KlineFrame tick;
+    tick.bars = {{2'000'000'000LL, 11.0, 13.0, 10.0, 12.0, 6, 2, 3}};
+    store.applyKline("SHFE.rb2701", 60'000'000'000LL, tick);
+    auto bars = store.bars("SHFE.rb2701", 60'000'000'000LL);
+    QCOMPARE(bars.size(), 2);
+    QCOMPARE(bars.back().close, 12.0);
+
+    KlineFrame update;
+    update.bars = {{2'000'000'000LL, 11.0, 14.0, 10.0, 13.0, 7, 2, 4}};
+    store.applyKline("SHFE.rb2701", 60'000'000'000LL, update);
+    bars = store.bars("SHFE.rb2701", 60'000'000'000LL);
+    QCOMPARE(bars.size(), 2);
+    QCOMPARE(bars.back().close, 13.0);
+
+    KlineFrame older;
+    older.bars = {{500'000'000LL, 9.0, 10.0, 8.0, 9.5, 2, 0, 1}};
+    store.applyKline("SHFE.rb2701", 60'000'000'000LL, older);
+    bars = store.bars("SHFE.rb2701", 60'000'000'000LL);
+    QCOMPARE(bars.size(), 3);
+    QCOMPARE(bars.front().datetime, 500'000'000LL);
+}
+
+void ModelTest::quoteModelFormatsRows() {
+    QuoteTableModel model;
+    model.setSymbols({"SHFE.rb2701", "DCE.m2701"});
+    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(model.symbolAt(1), QString("DCE.m2701"));
+
+    Quote quote;
+    quote.instrumentId  = "SHFE.rb2701";
+    quote.lastPrice     = 3010.5;
+    quote.preSettlement = 3000.0;
+    quote.bidPrice1     = 3010.0;
+    quote.askPrice1     = 3011.0;
+    quote.volume        = 42;
+    model.applyQuotes({quote});
+    QCOMPARE(model.data(model.index(0, QuoteTableModel::Last)).toString(), QString("3010.50"));
+    QCOMPARE(model.data(model.index(0, QuoteTableModel::ChangePercent)).toString(),
+             QString("+0.35%"));
+    QCOMPARE(model.data(model.index(1, QuoteTableModel::Last)).toString(), QString("—"));
+}
+
+void ModelTest::instrumentModelFormatsRows() {
+    InstrumentTableModel model;
+    Instrument           instrument;
+    instrument.instrumentId   = "SHFE.rb2701";
+    instrument.name           = "螺纹2701";
+    instrument.exchangeId     = "SHFE";
+    instrument.product        = "SHFE.rb";
+    instrument.lastPrice      = 3010.0;
+    instrument.priceTick      = 1.0;
+    instrument.volumeMultiple = 10.0;
+    model.setInstruments({instrument});
+    QCOMPARE(model.rowCount(), 1);
+    QCOMPARE(model.symbolAt(0), QString("SHFE.rb2701"));
+    QCOMPARE(model.data(model.index(0, InstrumentTableModel::Name)).toString(),
+             QString("螺纹2701"));
+    QCOMPARE(model.data(model.index(0, InstrumentTableModel::Multiplier)).toString(),
+             QString("10"));
+}
+
+QTEST_APPLESS_MAIN(ModelTest)
+#include "ModelTest.moc"

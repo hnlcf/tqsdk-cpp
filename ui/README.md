@@ -14,11 +14,17 @@
 vcpkg 至少需要：
 
 ```json
-"qtbase",
-"qtwebsockets"
+{
+  "name": "qtbase",
+  "features": ["wayland"]
+},
+"qtwayland",
+"qtwebsockets",
 ```
 
-如果 `"qt"` metaport 已包含所需模块，可以只使用 metaport；配置阶段会明确
+`qtwayland` 提供 Qt Wayland QPA/client 模块；`qtbase[wayland]` 是它的构建前提。
+XCB 仍由 `qtbase` 默认 feature 保留，因此可以在 Wayland 和 XWayland 之间切换。
+如果 `"qt"` metaport 已包含所需模块，也可以只使用 metaport；配置阶段会明确
 报告缺少的 Qt 组件。
 
 ## 构建
@@ -29,7 +35,7 @@ UI 默认关闭，避免影响后端核心构建。先安装 Qt，再用 UI pres
 export VCPKG_ROOT=/path/to/vcpkg
 cmake --preset ui-dev
 cmake --build --preset ui-dev
-ctest --test-dir build-ui -R tqsdk-ui-protocol --output-on-failure
+ctest --test-dir build-ui -R 'tqsdk-ui-(protocol|models)' --output-on-failure
 ./build-ui/bin/tqsdk-ui
 ```
 
@@ -42,14 +48,19 @@ cmake --build build-ui --target tqsdk-ui -j
 
 ## 当前阶段
 
-已在 Qt 6.11.2 + QtWebSockets 上验证过首次 configure/build。
+已在 Qt 6.11.2 + QtWebSockets + Wayland 上验证 configure/build 和运行时连接。
 
-Phase 0.5：
+Phase 1（已完成）：
 
-- 窗口壳和布局占位；
-- `NodeClient` 传输无关接口；
-- `HttpWsNodeClient`：HTTP 快照/下单 + WebSocket 订阅/diff；
-- 页面尚未绑定数据，K 线自绘、期货列表、期权链和交易面板在 Phase 1/2 接入。
+- 自选/最近行情表，绑定 node WS quote snapshot/diff；
+- 期货合约列表，绑定 REST `/catalog/instruments`，支持搜索和双击切换；
+- QPainter 自绘 K 线：蜡烛、成交量、价格/时间坐标、当前价、十字光标；
+- 1m/5m/15m/1h/1d 周期切换，K 线 REST 历史 + WS diff；
+- 深色/浅色主题；
+- Wayland 原生运行，保留 XCB/XWayland fallback；
+- QtTest 覆盖协议解析、MarketStore 合并和 table models。
+
+Phase 2 待接入：期权链/T 型报价、下单/撤单、账户/持仓/委托/成交表。
 
 启动时指定 node：
 
