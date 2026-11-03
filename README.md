@@ -156,6 +156,10 @@ Gateway 内部处理 → 写入 Channel<TradeEvent> / Channel<MarketDataDiff>
 
 这个模式与 vnpy_ctp 的 Task Queue 架构一致：CTP 回调只负责将数据封装为任务入队，由独立的消费者将数据投递到 Asio 执行上下文中进行后续处理。区别在于，vnpy 的任务队列最终服务于 Python GIL 边界，而这里的任务队列服务于将回调线程的同步世界安全地桥接到 Asio 的异步世界。
 
+已落地：`gateway/ctp/ctp_task_queue` + `ctp_spi_impl` + `CtpMdGateway/CtpTdGateway`；
+构建 `-DTQSDK_ENABLE_CTP=ON` 后在 `[md]/[td]` 使用 `kind="ctp"`。订单/成交/持仓/账户
+映射、登录结算、查询快照、断线重查和 200ms debounce 刷新见 [`docs/CTP.md`](./CTP.md)。
+
 ### 异步执行模型建议
 
 - 单一 io_context + 多线程 run() 作为全局执行引擎。所有网关的 Asio 操作、通道收发、定时器都绑定到同一个 io_context。
@@ -323,9 +327,9 @@ websocat -t ws://127.0.0.1:8080/stream
   最后一个客户端退订/断开时才 `release`（与网关引用计数语义对称）。
 - **每连接单写者 + 有界队列**：writer 协程独占 socket 写（消息与心跳 ping），
   慢消费者队列满时丢最旧消息；服务端按 `heartbeat_interval_ms` 发 WebSocket ping。
-- **executor 归属**：Hub 全部状态与 reader/writer 协程运行在 core strand；
-  多 worker 下 HTTP 连接并行，但 WebSocket 数据面仍由 core 串行（详见
-  [`docs/THREADING.md`](./THREADING.md)）。
+- **executor 归属**：Hub 状态/订阅表/广播在 core strand；每客户端 reader/writer
+  与 socket I/O 有独立 strand，入队用 post 切到客户端 strand。多 worker 下
+  WebSocket 连接之间可并行（详见 [`docs/THREADING.md`](./THREADING.md)）。
 - 配置见 `config/node.toml` 的 `[serve.ws]` 与 `[runtime]`。
 - 单测：`tests/serve/ws_stream_test.cpp`（真实 TCP + WebSocket 往返）。
 
@@ -360,10 +364,11 @@ length = 2 + payload.size()          # 含 type+encoding
 ### 多线程运行时
 
 - `[runtime].threads` / `--threads N` 控制 io_context worker 数（默认 1，上限 64）；
-- node 使用「每连接 strand 做 HTTP I/O + 单 core strand 做数据面」：
+- node 使用「每连接 strand 做 HTTP/WS I/O + 单 core strand 做数据面」：
   handler 前 `dispatch(core)`，写回前切回连接 strand；
-- TqApi/DataManager/网关/IPC/WebSocketHub 全部绑定 core strand，跨组件无锁；
-- gw 当前把网关与会话收敛到一条 core strand，优先保证多连接状态安全；
+- TqApi/DataManager/网关/IPC/WebSocketHub 状态全部绑定 core strand，跨组件无锁；
+- gw 每条 node 连接独立 strand；EventBus 把共享网关事件 post 到各连接 sink，
+  共享网关的 subscribe/release/snapshot 统一 dispatch 到 core strand；
 - 执行器边界、关闭顺序、TSan 命令与后续演进见 [`docs/THREADING.md`](./THREADING.md)。
 
 ## 模块文档
@@ -371,7 +376,9 @@ length = 2 + payload.size()          # 含 type+encoding
 逐模块的**目标 / 边界 / 关键约定 / 生命周期**见 [`docs/MODULES.md`](./MODULES.md)；
 两进程拆分、阶段路线、性能与风险见 [`docs/ROADMAP.md`](./ROADMAP.md)；
 可靠性恢复见 [`docs/IPC_RECOVERY.md`](./IPC_RECOVERY.md)；
-多线程模型见 [`docs/THREADING.md`](./THREADING.md)。
+多线程模型见 [`docs/THREADING.md`](./THREADING.md)；
+CTP 接入见 [`docs/CTP.md`](./CTP.md)；
+长稳/性能见 [`docs/SOAK_PERF.md`](./SOAK_PERF.md)。
 
 ### 源码地图
 
@@ -387,6 +394,7 @@ include/tqsdk/
     trading_gateway.h        交易网关抽象（insert_order/cancel_order/event_output）
     tq/tq_md_gateway.h       天勤行情（WebSocket/TLS，订阅引用计数 + peek 闸门）
     sim/sim_td_gateway.h     本地撮合模拟器
+    ctp/                     CTP 行情/交易（可选构建，TaskQueue 桥接 SPI 线程）
     mock/*                   脚本化测试网关
   ipc/
     frame.h                 帧格式 + FrameType（跨语言契约）
@@ -413,7 +421,7 @@ include/tqsdk/
 src/                        对应实现
 apps/                       gw_main.cpp / node_main.cpp
 config/                     gw.toml / node.toml
-tests/                      ~224 用例（channel/data/gateway/ipc/serve/e2e/config）
+tests/                      227 用例（CTP 构建 230；channel/data/gateway/ipc/serve/e2e/config）
 examples/demo.cpp           实时行情示例
-scripts/                    两进程冒烟 / 协议探测
+scripts/                    两进程冒烟 / 协议探测 / soak / perf baseline
 ```

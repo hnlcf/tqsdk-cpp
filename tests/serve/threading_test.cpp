@@ -1,5 +1,6 @@
 #include "tqsdk/pch.h"
 
+#include "tqsdk/gateway/mock/mock_md_gateway.h"
 #include "tqsdk/gateway/sim/sim_td_gateway.h"
 #include "tqsdk/serve/http_server.h"
 #include "tqsdk/tqapi.h"
@@ -7,6 +8,7 @@
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
+#include <boost/beast/websocket.hpp>
 
 namespace {
 
@@ -40,6 +42,55 @@ get_once(asio::any_io_executor ex, std::string host, uint16_t port, std::string 
     boost::system::error_code ec;
     stream.socket().shutdown(tcp::socket::shutdown_send, ec);
     co_return;
+}
+
+asio::awaitable<void> ws_roundtrip(asio::any_io_executor ex,
+                                   std::string           host,
+                                   uint16_t              port,
+                                   std::string           path,
+                                   tqsdk::MockMdGateway* md) {
+    namespace websocket = boost::beast::websocket;
+    using ws_t          = websocket::stream<beast::tcp_stream>;
+
+    ws_t          ws(ex);
+    tcp::endpoint ep{asio::ip::make_address(host), port};
+    co_await ws.next_layer().async_connect(ep, asio::use_awaitable);
+    co_await ws.async_handshake(host, path, asio::use_awaitable);
+
+    beast::flat_buffer buffer;
+    auto               read_json = [&]() -> asio::awaitable<nlohmann::json> {
+        buffer.clear();
+        co_await ws.async_read(buffer, asio::use_awaitable);
+        co_return nlohmann::json::parse(beast::buffers_to_string(buffer.data()));
+    };
+
+    auto welcome = co_await read_json();
+    if (welcome.value("type", "") != "welcome") {
+        throw std::runtime_error("missing welcome");
+    }
+
+    std::string sub = R"({"op":"subscribe","symbols":["SHFE.rb2610"],"klines":[],"topics":[]})";
+    co_await ws.async_write(asio::buffer(sub), asio::use_awaitable);
+
+    auto subscribed = co_await read_json();
+    if (subscribed.value("type", "") != "subscribed") {
+        throw std::runtime_error("missing subscribed");
+    }
+    auto snapshot = co_await read_json();
+    if (snapshot.value("type", "") != "snapshot") {
+        throw std::runtime_error("missing snapshot");
+    }
+
+    md->inject(nlohmann::json{{"quotes", {{"SHFE.rb2610", {{"last_price", 3800.0}}}}}});
+    auto diff = co_await read_json();
+    if (diff.value("type", "") != "diff" || !diff["data"].contains("quotes") ||
+        !diff["data"]["quotes"].contains("SHFE.rb2610")) {
+        throw std::runtime_error("missing quote diff");
+    }
+
+    boost::system::error_code ec;
+    co_await ws.async_close(websocket::close_reason(websocket::close_code::normal),
+                            asio::redirect_error(asio::use_awaitable, ec));
 }
 
 } // namespace
@@ -89,6 +140,57 @@ TEST(Threading, HttpServerWithMultipleIoThreads) {
 
     EXPECT_EQ(done.load(), kClients);
     EXPECT_EQ(failed.load(), 0);
+
+    server.stop();
+    api.close();
+    io.restart();
+    io.run_for(std::chrono::milliseconds(100));
+}
+
+// 多 worker + 每 WebSocket 客户端独立 strand：
+// welcome/subscribed/snapshot 往返、订阅后 diff 推送都应正常。
+TEST(Threading, WebSocketWithMultipleIoThreads) {
+    asio::io_context io;
+    auto             io_ex   = io.get_executor();
+    auto             core_ex = asio::make_strand(io);
+
+    auto         md_owner = std::make_unique<tqsdk::MockMdGateway>(core_ex);
+    auto         md       = md_owner.get();
+    tqsdk::TqApi api(core_ex, std::move(md_owner), nullptr);
+    api.start();
+
+    tqsdk::serve::HttpServer server(&api, io_ex, {}, core_ex);
+    server.listen("127.0.0.1", 0);
+    const uint16_t port = server.port();
+
+    bool               done = false;
+    std::exception_ptr error;
+    auto               client_ex = asio::make_strand(io);
+    asio::co_spawn(client_ex,
+                   ws_roundtrip(client_ex, "127.0.0.1", port, "/stream", md),
+                   [&](std::exception_ptr ep) {
+                       error = ep;
+                       done  = true;
+                       io.stop();
+                   });
+
+    std::vector<std::thread> workers;
+    for (int i = 1; i < 4; ++i) {
+        workers.emplace_back([&io]() { io.run(); });
+    }
+    io.run();
+    for (auto& t : workers) {
+        t.join();
+    }
+
+    EXPECT_TRUE(done);
+    if (error) {
+        try {
+            std::rethrow_exception(error);
+        } catch (const std::exception& e) {
+            ADD_FAILURE() << e.what();
+        }
+    }
 
     server.stop();
     api.close();

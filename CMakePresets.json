@@ -12,7 +12,7 @@
                 "CMAKE_CXX_FLAGS": "-fsanitize=address -fno-omit-frame-pointer -g",
                 "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address -fuse-ld=mold",
                 "CMAKE_SHARED_LINKER_FLAGS": "-fuse-ld=mold",
-                "TQSDK_ENABLE_CTP": "OFF",
+                "TQSDK_ENABLE_CTP": "ON",
                 "TQSDK_BUILD_EXAMPLES": "ON",
                 "TQSDK_BUILD_TESTS": "ON"
             }
@@ -29,7 +29,7 @@
                 "VCPKG_HOST_TRIPLET": "x64-linux-release",
                 "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=mold",
                 "CMAKE_SHARED_LINKER_FLAGS": "-fuse-ld=mold",
-                "TQSDK_ENABLE_CTP": "OFF",
+                "TQSDK_ENABLE_CTP": "ON",
                 "TQSDK_BUILD_EXAMPLES": "ON",
                 "TQSDK_BUILD_TESTS": "ON"
             }

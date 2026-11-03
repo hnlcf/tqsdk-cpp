@@ -101,9 +101,11 @@ public:
     Metrics              metrics() const noexcept { return metrics_; }
 
     /// 发送一条命令并等待对端 CommandAck（按 rid 关联，带超时）。
-    /// 超时 / 会话关闭 抛 IpcError。
+    /// max_attempts > 1 时，超时后用**同一 rid** 重发；gw 端有命令幂等缓存，
+    /// 不会重复提交非幂等报单。会话关闭不重试。
     asio::awaitable<CommandAck> send_command_and_wait(const CommandBody&        body,
-                                                      std::chrono::milliseconds timeout);
+                                                      std::chrono::milliseconds timeout,
+                                                      int                       max_attempts = 1);
 
     /// 优雅关闭：发 Goodbye + 关闭 session；唤醒所有 pending 请求。
     void stop() noexcept;

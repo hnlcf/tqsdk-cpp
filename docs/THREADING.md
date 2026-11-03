@@ -55,10 +55,17 @@ threads = 4
 ### 2.2 WebSocket 路径
 
 WebSocket 升级请求在 session 中先 `dispatch(core_ex)`，再交给
-`WebSocketHub::accept()`。Hub 的 `clients_` / 引用计数 / 订阅表 / 写队列
-全部只在 core strand 上访问；`Hub::push_loop` 也是 core 上唯一调用
-`TqApi::wait_update()` 的协程。WebSocket 的 reader/writer 协程同样在
-core strand 上运行，因此当前阶段 WS 数据面是串行的。
+`WebSocketHub::accept()`。Hub 的 `clients_` / 引用计数 / 订阅表 / 广播循环
+仍只在 core strand 上访问；`Hub::push_loop` 是 core 上唯一调用
+`TqApi::wait_update()` 的协程。
+
+每个 `Client` 另有 `client_ex_ = make_strand(io_ex)`：
+
+- reader/writer 协程、socket `async_read/write`、客户端队列都在 `client_ex_`；
+- Hub 广播 `post_text()` 用 `asio::post(client_ex_, ...)` 入队，慢客户端只影响自己；
+- reader 解析完帧后 dispatch 到 `hub_ex_` 改订阅/引用计数，再切回客户端 strand 回复。
+
+因此 WebSocket 连接之间可以并行，Hub/DataManager 状态仍然串行。
 
 ### 2.3 网关与 IPC
 
@@ -74,20 +81,35 @@ core strand 上运行，因此当前阶段 WS 数据面是串行的。
 
 ## 3. gw 的执行器布局
 
-gw 当前使用**一条进程级 core strand** 承载：
+gw 使用两层执行器：
 
-- 真实网关（TqMdGateway / SimTdGateway）；
-- 每个 `GatewayIpcServer`、其 md/td pump、控制循环；
-- 每个连接的 `IpcSession` 后台读/心跳/看门狗协程。
+```text
+gateway_ex_ (进程级 core strand)
+  - 真实网关 TqMdGateway / SimTdGateway / CtpMdGateway / CtpTdGateway
+  - EventBus md/td 源读取与 sink 列表
+  - 共享网关的 subscribe/release/snapshot 调用
 
-worker 线程数 > 1 时，socket I/O 可以由多个线程推进，但所有业务状态更新
-仍被 strand 串行化。
+每个 node 连接：
+  srv_ex = make_strand(io_ex)
+  - GatewayIpcServer 的 md/td pump、控制循环
+  - IpcSession 后台读/心跳/看门狗
+  - 该连接的 sink 队列
+```
 
-多 node 共享网关的“单消费者 Channel”问题已由 `ipc/event_bus.h` 解决：
-EventBus 是唯一消费者，把事件非阻塞复制到每个 `GatewayIpcServer` 的有界 sink。
-但 sink 的 `try_send()` 仍要求与 bus 同 executor；要给每个连接独立 strand，
-还需要把 sink 入队改成“post 到连接 strand”或线程安全队列。因此 gw 当前仍把
-总线、server、session 收敛到一条 core strand，先把正确性固定下来。
+共享网关事件到连接的路径：
+
+1. EventBus 独占读取网关 output（单消费者 Channel）；
+2. 对每个 sink `asio::post(sink.executor(), [sink, ev]{ sink->try_send(copy); })`；
+3. `try_send` 在 sink 所属的 `srv_ex` 上执行，满队列丢最旧事件，不阻塞 bus；
+4. 连接关闭时先在 gateway_ex_ 上 `remove_sink()`，再关闭 sink。
+
+`GatewayIpcServer` 对共享网关的调用统一：
+
+```text
+srv_ex -> dispatch(gateway_ex_) 调用网关 -> dispatch(srv_ex) 回连接状态
+```
+
+因此 worker > 1 时不同 node 连接的 pump/会话可以并行，共享网关状态仍串行。
 
 ## 4. 生命周期与关闭顺序
 
@@ -146,12 +168,18 @@ TSAN_OPTIONS=halt_on_error=1 ./build-tsan/tqsdk_tests \
 
 ## 7. 后续演进
 
-当前是“多线程传输 + 单 core 数据面”的安全折中。下一步可做：
+已落地（多线程 I/O + core strand 阶段）：
 
-1. 在 EventBus 基础上，让每条 gw 连接拥有独立 strand：把 sink 入队改成
-   post 到连接 strand 的无阻塞投递；
-2. 把 `Channel<T>` 升级为跨 executor、多消费者安全实现（或改用
-   `asio::experimental::channel`）；
-3. 将序列化/大 JSON 构造下沉到 thread_pool，core 只做指针交换；
-4. 为 WebSocket 每客户端分配独立 strand（需要先解决 Hub 状态的跨 strand 访问）；
-5. 增加 perf baseline、长时间 soak、队列水位与线程亲和度指标。
+1. node HTTP 每连接 strand、WebSocket 每客户端 strand；
+2. gw 每 node 连接 `srv_ex` strand + 进程级 `gateway_ex_`；
+3. `EventBus` 非阻塞 fan-out，sink 投递 post 到连接 strand；
+4. `scripts/soak_two_process.py`（默认 24h）与 `scripts/perf_baseline.py`；
+5. TSan 覆盖 `Threading.* / WsStream.* / GatewayIpcServerTest.* / IpcClientTest.*`。
+
+下一步可做：
+
+1. 把 `Channel<T>` 升级为跨 executor、多消费者安全实现（或改用
+   `asio::experimental::channel`），减少“必须 post 到所属 executor”的约束；
+2. 将序列化/大 JSON 构造下沉到 thread_pool，core 只做指针交换；
+3. 采集 sink 队列水位、慢消费者丢弃计数、线程亲和度指标；
+4. 在真实硬件上完成 24h soak 并归档 `docs/SOAK_PERF.md` 的基线结果。

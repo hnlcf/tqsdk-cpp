@@ -66,6 +66,16 @@ public:
                      asio::any_io_executor       ex,
                      Options                     options);
 
+    /// 每连接独立 strand 版本：
+    ///   - ex         ：本连接的 IpcSession/pump/control 所在 strand；
+    ///   - gateway_ex ：共享 md/td 网关（subscribe/release/snapshot）所在 core strand。
+    GatewayIpcServer(std::unique_ptr<IpcSession> session,
+                     MarketDataGateway*          md,
+                     TradingGateway*             td,
+                     asio::any_io_executor       ex,
+                     asio::any_io_executor       gateway_ex,
+                     Options                     options);
+
     ~GatewayIpcServer();
 
     GatewayIpcServer(const GatewayIpcServer&)            = delete;
@@ -88,6 +98,9 @@ public:
     void close() noexcept;
 
     bool is_open() const noexcept { return session_ && session_->is_open(); }
+
+    /// 本连接 IpcSession/pump/control 所在 executor（用于从其他 strand 安全 close）。
+    asio::any_io_executor executor() const noexcept { return ex_; }
 
     IpcSession& session() noexcept { return *session_; }
 
@@ -124,18 +137,26 @@ private:
     std::unique_ptr<IpcSession> session_;
     MarketDataGateway*          md_;
     TradingGateway*             td_;
-    asio::any_io_executor       ex_;
+    asio::any_io_executor       ex_;         // 本连接 strand
+    asio::any_io_executor       gateway_ex_; // 共享网关 core strand
 
     // 多 node 扇出：attach_buses 后 md_pump/td_pump 消费自己的 sink，
-    // 由 EventBus 把共享网关事件复制到每个连接。
-    EventBus<MarketDataEvent>* md_bus_{nullptr};
-    EventBus<TradeEvent>*      td_bus_{nullptr};
-    Channel<MarketDataEvent>   md_sink_;
-    Channel<TradeEvent>        td_sink_;
+    // 由 EventBus 把共享网关事件 post 到本连接 strand。
+    EventBus<MarketDataEvent>*                md_bus_{nullptr};
+    EventBus<TradeEvent>*                     td_bus_{nullptr};
+    std::shared_ptr<Channel<MarketDataEvent>> md_sink_;
+    std::shared_ptr<Channel<TradeEvent>>      td_sink_;
 
     std::string    stream_epoch_;
     OutboundStream md_stream_;
     OutboundStream td_stream_;
+
+    // 命令幂等缓存：命令帧可能因 ack 超时被 IpcClient 用同一 rid 重发；
+    // 命中直接复用首次 ack，避免 CTP 等非幂等报单被重复提交。
+    // key = "<op>:<rid>"，容量有界；control_loop 单协程访问，无需加锁。
+    std::unordered_map<std::string, CommandAck> command_acks_;
+    std::deque<std::string>                     command_ack_order_;
+    static constexpr std::size_t                kMaxCommandAcks = 4096;
 
     // 本连接累计订阅的合约与 K 线 (symbol,duration_ns)。close() 时一次性 release 给
     // 网关，使网关按引用计数释放（多 node 共享同一 md 网关时的正确退订语义）。

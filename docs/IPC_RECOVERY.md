@@ -129,8 +129,11 @@ td 不允许静默丢事件。`RemoteTdGateway` 的 gap handler 会发送
 - `SimTdGateway` 维护 `order_history_` / `trade_history_`，并把当前
   账户/持仓/订单/成交拼成完整截面；
 - 默认实现返回空对象，表示“该网关不支持快照”；
-- 接入 CTP 时，快照应由 `QueryOrders` / `QueryTrades` / `QueryPosition` /
-  `QueryAccount` 的结果构造；命令重试必须复用 `rid`，gw 侧 ack 去重，
+- `CtpTdGateway` 用 `ReqQryOrder/Trade/InvestorPosition/TradingAccount` 构造快照，
+  查询完成前保留上一份可用截面；
+- 命令重试已落地：`IpcClient` 超时后用同一 `rid` 重发，`GatewayIpcServer` 按
+  `<op>:<rid>` 缓存首次 ack，命中时不再次调用网关；
+- 该缓存是**每连接**的；连接重建后的跨会话幂等仍要靠订单查询/人工对账，
   不能简单重发报单。
 
 ## 6. 兼容性
@@ -161,6 +164,7 @@ td 不允许静默丢事件。`RemoteTdGateway` 的 gap handler 会发送
   - IpcClient md gap 检测；
   - TCP 断线后自动重连 + Resume；
   - epoch 变化直接返回 TradeSnapshot；
+  - 同一命令 `<op>:<rid>` 重复到达时复用缓存 ack，网关只执行一次；
 - `tests/e2e/sim_td_e2e_test.cpp`：`snapshot()` 可被 `DiffMergeEngine` 重建；
 - 两进程冒烟：node/gw 均 4 worker 线程，杀 gw、重启 gw 后 node 自动重连，
   REST 账户/订单从新 gw 快照恢复，且能继续下单。

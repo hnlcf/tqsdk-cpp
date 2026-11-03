@@ -36,13 +36,19 @@ public:
     EventBus(const EventBus&)            = delete;
     EventBus& operator=(const EventBus&) = delete;
 
-    void add_sink(Channel<T>* sink) {
-        if (sink != nullptr) {
-            sinks_.push_back(sink);
+    /// sink 用 shared_ptr 持有：remove_sink 后已 post 的事件仍能安全执行。
+    /// add/remove 可从任意连接 strand 调用；用 mutex 保护 sink 列表。
+    void add_sink(std::shared_ptr<Channel<T>> sink) {
+        if (sink) {
+            std::lock_guard<std::mutex> lock(sinks_mu_);
+            sinks_.push_back(Sink{sink->executor(), std::move(sink)});
         }
     }
 
-    void remove_sink(Channel<T>* sink) { std::erase(sinks_, sink); }
+    void remove_sink(Channel<T>* sink) {
+        std::lock_guard<std::mutex> lock(sinks_mu_);
+        std::erase_if(sinks_, [sink](const Sink& s) { return s.channel.get() == sink; });
+    }
 
     void start() {
         if (started_) {
@@ -89,22 +95,34 @@ private:
             if (!item.has_value()) {
                 break; // source closed
             }
-            for (auto* sink : sinks_) {
-                if (sink != nullptr && !sink->is_closed()) {
-                    // 每个 sink 一份副本；有界满时由 try_send 丢弃最旧。
-                    sink->try_send(*item);
-                }
+            std::vector<Sink> snapshot;
+            {
+                std::lock_guard<std::mutex> lock(sinks_mu_);
+                snapshot = sinks_;
+            }
+            for (const auto& sink : snapshot) {
+                // 每个 sink 一份副本，post 到它自己的 executor；
+                // try_send 保证只在 sink strand 上修改队列。
+                auto copy = std::make_shared<T>(*item);
+                asio::post(sink.ex,
+                           [ch = sink.channel, copy]() mutable { ch->try_send(std::move(*copy)); });
             }
         }
         co_return;
     }
 
-    Channel<T>&              source_;
-    asio::any_io_executor    ex_;
-    asio::steady_timer       stop_timer_;
-    std::vector<Channel<T>*> sinks_;
-    bool                     started_{false};
-    std::atomic<bool>        stopped_{false};
+    struct Sink {
+        asio::any_io_executor       ex;
+        std::shared_ptr<Channel<T>> channel;
+    };
+
+    Channel<T>&           source_;
+    asio::any_io_executor ex_;
+    asio::steady_timer    stop_timer_;
+    std::mutex            sinks_mu_;
+    std::vector<Sink>     sinks_;
+    bool                  started_{false};
+    std::atomic<bool>     stopped_{false};
 };
 
 } // namespace ipc

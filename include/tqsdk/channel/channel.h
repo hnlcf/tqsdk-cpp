@@ -35,9 +35,10 @@ public:
     // 关闭：唤醒所有挂起的 send/receive，之后再 send 抛异常，再 receive 得到 nullopt
     void close() noexcept;
 
-    bool        is_closed() const noexcept { return closed_; }
-    std::size_t size() const noexcept { return queue_.size(); }
-    std::size_t capacity() const noexcept { return capacity_; }
+    bool                  is_closed() const noexcept { return closed_; }
+    std::size_t           size() const noexcept { return queue_.size(); }
+    asio::any_io_executor executor() const { return ex_; }
+    std::size_t           capacity() const noexcept { return capacity_; }
 
 private:
     // 挂起者的身份：timer 挂在栈上，Guard 负责注册/反注册

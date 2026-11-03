@@ -85,29 +85,41 @@ set(CTP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ctp" CACHE PATH "CTP SDK r
 option(TQSDK_ENABLE_CTP "Build CTP gateway" OFF)
 
 if(TQSDK_ENABLE_CTP)
-    if(NOT EXISTS "${CTP_ROOT}/include/ThostFtdcTraderApi.h")
-        message(FATAL_ERROR "CTP headers not found at ${CTP_ROOT}/include/")
+    if(EXISTS "${CTP_ROOT}/include/ThostFtdcTraderApi.h")
+        set(CTP_INCLUDE_DIR "${CTP_ROOT}/include")
+    elseif(EXISTS "${CTP_ROOT}/ThostFtdcTraderApi.h")
+        set(CTP_INCLUDE_DIR "${CTP_ROOT}")
+    else()
+        message(FATAL_ERROR "CTP headers not found at ${CTP_ROOT}/include/ or ${CTP_ROOT}/")
     endif()
 
-    # 根据平台确定库文件后缀
+    # 兼容两种 SDK 布局：lib/libthost*.so 与根目录/thost*.so。
     if(WIN32)
         set(CTP_TRADER_LIB "${CTP_ROOT}/lib/thosttraderapi_se.lib")
         set(CTP_MD_LIB     "${CTP_ROOT}/lib/thostmduserapi_se.lib")
     else()
-        set(CTP_TRADER_LIB "${CTP_ROOT}/lib/libthosttraderapi_se.so")
-        set(CTP_MD_LIB     "${CTP_ROOT}/lib/libthostmduserapi_se.so")
+        if(EXISTS "${CTP_ROOT}/lib/libthosttraderapi_se.so")
+            set(CTP_TRADER_LIB "${CTP_ROOT}/lib/libthosttraderapi_se.so")
+        else()
+            set(CTP_TRADER_LIB "${CTP_ROOT}/thosttraderapi_se.so")
+        endif()
+        if(EXISTS "${CTP_ROOT}/lib/libthostmduserapi_se.so")
+            set(CTP_MD_LIB "${CTP_ROOT}/lib/libthostmduserapi_se.so")
+        else()
+            set(CTP_MD_LIB "${CTP_ROOT}/thostmduserapi_se.so")
+        endif()
     endif()
 
     add_library(ctp_trader SHARED IMPORTED)
     set_target_properties(ctp_trader PROPERTIES
         IMPORTED_LOCATION "${CTP_TRADER_LIB}"
-        INTERFACE_INCLUDE_DIRECTORIES "${CTP_ROOT}/include"
+        INTERFACE_INCLUDE_DIRECTORIES "${CTP_INCLUDE_DIR}"
     )
 
     add_library(ctp_md SHARED IMPORTED)
     set_target_properties(ctp_md PROPERTIES
         IMPORTED_LOCATION "${CTP_MD_LIB}"
-        INTERFACE_INCLUDE_DIRECTORIES "${CTP_ROOT}/include"
+        INTERFACE_INCLUDE_DIRECTORIES "${CTP_INCLUDE_DIR}"
     )
 
     add_library(tqsdk_ctp_gateway
@@ -137,6 +149,11 @@ if(TQSDK_BUILD_APPS)
 
     add_executable(tqsdk-node apps/node_main.cpp)
     target_link_libraries(tqsdk-node PRIVATE tqsdk_core)
+
+    if(TQSDK_ENABLE_CTP)
+        target_link_libraries(tqsdk-gw PRIVATE tqsdk_ctp_gateway)
+        target_compile_definitions(tqsdk-gw PRIVATE TQSDK_ENABLE_CTP=1)
+    endif()
 endif()
 
 # ---------- 示例可执行文件 ----------
@@ -191,6 +208,12 @@ if(TQSDK_BUILD_TESTS)
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>
     )
     target_link_libraries(tqsdk_tests PRIVATE tqsdk_core GTest::gtest)
+
+    if(TQSDK_ENABLE_CTP)
+        target_sources(tqsdk_tests PRIVATE tests/gateway/ctp_mapping_test.cpp)
+        target_link_libraries(tqsdk_tests PRIVATE tqsdk_ctp_gateway)
+        target_compile_definitions(tqsdk_tests PRIVATE TQSDK_ENABLE_CTP=1)
+    endif()
 
     include(GoogleTest)
     gtest_discover_tests(tqsdk_tests)

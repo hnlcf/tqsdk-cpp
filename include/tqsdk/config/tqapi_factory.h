@@ -2,6 +2,7 @@
 
 #include "tqsdk/pch.h"
 
+#include "tqsdk/gateway/ctp/ctp_config.h"
 #include "tqsdk/ipc/protocol.h"
 #include "tqsdk/tqapi.h"
 #include "tqsdk/util/runtime.h"
@@ -12,6 +13,7 @@ namespace tqsdk {
 enum class MdKind {
     None,   ///< 不接行情
     Tq,     ///< 天勤行情（进程内直连）
+    Ctp,    ///< CTP 行情前置
     Remote, ///< 通过 IPC 代理到 gw 进程
     Mock,   ///< 脚本化 mock（测试用，需外部注入）
 };
@@ -20,6 +22,7 @@ enum class MdKind {
 enum class TdKind {
     None,   ///< 不接交易
     Sim,    ///< 本地撮合模拟器
+    Ctp,    ///< CTP 交易前置
     Remote, ///< 通过 IPC 代理到 gw 进程
     Mock,   ///< 脚本化 mock（测试用）
 };
@@ -79,6 +82,9 @@ struct TqApiConfig {
         std::string               name     = "gw-td";
         std::chrono::milliseconds ack_timeout{std::chrono::seconds(10)};
     } td;
+
+    /// [ctp] 柜台参数（md.kind/td.kind == ctp 时使用）。
+    CtpConfig ctp;
 };
 
 /// 从 TOML 文件解析配置。文件不存在 / 语法错误 / 缺必填项 抛 std::runtime_error。
@@ -142,6 +148,9 @@ struct GwConfig {
     /// SimTdGateway 的初始撮合价（[td.last_prices]）。用于让市价单/限价单在启动即有
     /// 可撮合价格；对应 on_tick(symbol, price)。
     std::map<std::string, double> last_prices;
+
+    /// [ctp] 柜台参数（md.kind/td.kind == ctp 时使用）。
+    CtpConfig ctp;
 
     /// [runtime] worker 线程数（io_context 线程；数据面仍由 core strand 串行）。
     RuntimeConfig runtime;

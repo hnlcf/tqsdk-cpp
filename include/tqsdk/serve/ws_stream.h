@@ -66,7 +66,16 @@ struct WsOptions {
 ///   account/orders/trades/positions 仅在该实体有变化时出现（完整实体）。
 class WebSocketHub : public std::enable_shared_from_this<WebSocketHub> {
 public:
+    /// 兼容构造：Hub 状态与客户端 I/O 使用同一 executor（单线程/测试）。
     WebSocketHub(TqApi* api, asio::any_io_executor ex, WsOptions options = {});
+
+    /// 双 executor 构造：
+    ///   - core_ex：Hub 状态、订阅表、push_loop、broadcast 所在的 core strand；
+    ///   - io_ex  ：客户端 socket I/O 的基础 executor，每客户端再派生独立 strand。
+    WebSocketHub(TqApi*                api,
+                 asio::any_io_executor core_ex,
+                 asio::any_io_executor io_ex,
+                 WsOptions             options);
     ~WebSocketHub();
 
     WebSocketHub(const WebSocketHub&)            = delete;
@@ -112,7 +121,8 @@ private:
     void broadcast(const nlohmann::json& diff);
 
     TqApi*                                                api_;
-    asio::any_io_executor                                 ex_;
+    asio::any_io_executor                                 ex_;    // core strand
+    asio::any_io_executor                                 io_ex_; // 客户端 I/O 基础 executor
     asio::steady_timer                                    stop_timer_;
     WsOptions                                             options_;
     bool                                                  started_ = false;

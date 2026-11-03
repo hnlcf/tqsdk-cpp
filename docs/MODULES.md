@@ -5,7 +5,8 @@
 > 项目介绍与快速上手见 `README.md`。
 >
 > 约定：每个模块给出【目标】【负责】【不负责/边界】【关键约定】【关键文件】。
-> 若无特别说明，所有异步代码都运行在**单 io_context 线程**上（见 §2.7 线程模型）。
+> 默认单 io_context 线程；可通过 `[runtime].threads` 启用多 worker，传输层并行，
+> 数据面仍由 core strand 串行（见 §5.4 与 `docs/THREADING.md`）。
 
 ---
 
@@ -432,19 +433,36 @@
 - **负责**：
   - `RuntimeConfig{threads}` + `run_io_context(io, N)`；N 收敛到 `[1,64]`。
   - node：`io_ex` 负责 accept；每条 HTTP 连接一个 `make_strand(io_ex)`；
-    `core_ex` 承载 TqApi/DataManager/网关/IPC/WebSocketHub。
+    `core_ex` 承载 TqApi/DataManager/网关/IPC/WebSocketHub 状态。
+  - WebSocket 每客户端单独 `make_strand(io_ex)`；Hub 订阅/广播状态在 core strand，
+    reader/writer 与 socket I/O 在客户端 strand，入队用 `post(client_ex)`。
   - `HttpServer(api, io_ex, ws, data_ex)`：session 在连接 strand 读/写，
     handler 前 `dispatch(data_ex)`，写回前切回连接 strand。
-  - gw：所有网关/会话绑定单 core strand，多 worker 下状态仍串行。
+  - gw：每 node 连接独立 `srv_ex` strand；共享网关调用 dispatch 到 core strand；
+    `EventBus` 把网关事件 post 到各连接 sink。
 - **关键约定**：
   - core strand 上的对象禁止在其他 executor 直接修改；新增路由必须遵守 dispatch 边界。
   - `Channel<T>` 仍是单消费者、executor-affine；`TqApi::wait_update` 仍单 waiter。
   - 关闭顺序：stop IO -> close api/gateways -> restart/run 排空回调 -> 析构。
 - **关键文件**：`include/tqsdk/util/runtime.h`、`include/tqsdk/serve/http_server.h`、
-  `src/serve/http_server.cpp`、`apps/node_main.cpp`、`apps/gw_main.cpp`
-- **测试**：`tests/serve/threading_test.cpp`（4 worker + 32 并发 HTTP）、
-  TSan 下跑 `Threading.* / WsStream.* / GatewayIpcServerTest.* / IpcClientTest.*`。
+  `src/serve/http_server.cpp`、`include/tqsdk/serve/ws_stream.h`、
+  `apps/node_main.cpp`、`apps/gw_main.cpp`、`include/tqsdk/ipc/event_bus.h`
+- **测试**：`tests/serve/threading_test.cpp`（4 worker + 32 并发 HTTP +
+  WebSocket 多 io 线程）、`tests/ipc/gateway_server_test.cpp`（per-connection strand
+  + EventBus 广播）；TSan 下跑 `Threading.* / WsStream.* / GatewayIpcServerTest.* / IpcClientTest.*`。
 - **详细文档**：[`THREADING.md`](./THREADING.md)。
+
+### 5.5 CTP 网关（可选）
+
+- **目标**：在 gw 进程接入 CTP 行情/交易前置，把 SPI 回调转成统一领域事件。
+- **负责**：
+  - `CtpTaskQueue`：SPI 线程只拷贝 struct + push，core executor 串行消费；
+  - `CtpMdSpi`/`CtpTdSpi`：登录、认证、订阅、报单/撤单、成交、查询回调；
+  - `CtpMdGateway`：订阅引用计数、断线重登录/重订阅、depth -> quote diff；
+  - `CtpTdGateway`：OrderRef<->rid、查询快照、200ms debounce 刷新、reject 终态。
+- **边界**：不实现 CTP 柜台风控/K 线序列；不替代 node 的 seq/Resume 恢复。
+- **构建**：`-DTQSDK_ENABLE_CTP=ON`；未开启时 `kind=ctp` 会显式报错。
+- **详细文档**：[`CTP.md`](./CTP.md)。
 
 ---
 
@@ -539,11 +557,17 @@
 
 ## 9. 已知约束与 TODO
 
-- **线程模型**：node 为“多 worker 传输 + 单 core strand 数据面”；gw 仍把所有网关/会话收敛到单 core strand。TCP/UDP 之外的每网关/每客户端独立 strand 需要先实现 Channel fan-out，见 `THREADING.md` §7。
-- **自动重连**：`IpcClient`（远程 md/td）已支持指数退避重连 + Resume；`TqMdGateway`/`TqTdGateway` 直连天勤/CTP 的重连仍由各自网关实现（当前 TqMdGateway 投递 Disconnected 后不自动重连）。
+- **线程模型**：node 为“多 worker 传输 + 单 core strand 数据面”；gw 为“每连接 strand
+  + 单 core strand 共享网关状态”。WebSocket 每客户端、gw 每 node 连接均已独立 strand；
+  `Channel` 仍需在所属 executor 上使用。
+- **自动重连**：`IpcClient`（远程 md/td）已支持指数退避重连 + Resume；CTP Md/Td
+  依赖 CTP API 自带前置重连，并在 OnFrontConnected 重登录/重订阅/重新查询；
+  `TqMdGateway` 当前投递 Disconnected 后不自动重连。
 - **seq / gap 检测**：md/td 已实现 epoch+seq、重复丢弃、gap 回调、Resume/replay、md resync、td TradeSnapshot 对账；跨版本旧 peer 按 seq=0 兼容。
 - **多 node 广播**：已由 `ipc/event_bus.h` 解决——EventBus 独占读取单消费者网关 output，把事件以非阻塞 `Channel::try_send()` 复制到每个连接的有界 sink；慢连接只丢自己的最旧事件。`GatewayIpcServer::attach_buses()` 在 gw_main 中统一挂接。
-- **CTP 网关**：未实现（roadmap 阶段4）。
+- **CTP 网关**：已实现可选构建（`-DTQSDK_ENABLE_CTP=ON`）：Md/Td SPI 经
+  `CtpTaskQueue` 桥接、登录/结算/查询快照、报单/撤单/成交映射、断线重查；
+  真实柜台时序仍需上线前专项验证，详见 `docs/CTP.md`。
 - **共享内存快通道**：未实现（性能阶段可选项）。
 - **WebSocket 与 wait_update**：`HttpServer` 内的 `WebSocketHub::push_loop` 是 serve 层
   唯一的 `wait_update()` 消费者；同一进程内不要再启动第二个等待者（会破坏清位语义）。

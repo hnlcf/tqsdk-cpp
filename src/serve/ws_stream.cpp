@@ -26,32 +26,48 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
     Client(uint64_t                    id,
            ws_t                        ws,
            std::weak_ptr<WebSocketHub> hub,
-           asio::any_io_executor       ex,
+           asio::any_io_executor       client_ex,
+           asio::any_io_executor       hub_ex,
            WsOptions                   options)
         : id_(id),
           ws_(std::move(ws)),
           hub_(std::move(hub)),
-          ex_(std::move(ex)),
-          wakeup_(ex_),
+          client_ex_(std::move(client_ex)),
+          hub_ex_(std::move(hub_ex)),
+          wakeup_(client_ex_),
           options_(std::move(options)) {}
 
     void start() {
         auto self = shared_from_this();
         co_spawn_logged(
-            ex_, [self]() -> asio::awaitable<void> { co_await self->writer_loop(); }, "Ws.writer");
+            client_ex_,
+            [self]() -> asio::awaitable<void> { co_await self->writer_loop(); },
+            "Ws.writer");
         co_spawn_logged(
-            ex_, [self]() -> asio::awaitable<void> { co_await self->reader_loop(); }, "Ws.reader");
+            client_ex_,
+            [self]() -> asio::awaitable<void> { co_await self->reader_loop(); },
+            "Ws.reader");
     }
 
     /// 发送一条强类型服务端消息（自动序列化为文本帧）。
+    /// 可从 hub core strand 或客户端 strand 调用；实际入队 post 到客户端 strand。
     template <typename Message>
     void send(Message msg) {
-        enqueue(serialize_ws_message(WsServerMessage{std::move(msg)}));
+        post_text(serialize_ws_message(WsServerMessage{std::move(msg)}));
     }
 
-    // 只允许在 io_context 线程调用。队列满时丢最旧消息，形成"行情可丢"的背压。
-    void enqueue(std::string msg) {
-        if (closed_.load(std::memory_order_relaxed)) {
+    void post_text(std::string msg) {
+        if (closed()) {
+            return;
+        }
+        auto self = shared_from_this();
+        asio::post(client_ex_,
+                   [self, msg = std::move(msg)]() mutable { self->enqueue_local(std::move(msg)); });
+    }
+
+    /// 仅允许在 client_ex_ 上调用。队列满时丢最旧消息。
+    void enqueue_local(std::string msg) {
+        if (closed()) {
             return;
         }
         if (queue_.size() >= options_.max_queue) {
@@ -64,8 +80,19 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
         wakeup_.cancel();
     }
 
+    /// 可从任意线程调用：置 closed 并把真正的 socket close post 到客户端 strand。
     void shutdown() noexcept {
         if (closed_.exchange(true, std::memory_order_acq_rel)) {
+            return;
+        }
+        auto self = shared_from_this();
+        asio::post(client_ex_, [self]() { self->close_local(); });
+    }
+
+    /// 仅允许在 client_ex_ 上调用；幂等。
+    void close_local() noexcept {
+        closed_.store(true, std::memory_order_release);
+        if (socket_closed_.exchange(true, std::memory_order_acq_rel)) {
             return;
         }
         wakeup_.cancel();
@@ -94,8 +121,10 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
                 send(WsError{e.what()});
             }
         }
-        shutdown();
+        close_local();
         if (auto hub = hub_.lock()) {
+            // Hub 状态在 core strand；移除订阅必须切回 core。
+            co_await asio::dispatch(hub->ex_, asio::use_awaitable);
             co_await hub->remove_client(id_);
         }
     }
@@ -116,7 +145,7 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
                 continue;
             }
 
-            // 空闲：等待新消息或心跳到期。enqueue() 会 cancel 该 timer 唤醒 writer。
+            // 空闲：等待新消息或心跳到期。enqueue_local() 会 cancel 该 timer 唤醒 writer。
             wakeup_.expires_after(options_.heartbeat_interval);
             ec.clear();
             co_await wakeup_.async_wait(asio::redirect_error(asio::use_awaitable, ec));
@@ -138,7 +167,7 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
                 break;
             }
         }
-        shutdown();
+        close_local();
     }
 
     asio::awaitable<void> handle_message(std::string text) {
@@ -165,7 +194,9 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
             send(WsError{"server shutting down"});
             co_return;
         }
+        co_await asio::dispatch(hub_ex_, asio::use_awaitable);
         co_await hub->add_subscriptions(shared_from_this(), msg);
+        co_await asio::dispatch(client_ex_, asio::use_awaitable);
     }
 
     asio::awaitable<void> handle(const WsUnsubscribe& msg) {
@@ -174,10 +205,12 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
             send(WsError{"server shutting down"});
             co_return;
         }
+        co_await asio::dispatch(hub_ex_, asio::use_awaitable);
         co_await hub->remove_subscriptions(shared_from_this(), msg);
+        co_await asio::dispatch(client_ex_, asio::use_awaitable);
     }
 
-    // ---- 订阅状态（由 hub 在单一 io 线程内读写）----
+    // ---- 订阅状态（仅由 hub 在 core strand 读写）----
     std::set<std::string>                          symbols;
     std::map<std::pair<std::string, int64_t>, int> klines; // key -> view_width
     std::set<std::string>                          topics;
@@ -186,11 +219,13 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
     uint64_t                    id_;
     ws_t                        ws_;
     std::weak_ptr<WebSocketHub> hub_;
-    asio::any_io_executor       ex_;
+    asio::any_io_executor       client_ex_;
+    asio::any_io_executor       hub_ex_;
     asio::steady_timer          wakeup_;
     WsOptions                   options_;
     std::deque<std::string>     queue_;
     std::atomic<bool>           closed_{false};
+    std::atomic<bool>           socket_closed_{false};
     uint64_t                    dropped_ = 0;
 };
 
@@ -198,8 +233,15 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
 // Hub
 // ============================================================================
 WebSocketHub::WebSocketHub(TqApi* api, asio::any_io_executor ex, WsOptions options)
+    : WebSocketHub(api, ex, ex, std::move(options)) {}
+
+WebSocketHub::WebSocketHub(TqApi*                api,
+                           asio::any_io_executor core_ex,
+                           asio::any_io_executor io_ex,
+                           WsOptions             options)
     : api_(api),
-      ex_(std::move(ex)),
+      ex_(std::move(core_ex)),
+      io_ex_(std::move(io_ex)),
       stop_timer_(ex_),
       options_(std::move(options)) {
     if (options_.heartbeat_interval.count() <= 0) {
@@ -260,7 +302,11 @@ asio::awaitable<void> WebSocketHub::accept(asio::ip::tcp::socket            sock
     }
 
     const uint64_t id = next_client_id_++;
-    auto client = std::make_shared<Client>(id, std::move(ws), shared_from_this(), ex_, options_);
+    // 每客户端一条独立 strand：reader/writer/socket I/O 并行，
+    // Hub 状态仍只在 core strand 访问。
+    auto client_ex = asio::make_strand(io_ex_);
+    auto client =
+        std::make_shared<Client>(id, std::move(ws), shared_from_this(), client_ex, ex_, options_);
     clients_.emplace(id, client);
 
     WsWelcome welcome;

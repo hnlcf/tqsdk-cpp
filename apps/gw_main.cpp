@@ -3,6 +3,11 @@
 #include "tqsdk/config/tqapi_factory.h"
 #include "tqsdk/gateway/sim/sim_td_gateway.h"
 #include "tqsdk/gateway/tq/tq_md_gateway.h"
+
+#ifdef TQSDK_ENABLE_CTP
+    #include "tqsdk/gateway/ctp/ctp_md_gateway.h"
+    #include "tqsdk/gateway/ctp/ctp_td_gateway.h"
+#endif
 #include "tqsdk/ipc/gateway_server.h"
 #include "tqsdk/ipc/ipc_session.h"
 #include "tqsdk/ipc/tcp_channel.h"
@@ -36,11 +41,18 @@ using namespace tqsdk;
 using tcp = boost::asio::ip::tcp;
 
 // 依据配置构造真实网关；未知/不支持的种类返回 nullptr 并记警告。
-std::unique_ptr<MarketDataGateway> make_real_md(const TqApiConfig::Md& md,
-                                                asio::any_io_executor  ex) {
+std::unique_ptr<MarketDataGateway>
+make_real_md(const TqApiConfig::Md& md, const CtpConfig& ctp, asio::any_io_executor ex) {
     switch (md.kind) {
     case MdKind::Tq:
         return std::make_unique<TqMdGateway>(ex, md.host, md.port, md.path);
+    case MdKind::Ctp:
+#ifdef TQSDK_ENABLE_CTP
+        return std::make_unique<CtpMdGateway>(ex, ctp);
+#else
+        SPDLOG_ERROR("[gw] md.kind=ctp but binary built without TQSDK_ENABLE_CTP");
+        return nullptr;
+#endif
     case MdKind::None:
     case MdKind::Mock:
     case MdKind::Remote: // gw 进程本身不接受"远程"行情网关
@@ -49,10 +61,18 @@ std::unique_ptr<MarketDataGateway> make_real_md(const TqApiConfig::Md& md,
     return nullptr;
 }
 
-std::unique_ptr<TradingGateway> make_real_td(const TqApiConfig::Td& td, asio::any_io_executor ex) {
+std::unique_ptr<TradingGateway>
+make_real_td(const TqApiConfig::Td& td, const CtpConfig& ctp, asio::any_io_executor ex) {
     switch (td.kind) {
     case TdKind::Sim:
         return std::make_unique<SimTdGateway>(ex, td.initial_balance);
+    case TdKind::Ctp:
+#ifdef TQSDK_ENABLE_CTP
+        return std::make_unique<CtpTdGateway>(ex, ctp);
+#else
+        SPDLOG_ERROR("[gw] td.kind=ctp but binary built without TQSDK_ENABLE_CTP");
+        return nullptr;
+#endif
     case TdKind::None:
     case TdKind::Mock:
     case TdKind::Remote:
@@ -92,8 +112,8 @@ int main(int argc, char** argv) {
     auto ex = asio::make_strand(io);
 
     // 真实网关（进程生命周期内常驻，被所有连接共享）。
-    auto md = make_real_md(cfg.md, ex);
-    auto td = make_real_td(cfg.td, ex);
+    auto md = make_real_md(cfg.md, cfg.ctp, ex);
+    auto td = make_real_td(cfg.td, cfg.ctp, ex);
 
     // 若交易网关是 Sim：按配置灌入合约规格与初始撮合价，使其可直接撮合。
     if (auto* sim = dynamic_cast<SimTdGateway*>(td.get()); sim != nullptr) {
@@ -147,14 +167,16 @@ int main(int argc, char** argv) {
     // 活动连接注册表：shutdown 时统一 close。GatewayIpcServer 由各自的
     // 后台循环以 shared_from_this 自持，这里只保留一份引用用于优雅关闭。
     auto live_servers = std::make_shared<std::vector<std::shared_ptr<ipc::GatewayIpcServer>>>();
+    auto live_mutex   = std::make_shared<std::mutex>();
 
     // 处理一条已建立的 channel：握手 -> 建 Server -> 登记 -> 自持运行。
-    // 握手失败/连接断开时，watchdog 协程把 server 从注册表移除并 close。
-    auto on_accept = [&cfg, ex, md_bus, td_bus](
+    // 每条连接一个 strand；共享网关状态仍统一 dispatch 到 ex（core strand）。
+    auto on_accept = [&cfg, ex, io_ex = io.get_executor(), md_bus, td_bus](
                          std::unique_ptr<ipc::IIpcChannel> channel,
                          std::shared_ptr<std::vector<std::shared_ptr<ipc::GatewayIpcServer>>> live,
-                         MarketDataGateway*                                                   md_p,
-                         TradingGateway* td_p) {
+                         std::shared_ptr<std::mutex> live_mu,
+                         MarketDataGateway*          md_p,
+                         TradingGateway*             td_p) {
         ipc::IpcSession::Options opts;
         opts.local_role         = ipc::IpcRole::Gateway; // gw 侧声明 Gateway
         opts.local_name         = cfg.local_name;
@@ -163,11 +185,20 @@ int main(int argc, char** argv) {
         opts.heartbeat_timeout  = cfg.heartbeat_timeout;
         opts.encoding           = cfg.encoding;
 
-        auto session = std::make_unique<ipc::IpcSession>(std::move(channel), ex, opts);
+        // 每条连接独立 strand；共享网关状态通过 gateway_ex=ex 串行化。
+        auto srv_ex  = asio::make_strand(io_ex);
+        auto session = std::make_unique<ipc::IpcSession>(std::move(channel), srv_ex, opts);
         co_spawn_logged(
-            ex,
-            [session = std::move(session), ex, live, md_p, td_p, md_bus, td_bus]() mutable
-                -> asio::awaitable<void> {
+            srv_ex,
+            [session = std::move(session),
+             srv_ex,
+             gateway_ex = ex,
+             live,
+             live_mu,
+             md_p,
+             td_p,
+             md_bus,
+             td_bus]() mutable -> asio::awaitable<void> {
                 try {
                     co_await session->start(); // 握手；失败抛异常
                 } catch (const std::exception& e) {
@@ -177,10 +208,18 @@ int main(int argc, char** argv) {
                 SPDLOG_INFO("[gw] node connected & handshake ok");
 
                 auto srv =
-                    std::make_shared<ipc::GatewayIpcServer>(std::move(session), md_p, td_p, ex);
+                    std::make_shared<ipc::GatewayIpcServer>(std::move(session),
+                                                            md_p,
+                                                            td_p,
+                                                            srv_ex,
+                                                            gateway_ex,
+                                                            ipc::GatewayIpcServer::Options{});
                 srv->attach_buses(md_bus.get(), td_bus.get());
                 srv->start();
-                live->push_back(srv);
+                {
+                    std::lock_guard<std::mutex> lock(*live_mu);
+                    live->push_back(srv);
+                }
 
                 // watchdog：轮询该连接是否已关闭；关闭后从注册表摘除并 close，
                 // 释放我们对 server 的引用（server 仍由后台循环自持直到退出）。
@@ -190,8 +229,11 @@ int main(int argc, char** argv) {
                     boost::system::error_code ec;
                     co_await t.async_wait(asio::redirect_error(asio::use_awaitable, ec));
                 }
-                srv->close();
-                std::erase(*live, srv);
+                srv->close(); // 在 srv_ex 上关闭本连接资源
+                {
+                    std::lock_guard<std::mutex> lock(*live_mu);
+                    std::erase(*live, srv);
+                }
                 SPDLOG_INFO("[gw] node disconnected");
                 co_return;
             },
@@ -211,7 +253,7 @@ int main(int argc, char** argv) {
 
         co_spawn_logged(
             ex,
-            [uds_acc, ex, on_accept, live_servers, md = md.get(), td = td.get()]()
+            [uds_acc, ex, on_accept, live_servers, live_mutex, md = md.get(), td = td.get()]()
                 -> asio::awaitable<void> {
                 for (;;) {
                     boost::system::error_code ec;
@@ -226,7 +268,7 @@ int main(int argc, char** argv) {
                     }
                     SPDLOG_INFO("[gw] accepted UDS connection");
                     auto ch = std::make_unique<ipc::UdsChannel>(std::move(sock));
-                    on_accept(std::move(ch), live_servers, md, td);
+                    on_accept(std::move(ch), live_servers, live_mutex, md, td);
                 }
             },
             "gw.accept.uds");
@@ -238,7 +280,7 @@ int main(int argc, char** argv) {
 
         co_spawn_logged(
             ex,
-            [tcp_acc, ex, on_accept, live_servers, md = md.get(), td = td.get()]()
+            [tcp_acc, ex, on_accept, live_servers, live_mutex, md = md.get(), td = td.get()]()
                 -> asio::awaitable<void> {
                 for (;;) {
                     boost::system::error_code ec;
@@ -253,7 +295,7 @@ int main(int argc, char** argv) {
                     }
                     SPDLOG_INFO("[gw] accepted TCP connection");
                     auto ch = std::make_unique<ipc::TcpChannel>(std::move(sock));
-                    on_accept(std::move(ch), live_servers, md, td);
+                    on_accept(std::move(ch), live_servers, live_mutex, md, td);
                 }
             },
             "gw.accept.tcp");
@@ -276,8 +318,14 @@ int main(int argc, char** argv) {
         if (tcp_acc) {
             tcp_acc->close(ignored);
         }
-        for (auto& srv : *live_servers) {
-            srv->close();
+        std::vector<std::shared_ptr<ipc::GatewayIpcServer>> snapshot;
+        {
+            std::lock_guard<std::mutex> lock(*live_mutex);
+            snapshot = *live_servers;
+        }
+        // close 需要访问本连接的 timers/sink，post 到各自的 strand 执行。
+        for (auto& srv : snapshot) {
+            asio::post(srv->executor(), [srv]() { srv->close(); });
         }
         // 关闭网关事件源：唤醒仍阻塞在 output().async_receive() 的 pump 协程，
         // 使其以 nullopt 退出并释放各 server 的自持引用。

@@ -20,12 +20,21 @@ GatewayIpcServer::GatewayIpcServer(std::unique_ptr<IpcSession> session,
                                    TradingGateway*             td,
                                    asio::any_io_executor       ex,
                                    Options                     options)
+    : GatewayIpcServer(std::move(session), md, td, ex, ex, std::move(options)) {}
+
+GatewayIpcServer::GatewayIpcServer(std::unique_ptr<IpcSession> session,
+                                   MarketDataGateway*          md,
+                                   TradingGateway*             td,
+                                   asio::any_io_executor       ex,
+                                   asio::any_io_executor       gateway_ex,
+                                   Options                     options)
     : session_(std::move(session)),
       md_(md),
       td_(td),
       ex_(std::move(ex)),
-      md_sink_(ex_, 2048),
-      td_sink_(ex_, 2048),
+      gateway_ex_(std::move(gateway_ex)),
+      md_sink_(std::make_shared<Channel<MarketDataEvent>>(ex_, 2048)),
+      td_sink_(std::make_shared<Channel<TradeEvent>>(ex_, 2048)),
       stream_epoch_(make_stream_epoch("gw")),
       md_stream_(StreamKind::Md, stream_epoch_, options.md_replay),
       td_stream_(StreamKind::Td, stream_epoch_, options.td_replay),
@@ -58,8 +67,11 @@ asio::awaitable<void> GatewayIpcServer::send_td_snapshot() {
         co_return;
     }
     TradeSnapshotBody body;
-    body.meta          = td_stream_.next_meta();
-    body.data          = td_->snapshot();
+    body.meta = td_stream_.next_meta();
+    // td_->snapshot() 访问共享交易网关状态，必须在 gateway core strand 上执行。
+    co_await asio::dispatch(gateway_ex_, asio::use_awaitable);
+    body.data = td_->snapshot();
+    co_await asio::dispatch(ex_, asio::use_awaitable);
     const auto enc     = session_->encoding();
     auto       payload = encode_body(body, enc);
     td_stream_.record(body.meta.seq, FrameType::TradeSnapshot, enc, payload);
@@ -125,10 +137,10 @@ void GatewayIpcServer::attach_buses(EventBus<MarketDataEvent>* md_bus,
     md_bus_ = md_bus;
     td_bus_ = td_bus;
     if (md_bus_ != nullptr) {
-        md_bus_->add_sink(&md_sink_);
+        md_bus_->add_sink(md_sink_);
     }
     if (td_bus_ != nullptr) {
-        td_bus_->add_sink(&td_sink_);
+        td_bus_->add_sink(td_sink_);
     }
 }
 
@@ -160,15 +172,15 @@ void GatewayIpcServer::close() noexcept {
     closed_ = true;
     // 先从扇出总线摘除，再关闭自己的 sink；避免 bus 继续向已析构连接投递。
     if (md_bus_ != nullptr) {
-        md_bus_->remove_sink(&md_sink_);
+        md_bus_->remove_sink(md_sink_.get());
         md_bus_ = nullptr;
     }
     if (td_bus_ != nullptr) {
-        td_bus_->remove_sink(&td_sink_);
+        td_bus_->remove_sink(td_sink_.get());
         td_bus_ = nullptr;
     }
-    md_sink_.close();
-    td_sink_.close();
+    md_sink_->close();
+    td_sink_->close();
 
     // 唤醒阻塞在网关 output 上的 pump（wait_stop 分支）。
     md_stop_timer_.cancel();
@@ -188,7 +200,7 @@ void GatewayIpcServer::close() noexcept {
         symbol_use_.clear();
         subscribed_kline_keys_.clear();
         co_spawn_logged(
-            ex_,
+            gateway_ex_,
             [md, syms = std::move(syms), klines = std::move(klines)]() -> asio::awaitable<void> {
                 try {
                     co_await md->release(syms, klines);
@@ -285,7 +297,7 @@ bool GatewayIpcServer::filter_md_for_connection(MarketDataEvent& ev) const {
 // md_pump：把行情网关事件翻译成 MarketDataPush / GatewayEvent 上推。
 // ---------------------------------------------------------------------------
 asio::awaitable<void> GatewayIpcServer::md_pump() {
-    Channel<MarketDataEvent>& out = (md_bus_ != nullptr) ? md_sink_ : md_->output();
+    Channel<MarketDataEvent>& out = (md_bus_ != nullptr) ? *md_sink_ : md_->output();
     while (!closed_) {
         // race：网关事件 vs 停止信号。若停止先到，接收方被取消并退出循环。
         std::variant<std::optional<MarketDataEvent>, std::monostate> raced;
@@ -344,7 +356,7 @@ asio::awaitable<void> GatewayIpcServer::md_pump() {
 // td_pump：把交易网关事件翻译成 TradePush / GatewayEvent 上推。
 // ---------------------------------------------------------------------------
 asio::awaitable<void> GatewayIpcServer::td_pump() {
-    Channel<TradeEvent>& out = (td_bus_ != nullptr) ? td_sink_ : td_->event_output();
+    Channel<TradeEvent>& out = (td_bus_ != nullptr) ? *td_sink_ : td_->event_output();
     while (!closed_) {
         std::variant<std::optional<TradeEvent>, std::monostate> raced;
         try {
@@ -489,6 +501,8 @@ asio::awaitable<void> GatewayIpcServer::handle_subscribe(const ReceivedFrame& fr
                 subscribed_klines_.emplace_back(k.symbol, k.duration_ns);
             }
 
+            // 共享 md 网关状态在 gateway core strand 上。
+            co_await asio::dispatch(gateway_ex_, asio::use_awaitable);
             try {
                 if (!new_syms.empty()) {
                     co_await md_->subscribe(new_syms);
@@ -501,6 +515,7 @@ asio::awaitable<void> GatewayIpcServer::handle_subscribe(const ReceivedFrame& fr
                 ack.ok    = false;
                 ack.error = e.what();
             }
+            co_await asio::dispatch(ex_, asio::use_awaitable);
         } else {
             // 退订：显式 symbols 与 kline 依赖各 -1；归零才向上游 release。
             std::vector<std::string>                     release_syms;
@@ -535,6 +550,7 @@ asio::awaitable<void> GatewayIpcServer::handle_subscribe(const ReceivedFrame& fr
                 release_symbol_once(k.symbol);
             }
 
+            co_await asio::dispatch(gateway_ex_, asio::use_awaitable);
             try {
                 if (!release_syms.empty() || !release_klines.empty()) {
                     co_await md_->release(release_syms, release_klines);
@@ -544,6 +560,7 @@ asio::awaitable<void> GatewayIpcServer::handle_subscribe(const ReceivedFrame& fr
                 ack.ok    = false;
                 ack.error = e.what();
             }
+            co_await asio::dispatch(ex_, asio::use_awaitable);
         }
     }
 
@@ -567,31 +584,60 @@ asio::awaitable<void> GatewayIpcServer::handle_command(const ReceivedFrame& fram
         ack.error_msg = std::string("bad Command: ") + e.what();
     }
 
+    std::string cmd_key;
+    if (decode_ok && !body.rid.empty()) {
+        cmd_key = std::string(1, static_cast<char>(body.op)) + ":" + body.rid;
+    }
+
     if (decode_ok) {
         SPDLOG_DEBUG(
             "[Gw.control] Command op={} rid='{}'", magic_enum::enum_name(body.op), body.rid);
         ack.order_id = body.rid; // 默认回显关联键，失败时也能让消费端正确匹配
-        if (td_ == nullptr) {
-            ack.success   = false;
-            ack.error_msg = "no trading gateway on this connection";
-        } else {
-            try {
-                switch (body.op) {
-                case CommandOp::InsertOrder:
-                    ack = co_await td_->insert_order(body.insert, body.rid);
-                    break;
-                case CommandOp::CancelOrder:
-                    ack = co_await td_->cancel_order(body.cancel);
-                    break;
-                }
-                // 保证关联键至少回显（某些网关成功时可能不回填 order_id）。
-                if (ack.order_id.empty()) {
-                    ack.order_id = body.rid;
-                }
-            } catch (const std::exception& e) {
+
+        bool cached = false;
+        if (!cmd_key.empty()) {
+            if (auto it = command_acks_.find(cmd_key); it != command_acks_.end()) {
+                ack    = it->second;
+                cached = true;
+                SPDLOG_DEBUG("[Gw.control] duplicate command rid='{}' -> cached ack", body.rid);
+            }
+        }
+
+        if (!cached) {
+            if (td_ == nullptr) {
                 ack.success   = false;
-                ack.order_id  = body.rid;
-                ack.error_msg = e.what();
+                ack.error_msg = "no trading gateway on this connection";
+            } else {
+                // 共享交易网关状态在 gateway core strand 上。
+                co_await asio::dispatch(gateway_ex_, asio::use_awaitable);
+                try {
+                    switch (body.op) {
+                    case CommandOp::InsertOrder:
+                        ack = co_await td_->insert_order(body.insert, body.rid);
+                        break;
+                    case CommandOp::CancelOrder:
+                        ack = co_await td_->cancel_order(body.cancel);
+                        break;
+                    }
+                    // 保证关联键至少回显（某些网关成功时可能不回填 order_id）。
+                    if (ack.order_id.empty()) {
+                        ack.order_id = body.rid;
+                    }
+                } catch (const std::exception& e) {
+                    ack.success   = false;
+                    ack.order_id  = body.rid;
+                    ack.error_msg = e.what();
+                }
+                co_await asio::dispatch(ex_, asio::use_awaitable);
+            }
+
+            if (!cmd_key.empty()) {
+                if (command_acks_.size() >= kMaxCommandAcks && !command_ack_order_.empty()) {
+                    command_acks_.erase(command_ack_order_.front());
+                    command_ack_order_.pop_front();
+                }
+                command_acks_[cmd_key] = ack;
+                command_ack_order_.push_back(cmd_key);
             }
         }
     }

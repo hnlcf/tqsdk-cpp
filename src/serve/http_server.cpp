@@ -27,7 +27,7 @@ HttpServer::HttpServer(TqApi*                api,
       io_ex_(std::move(io_ex)),
       data_ex_(data_ex ? std::move(data_ex) : io_ex_),
       acceptor_(io_ex_),
-      ws_(std::make_shared<WebSocketHub>(api_, data_ex_, std::move(ws_options))) {
+      ws_(std::make_shared<WebSocketHub>(api_, data_ex_, io_ex_, std::move(ws_options))) {
     setup_routes();
 }
 

@@ -23,6 +23,8 @@ MdKind parse_md_kind(std::string_view s) {
         return MdKind::None;
     if (s == "tq")
         return MdKind::Tq;
+    if (s == "ctp")
+        return MdKind::Ctp;
     if (s == "remote")
         return MdKind::Remote;
     if (s == "mock")
@@ -35,6 +37,8 @@ TdKind parse_td_kind(std::string_view s) {
         return TdKind::None;
     if (s == "sim")
         return TdKind::Sim;
+    if (s == "ctp")
+        return TdKind::Ctp;
     if (s == "remote")
         return TdKind::Remote;
     if (s == "mock")
@@ -103,6 +107,21 @@ const toml::table& require_table(const toml::table& root, std::string_view name)
     return t ? *t : empty;
 }
 
+CtpConfig parse_ctp_config(const toml::table& root) {
+    CtpConfig ctp;
+    if (const auto& t = require_table(root, "ctp"); !t.empty()) {
+        ctp.broker_id = get_str(t, "broker_id", ctp.broker_id);
+        ctp.user_id   = get_str(t, "user_id", ctp.user_id);
+        ctp.password  = get_str(t, "password", ctp.password);
+        ctp.auth_code = get_str(t, "auth_code", ctp.auth_code);
+        ctp.app_id    = get_str(t, "app_id", ctp.app_id);
+        ctp.td_front  = get_str(t, "td_front", ctp.td_front);
+        ctp.md_front  = get_str(t, "md_front", ctp.md_front);
+        ctp.flow_path = get_str(t, "flow_path", ctp.flow_path);
+    }
+    return ctp;
+}
+
 // 解析一份已加载的 TOML DOM 到 TqApiConfig。
 TqApiConfig build_from_toml(const toml::table& root) {
     TqApiConfig cfg;
@@ -142,6 +161,7 @@ TqApiConfig build_from_toml(const toml::table& root) {
         cfg.td.ack_timeout     = std::chrono::milliseconds(get_int(td_t, "ack_timeout_ms", 10000));
     }
 
+    cfg.ctp = parse_ctp_config(root);
     return cfg;
 }
 
@@ -250,6 +270,10 @@ make_tqapi(asio::io_context& ctx, const TqApiConfig& cfg, asio::any_io_executor 
     case MdKind::Tq:
         md = std::make_unique<TqMdGateway>(ex, cfg.md.host, cfg.md.port, cfg.md.path);
         break;
+    case MdKind::Ctp:
+        // CTP 只在 gw 进程（可选 tqsdk_ctp_gateway）中构造；node 直连模式不支持。
+        md = nullptr;
+        break;
     case MdKind::Remote:
         // 注册 md handler 进 client（在 client->start() 之前完成）。
         md = std::make_unique<ipc::RemoteMdGateway>(client, ex);
@@ -265,6 +289,10 @@ make_tqapi(asio::io_context& ctx, const TqApiConfig& cfg, asio::any_io_executor 
         break;
     case TdKind::Sim:
         td = std::make_unique<SimTdGateway>(ex, cfg.td.initial_balance);
+        break;
+    case TdKind::Ctp:
+        // CTP 只在 gw 进程中构造。
+        td = nullptr;
         break;
     case TdKind::Remote:
         td = std::make_unique<ipc::RemoteTdGateway>(client, ex, cfg.td.ack_timeout);
@@ -341,6 +369,7 @@ GwConfig build_gw_from_toml(const toml::table& root) {
     }
     cfg.md      = parse_gw_md(root);
     cfg.td      = parse_gw_td(root);
+    cfg.ctp     = parse_ctp_config(root);
     cfg.runtime = parse_runtime(root);
 
     // [td.specs."SYMBOL"] -> SpecSeed（仅 sim 用）

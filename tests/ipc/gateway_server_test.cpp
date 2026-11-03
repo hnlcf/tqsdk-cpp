@@ -151,7 +151,79 @@ TEST(GatewayIpcServerTest, InsertOrderRoundtripAndFill) {
 }
 
 // ---------------------------------------------------------------------------
-// 2) 撤单：下单挂住（限价未穿越）-> 撤单 -> ack success
+// 2) 命令幂等：同一 op+rid 重复到达时复用首次 ack，不重复下单
+// ---------------------------------------------------------------------------
+TEST(GatewayIpcServerTest, DuplicateCommandReusesCachedAck) {
+    const std::string path = make_uds_path("dedup");
+    asio::io_context  io;
+    auto              pair = make_uds_pair(io, path);
+
+    SimTdGateway sim(io.get_executor(), 1'000'000.0);
+    sim.set_contract_spec("SHFE.rb2610", rb_spec());
+    sim.on_tick("SHFE.rb2610", 3800.0);
+
+    auto gw_sess = std::make_unique<IpcSession>(
+        std::move(pair.srv), io.get_executor(), opt(IpcRole::Gateway, "gw"));
+    auto gw_start =
+        test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await gw_sess->start(); });
+    auto node_sess = std::make_unique<IpcSession>(
+        std::move(pair.cli), io.get_executor(), opt(IpcRole::Node, "node"));
+    auto node_start =
+        test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await node_sess->start(); });
+
+    test::wait_all(io, std::chrono::seconds(2), gw_start, node_start);
+    gw_start.get();
+    node_start.get();
+
+    auto gw_server =
+        std::make_shared<GatewayIpcServer>(std::move(gw_sess), nullptr, &sim, io.get_executor());
+    gw_server->start();
+
+    CommandBody body;
+    body.op     = CommandOp::InsertOrder;
+    body.rid    = "rid_dup";
+    body.insert = market_buy("SHFE.rb2610", 1);
+
+    std::vector<CommandAck> acks;
+    auto                    reader = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
+        // 中间可能夹着 SimTd 的 TradePush，读到两个 CommandAck 为止。
+        for (int i = 0; i < 10 && acks.size() < 2; ++i) {
+            auto f = co_await node_sess->incoming().async_receive();
+            if (!f) {
+                co_return;
+            }
+            if (f->type == FrameType::CommandAck) {
+                acks.push_back(decode_as<FrameType::CommandAck>(*f).ack);
+            }
+        }
+    });
+    auto                    sender = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
+        co_await node_sess->send_body<FrameType::Command>(body);
+        co_await node_sess->send_body<FrameType::Command>(body);
+    });
+
+    test::wait_all(io, std::chrono::seconds(3), sender, reader);
+    sender.rethrow_if_error();
+    reader.rethrow_if_error();
+
+    const auto snap = sim.snapshot();
+
+    // 先完成清理再断言：避免 ASSERT 失败提前返回导致后台协程仍引用栈上的 sim。
+    node_sess->close();
+    gw_server->close();
+    test::drive_for(io, std::chrono::milliseconds(100));
+    ::unlink(path.c_str());
+
+    ASSERT_EQ(acks.size(), 2u);
+    EXPECT_TRUE(acks[0].success);
+    EXPECT_TRUE(acks[1].success);
+    EXPECT_EQ(acks[0].order_id, "rid_dup");
+    EXPECT_EQ(acks[1].order_id, "rid_dup");
+    EXPECT_EQ(snap["trade"][""]["user"]["orders"].size(), 1u);
+}
+
+// ---------------------------------------------------------------------------
+// 3) 撤单：下单挂住（限价未穿越）-> 撤单 -> ack success
 // ---------------------------------------------------------------------------
 TEST(GatewayIpcServerTest, CancelOrderRoundtrip) {
     const std::string path = make_uds_path("cancel");
@@ -774,10 +846,14 @@ TEST(GatewayIpcServerTest, EventBusBroadcastsToAllConnections) {
 
     RecordingMdGateway md(io.get_executor());
 
-    auto gw1 = std::make_unique<IpcSession>(
-        std::move(pair1.srv), io.get_executor(), opt(IpcRole::Gateway, "gw1"));
-    auto gw2 = std::make_unique<IpcSession>(
-        std::move(pair2.srv), io.get_executor(), opt(IpcRole::Gateway, "gw2"));
+    // 两个 gw server 各自一条 strand；gateway/EventBus 仍在 io core executor。
+    auto srv1_ex = asio::make_strand(io);
+    auto srv2_ex = asio::make_strand(io);
+
+    auto gw1 =
+        std::make_unique<IpcSession>(std::move(pair1.srv), srv1_ex, opt(IpcRole::Gateway, "gw1"));
+    auto gw2 =
+        std::make_unique<IpcSession>(std::move(pair2.srv), srv2_ex, opt(IpcRole::Gateway, "gw2"));
     auto node1 = std::make_unique<IpcSession>(
         std::move(pair1.cli), io.get_executor(), opt(IpcRole::Node, "node1"));
     auto node2 = std::make_unique<IpcSession>(
@@ -794,8 +870,10 @@ TEST(GatewayIpcServerTest, EventBusBroadcastsToAllConnections) {
     t4.get();
 
     auto bus  = std::make_shared<EventBus<MarketDataEvent>>(md.output(), io.get_executor());
-    auto srv1 = std::make_shared<GatewayIpcServer>(std::move(gw1), &md, nullptr, io.get_executor());
-    auto srv2 = std::make_shared<GatewayIpcServer>(std::move(gw2), &md, nullptr, io.get_executor());
+    auto srv1 = std::make_shared<GatewayIpcServer>(
+        std::move(gw1), &md, nullptr, srv1_ex, io.get_executor(), GatewayIpcServer::Options{});
+    auto srv2 = std::make_shared<GatewayIpcServer>(
+        std::move(gw2), &md, nullptr, srv2_ex, io.get_executor(), GatewayIpcServer::Options{});
     srv1->attach_buses(bus.get(), nullptr);
     srv2->attach_buses(bus.get(), nullptr);
     bus->start();

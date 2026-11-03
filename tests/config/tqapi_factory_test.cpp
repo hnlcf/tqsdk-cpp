@@ -89,7 +89,8 @@ TEST(TqApiConfigTest, ParseDefaultsToNone) {
 
 TEST(TqApiConfigTest, ParseErrorsOnBadKind) {
     EXPECT_THROW(parse_tqapi_config("[md]\nkind = \"bogus\"\n"), std::runtime_error);
-    EXPECT_THROW(parse_tqapi_config("[td]\nkind = \"ctp\"\n"), std::runtime_error);
+    EXPECT_THROW(parse_tqapi_config("[td]\nkind = \"bogus\"\n"), std::runtime_error);
+    EXPECT_EQ(parse_tqapi_config("[td]\nkind = \"ctp\"\n").td.kind, TdKind::Ctp);
     EXPECT_THROW(parse_tqapi_config("[ipc]\ntransport = \"smoke\"\n"), std::runtime_error);
     EXPECT_THROW(parse_tqapi_config("this is not toml === "), std::runtime_error);
 }
@@ -297,6 +298,38 @@ TEST(TqApiFactoryConfig, ParsesRuntimeThreads) {
     EXPECT_EQ(parse_node_config("[runtime]\nthreads = 0\n").runtime.threads, 1);
     EXPECT_EQ(parse_gw_config("[runtime]\nthreads = -8\n").runtime.threads, 1);
     EXPECT_EQ(parse_node_config("[runtime]\nthreads = 1000\n").runtime.threads, 64);
+}
+
+TEST(TqApiFactoryConfig, ParsesCtpSection) {
+    const char* toml = R"(
+[md]
+kind = "ctp"
+[td]
+kind = "ctp"
+[ctp]
+broker_id = "9999"
+user_id = "u1"
+password = "p1"
+auth_code = "a1"
+app_id = "app1"
+td_front = "tcp://127.0.0.1:41205"
+md_front = "tcp://127.0.0.1:41213"
+flow_path = "/tmp/ctp-flow"
+)";
+    auto        cfg  = parse_tqapi_config(toml);
+    EXPECT_EQ(cfg.md.kind, MdKind::Ctp);
+    EXPECT_EQ(cfg.td.kind, TdKind::Ctp);
+    EXPECT_EQ(cfg.ctp.broker_id, "9999");
+    EXPECT_EQ(cfg.ctp.user_id, "u1");
+    EXPECT_EQ(cfg.ctp.password, "p1");
+    EXPECT_EQ(cfg.ctp.auth_code, "a1");
+    EXPECT_EQ(cfg.ctp.app_id, "app1");
+    EXPECT_EQ(cfg.ctp.td_front, "tcp://127.0.0.1:41205");
+    EXPECT_EQ(cfg.ctp.md_front, "tcp://127.0.0.1:41213");
+    EXPECT_EQ(cfg.ctp.flow_path, "/tmp/ctp-flow");
+
+    auto gw = parse_gw_config(toml);
+    EXPECT_EQ(gw.ctp.broker_id, "9999");
 }
 
 } // namespace

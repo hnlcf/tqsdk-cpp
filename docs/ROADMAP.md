@@ -24,13 +24,19 @@
 - ✅ **阶段 8 可靠性（4.6）**：md/td 独立 epoch+seq、`StreamTracker` 缺口/重复/epoch 检测、
   `OutboundStream` replay buffer、`Resume/ResumeAck/TradeSnapshot`、IpcClient 指数退避重连、
   md 重订阅 resync、td replay/快照对账。详见 [`IPC_RECOVERY.md`](./IPC_RECOVERY.md)。
-- ✅ **阶段 8 多线程**：`[runtime].threads` / `--threads`，node 每连接 HTTP strand +
-  单 core strand 数据面，gw 单 core strand；4 worker 并发 HTTP、WebSocket、两进程
-  断线重启恢复已实测；TSan 覆盖核心并发用例。详见 [`THREADING.md`](./THREADING.md)。
+- ✅ **阶段 8 多线程**：`[runtime].threads` / `--threads`，node 每连接 HTTP/WS
+  strand + 单 core strand 数据面；gw 每 node 连接 strand + 单 core strand 共享网关；
+  4 worker 并发 HTTP、WebSocket、两进程断线重启恢复已实测；TSan 覆盖核心并发用例。
+  详见 [`THREADING.md`](./THREADING.md)。
 - ✅ **多 node 扇出**：`ipc/event_bus.h` 把共享网关 output 非阻塞广播到每连接
   有界 sink；`GatewayIpcServer::attach_buses()` 在 gw_main 统一挂接，双连接广播有测。
-- ⬜ 未完成：CTP（阶段4）、共享内存快通道、WebSocket 每客户端独立 strand、
-  gw 每连接独立 strand、24h soak/perf baseline。
+- ✅ **阶段 4 CTP 网关**：可选构建 `-DTQSDK_ENABLE_CTP=ON`；`CtpTaskQueue` 桥接
+  SPI 线程，Md/Td 登录/订阅/报单/撤单/查询快照/断线重查；映射与队列有单测，
+  进程启动/停止有 smoke。详见 [`CTP.md`](./CTP.md)。
+- ✅ **soak / perf 工具**：`scripts/soak_two_process.py`（默认 24h）与
+  `scripts/perf_baseline.py`；Release 30s soak、HTTP/WS 基线已归档到
+  [`SOAK_PERF.md`](./SOAK_PERF.md)。
+- ⬜ 未完成：共享内存快通道；真实 24h soak 的实际运行/归档（工具已就绪）。
 
 > 下方 4~10 章保留为**设计意图与原始规划**，与已实现代码若有出入，以 `docs/MODULES.md` 为准。
 
@@ -106,7 +112,7 @@
 - Channel 家族：basic/bounded/multiplex/close 全覆盖测试。
 - UDS IPC 通道：帧编解码、大 payload(1MB)、对端关闭、非法帧、幂等 close、双向并发。
 - 日志分级与文件轮转；测试 `main()` 统一初始化。
-- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 224 项
+- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 227 项（CTP 构建 230 项）
   （其中 2 个联网行情测试默认跳过），TSan 并发用例全绿。
 
 ### 2.5 测试规模快照（阶段 3 历史快照；当前总数见上）
@@ -143,16 +149,16 @@
 
 | 区域 | 缺口描述 | 优先级 |
 |---|---|---|
-| **CTP 网关** | 完全无实现、无测试；`third_party/ctp` 有 SDK 头/so，但 `src/gateway/ctp/*` 不存在。TaskQueue/SPI 桥接、断线重连、报单回报时序全空白。 | ★★★★★ |
-| **多线程 io_context** | node/gw 已实现 core strand + 每连接 HTTP strand，4 worker/TSan 覆盖；剩余：WebSocket 每客户端独立 strand、gw 多连接 fan-out、`Channel` 跨线程投递。 | ★★☆☆☆ |
+| **CTP 网关** | 已实现可选构建：TaskQueue/SPI、登录/结算/查询、报单/撤单/成交、断线重查、命令幂等缓存与映射单测；真实柜台时序/高频回调仍需专项回归。 | ★★★☆☆ |
+| **多线程 io_context** | node HTTP/WS 每连接 strand、gw 每 node 连接 strand、EventBus fan-out 已落地，4 worker/TSan 覆盖；剩余：`Channel` 跨 executor 约束、序列化下沉、队列水位指标。 | ★★☆☆☆ |
 | **重连与容错** | IpcClient 重连/Resume/TradeSnapshot 已实现并测；`TqMdGateway` 直连天勤的断线重连（chart_id 复用、peek 恢复）仍无针对性测试。 | ★★★☆☆ |
 | **wait_update 并发语义** | 多个协程同时 wait_update、close 时挂起者唤醒、清位时序在并发下是否正确，未测。 | ★★★★☆ |
 | **KlineStream 裁剪/边界** | capacity 裁剪最旧 bar、Appended 位、首帧全量覆盖、空序列读取，仅有分散断言，无系统测试。 | ★★★☆☆ |
 | **insert_order 竞态** | 占位单在 ack 前可见、ack 失败转错误终态、网关无响应超时，边界未测。 | ★★★☆☆ |
 | **交易资金模型边界** | 爆仓、保证金不足拒单、部分平仓、多空双向持仓、手续费边界，模拟器覆盖不足。 | ★★★☆☆ |
 | **序列化健壮性** | 异常/超大/深层嵌套 JSON、MessagePack 路径（当前多走 JSON），未测。 | ★★☆☆☆ |
-| **IPC 端到端角色** | `FrameType` 定义的 Subscribe/Snapshot/Diff/Command 等协议**无任何收发方实现**，只有裸通道。 | ★★★★☆（拆分前置） |
-| **资源泄漏/长稳** | 无 soak test（长时间跑、订阅大量合约、内存增长）。 | ★★☆☆☆ |
+| **IPC 端到端角色** | 已实现 gw/node 两端 + 完整帧分发、恢复、命令 ack；剩余是跨版本兼容与更多故障注入。 | ★☆☆☆☆ |
+| **资源泄漏/长稳** | soak 工具已落地（默认 24h），短时 Release 验证通过；真实 24h 运行需纳入夜间任务并归档。 | ★★☆☆☆ |
 | **跨平台** | 仅 Linux；Windows（CTP 主要运行于 Win）未验证。 | ★★☆☆☆ |
 
 ### 3.3 测试策略建议
@@ -248,12 +254,13 @@
 两进程架构下，需要处理的断线场景只有 **gw<->node** 一条：
 
 > **进度**：1/2 已实现（见 `IPC_RECOVERY.md`）：md/td 独立 epoch+seq、Resume/replay、
-> md 重订阅 resync、td TradeSnapshot 对账、IpcClient 自动重连。3 的命令重传
-> 依赖 CTP/真实柜台幂等语义，仍属阶段 4/8 待办。
+> md 重订阅 resync、td TradeSnapshot 对账、IpcClient 自动重连。3 的命令重传/去重
+> 已落地（同 rid 超时重试 + gw ack 幂等缓存 + CTP 订单查询对账）；真实柜台下的
+> 跨会话幂等仍需专项回归。
 
 1. **gw<->core 断线**：core 缓存"当前有效订阅集合"，重连 gw 后重发 Subscribe（`RemoteMdGateway::resync`）；gw 侧网关需重连柜台并重放订阅（已有 pending_subs_ 机制，需扩展到命令）。
 2. **gap 检测**：每个 push 带单调递增 `seq`（md/td 各自独立）。gw/node 检测 seq 跳变 -> 请求补发；行情可重建（重新订阅拿快照），交易回报**不可丢**（replay 或 TradeSnapshot 对账）。
-3. **交易命令必达**：`Command` 走"应用层重传 + Ack 确认 + QueryOrders 兜底"（协议 rid 关联已实现，重传/去重仍需真实网关落地）。
+3. **交易命令必达**：`Command` 走"应用层重传 + Ack 确认 + QueryOrders 兜底"（协议 rid 关联、IpcClient 同 rid 重试、gw ack 幂等缓存已实现；跨会话仍需 QueryOrders 兜底）。
 4. **core/serve 同进程无断线问题**：serve 直接读内存，无需 Snapshot 重建逻辑——这是两进程架构相对三进程的**显著简化**。
 
 ---
@@ -369,8 +376,9 @@
 - [x] md/td seq + gap 单测与集成测试（Tracker/replay/重复/epoch）。
 - [x] 断线重连与 Resume/TradeSnapshot 系统测试（真实 TCP，gw 重启 epoch 变化）。
 - [x] 两进程 4 worker 冒烟：并发 REST、WebSocket subscribe/ping、杀 gw 重启后自动恢复。
-- [ ] 24h soak（内存、句柄、队列水位）。
-- [ ] 命令重传/ack 去重的 CTP 专项回归（依赖阶段4）。
+- [x] soak 工具 + Release 短时验证（内存、句柄、队列水位）；[ ] 发布前实际 24h 运行。
+- [x] 命令重传/ack 去重：`GatewayIpcServer` 幂等缓存 + `IpcClient` 同 rid 超时重试；
+  [ ] 真实 CTP 柜台下的专项回归。
 - [x] 多 node 同时连接时的广播 fan-out 正确性测试（EventBus 双连接）。
 
 **验收**：故障注入下数据不丢（交易）/可重建（行情），长稳 24h 无泄漏。
@@ -497,7 +505,7 @@ include/tqsdk/
     uds_channel.h         UDS 实现
   util/                   log / serde / async_mutex / spawn_logged / runtime
 src/                      对应实现
-tests/                    ~224 用例
+tests/                    ~227 用例（CTP 构建 230）
 examples/demo.cpp
 scripts/probe_*.py        协议探测
 third_party/ctp/          CTP SDK（有头与 so，网关未实现）
