@@ -29,9 +29,9 @@ public:
     void setSubscription(const Subscription& subscription) override;
 
     void requestCatalog(const CatalogQuery& query) override;
-    void requestKlineHistory(const QString& symbol,
-                             qint64         durationNs,
-                             int            viewWidth) override;
+    void requestQuotes(const QStringList& symbols) override;
+    void requestOptionChain(const QString& underlying) override;
+    void requestKlineHistory(const QString& symbol, qint64 durationNs, int viewWidth) override;
     void requestAccountSnapshot() override;
     void requestOrders() override;
     void requestPositions() override;
@@ -54,17 +54,17 @@ private:
     using JsonCallback = std::function<void(const QJsonObject&, const QString&)>;
     void getJson(const QUrl& url, JsonCallback callback);
     void sendJson(QNetworkAccessManager::Operation method,
-                  const QUrl&                        url,
-                  const QJsonObject&                 body,
-                  JsonCallback                       callback);
+                  const QUrl&                      url,
+                  const QJsonObject&               body,
+                  JsonCallback                     callback);
 
     QNetworkAccessManager network_;
-    QWebSocket          socket_;
-    QTimer              reconnectTimer_;
-    QUrl                nodeUrl_;
-    Subscription        subscription_;
-    int                 reconnectDelayMs_ = 1000;
-    bool                manualDisconnect_ = false;
+    QWebSocket            socket_;
+    QTimer                reconnectTimer_;
+    QUrl                  nodeUrl_;
+    Subscription          subscription_;
+    int                   reconnectDelayMs_ = 1000;
+    bool                  manualDisconnect_ = false;
 };
 
 } // namespace tqsdk::ui

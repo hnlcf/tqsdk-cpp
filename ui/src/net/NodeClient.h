@@ -29,23 +29,24 @@ public:
     ~NodeClient() override = default;
 
     virtual void connectToNode(const QUrl& nodeUrl) = 0;
-    virtual void disconnectFromNode() = 0;
+    virtual void disconnectFromNode()               = 0;
 
     /// 合并/替换当前订阅集。实现负责在重连后重新发送。
     virtual void setSubscription(const Subscription& subscription) = 0;
 
     /// 一次性快照查询；结果通过 *Loaded 信号返回。
     virtual void requestCatalog(const CatalogQuery& query) = 0;
-    virtual void requestKlineHistory(const QString& symbol,
-                                     qint64         durationNs,
-                                     int            viewWidth) = 0;
-    virtual void requestAccountSnapshot() = 0;
-    virtual void requestOrders() = 0;
-    virtual void requestPositions() = 0;
-    virtual void requestTrades() = 0;
+    /// 拉取 REST 最新 quote 快照；即使 WS 尚未推送也能先显示已有截面。
+    virtual void requestQuotes(const QStringList& symbols)                                    = 0;
+    virtual void requestOptionChain(const QString& underlying)                                = 0;
+    virtual void requestKlineHistory(const QString& symbol, qint64 durationNs, int viewWidth) = 0;
+    virtual void requestAccountSnapshot()                                                     = 0;
+    virtual void requestOrders()                                                              = 0;
+    virtual void requestPositions()                                                           = 0;
+    virtual void requestTrades()                                                              = 0;
 
     virtual void placeOrder(const OrderRequest& request) = 0;
-    virtual void cancelOrder(const QString& orderId) = 0;
+    virtual void cancelOrder(const QString& orderId)     = 0;
 
     State state() const noexcept { return state_; }
 
@@ -61,8 +62,9 @@ signals:
     void tradesUpdated(const QVector<tqsdk::ui::Trade>& trades);
 
     void catalogLoaded(const QVector<tqsdk::ui::Instrument>& instruments);
-    void klineHistoryLoaded(const QString& symbol,
-                            qint64         durationNs,
+    void optionChainLoaded(const tqsdk::ui::OptionChain& chain);
+    void klineHistoryLoaded(const QString&                      symbol,
+                            qint64                              durationNs,
                             const QVector<tqsdk::ui::KlineBar>& bars);
     void orderAckReceived(const tqsdk::ui::OrderAck& ack);
     void errorOccurred(const QString& error);

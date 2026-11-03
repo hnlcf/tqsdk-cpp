@@ -53,14 +53,20 @@ cmake --build build-ui --target tqsdk-ui -j
 Phase 1（已完成）：
 
 - 自选/最近行情表，绑定 node WS quote snapshot/diff；
-- 期货合约列表，绑定 REST `/catalog/instruments`，支持搜索和双击切换；
+- 期货合约列表，绑定 REST `/catalog/instruments`，支持模糊搜索、回车加入自选和双击切换；
+- REST quote 快照 + WS quote 推送，无推送时也先显示已有截面/占位；
 - QPainter 自绘 K 线：蜡烛、成交量、价格/时间坐标、当前价、十字光标；
-- 1m/5m/15m/1h/1d 周期切换，K 线 REST 历史 + WS diff；
+- 1m/5m/15m/30m/1h/2h/4h/1d/3d/1w 周期切换，K 线 REST 历史 + WS diff；
 - 深色/浅色主题；
 - Wayland 原生运行，保留 XCB/XWayland fallback；
 - QtTest 覆盖协议解析、MarketStore 合并和 table models。
 
-Phase 2 待接入：期权链/T 型报价、下单/撤单、账户/持仓/委托/成交表。
+Phase 2（已完成基础版）：
+
+- 期权链 CALL/PUT 表格，双击合约加入自选；
+- 限价单下单、撤单，带风险确认；
+- 账户、持仓、委托、成交表，REST 快照 + WS diff；
+- 交易面板在 node ready、账户加载和风险确认后才可提交。
 
 启动时指定 node：
 

@@ -359,17 +359,18 @@ Qt6::WebSockets
 - `InstrumentTableModel` 合约目录表，支持搜索和双击切换；
 - `MarketStore` 合并 quote 和 K 线，支持 reset/append/update/裁剪；
 - `KLineChartWidget`：QPainter 蜡烛、成交量、坐标、当前价和十字光标；
-- 周期切换（1m/5m/15m/1h/1d）及 REST 历史 + WS 增量；
+- 周期切换（1m/5m/15m/30m/1h/2h/4h/1d/3d/1w）及 REST 历史 + WS 增量；
 - 深色/浅色主题；
 - Wayland 原生运行，XCB fallback；
 - QtTest 协议和模型测试。
 
-### Phase 2：期权与交易
+### Phase 2：期权与交易（基础版已完成，2026-11）
 
-- 期权链/T 型报价；
-- 下单/撤单；
-- 账户/持仓/委托/成交；
-- 风险提示和 readyz 门禁。
+- 期权链 CALL/PUT 表格，双击加入自选；
+- 限价单下单/撤单，风险确认复选框；
+- 账户、持仓、委托、成交表；
+- REST 快照与 WS diff 合并；
+- node ready + 账户加载门禁；`/readyz` 仍由 node 侧负责。
 
 ### Phase 3：工程质量
 

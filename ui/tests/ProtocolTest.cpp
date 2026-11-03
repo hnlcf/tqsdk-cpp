@@ -15,6 +15,7 @@ class ProtocolTest : public QObject {
 private slots:
     void parsesMarketData();
     void parsesCatalogAndHistory();
+    void parsesOptionChain();
     void buildsRequests();
     void rejectsMalformedNumbers();
 };
@@ -99,6 +100,22 @@ void ProtocolTest::parsesCatalogAndHistory() {
     QVERIFY(bars.size() == 1);
     QVERIFY(qFuzzyCompare(bars[0].close, 100.5));
     QVERIFY(bars[0].volume == 3u);
+}
+
+void ProtocolTest::parsesOptionChain() {
+    const auto chain = parseOptionChain(objectFrom(R"({
+      "underlying":"SHFE.rb2701",
+      "calls":[{"instrument_id":"SHFE.rb2701C3000","name":"rb2701C3000",
+                "option_class":"CALL","strike_price":"3000","last_price":"12.5"}],
+      "puts":[{"instrument_id":"SHFE.rb2701P3000","name":"rb2701P3000",
+               "option_class":"PUT","strike_price":3000,"last_price":8.0}]
+    })"));
+    QVERIFY(chain.has_value());
+    QCOMPARE(chain->underlying, QString("SHFE.rb2701"));
+    QCOMPARE(chain->calls.size(), 1);
+    QCOMPARE(chain->calls.front().instrumentId, QString("SHFE.rb2701C3000"));
+    QCOMPARE(chain->puts.size(), 1);
+    QVERIFY(qFuzzyCompare(chain->puts.front().strikePrice, 3000.0));
 }
 
 void ProtocolTest::buildsRequests() {

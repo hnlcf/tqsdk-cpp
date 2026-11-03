@@ -29,8 +29,10 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
 
-    void    setInstruments(const QVector<Instrument>& instruments);
-    QString symbolAt(int row) const;
+    void                       setInstruments(const QVector<Instrument>& instruments);
+    void                       applyQuotes(const QVector<Quote>& quotes);
+    QString                    symbolAt(int row) const;
+    const QVector<Instrument>& instruments() const { return instruments_; }
 
 private:
     QVector<Instrument> instruments_;

@@ -18,13 +18,13 @@ namespace tqsdk::ui {
 /// 页面/图表只看到这些类型，不直接接触 QJsonObject/QWebSocket。
 struct Quote {
     QString instrumentId;
-    double  lastPrice       = std::numeric_limits<double>::quiet_NaN();
-    double  bidPrice1       = std::numeric_limits<double>::quiet_NaN();
-    double  askPrice1       = std::numeric_limits<double>::quiet_NaN();
-    double  preSettlement   = std::numeric_limits<double>::quiet_NaN();
-    double  openInterest    = std::numeric_limits<double>::quiet_NaN();
-    qint64  volume          = 0;
-    qint64  datetime        = 0;
+    double  lastPrice     = std::numeric_limits<double>::quiet_NaN();
+    double  bidPrice1     = std::numeric_limits<double>::quiet_NaN();
+    double  askPrice1     = std::numeric_limits<double>::quiet_NaN();
+    double  preSettlement = std::numeric_limits<double>::quiet_NaN();
+    double  openInterest  = std::numeric_limits<double>::quiet_NaN();
+    qint64  volume        = 0;
+    qint64  datetime      = 0;
 };
 
 struct KlineBar {
@@ -39,8 +39,8 @@ struct KlineBar {
 };
 
 struct KlineFrame {
-    bool                reset = false;
-    QVector<KlineBar>   bars;
+    bool              reset = false;
+    QVector<KlineBar> bars;
 };
 
 struct Instrument {
@@ -52,33 +52,39 @@ struct Instrument {
     QString productName;
     QString underlyingSymbol;
     QString optionClass;
-    double  lastPrice     = 0.0;
-    double  strikePrice   = 0.0;
-    double  priceTick     = 0.0;
+    double  lastPrice      = 0.0;
+    double  strikePrice    = 0.0;
+    double  priceTick      = 0.0;
     double  volumeMultiple = 0.0;
     double  expireDatetime = 0.0;
-    int     priceDecs     = 0;
-    bool    expired       = false;
+    int     priceDecs      = 0;
+    bool    expired        = false;
+};
+
+struct OptionChain {
+    QString             underlying;
+    QVector<Instrument> calls;
+    QVector<Instrument> puts;
 };
 
 struct Account {
     QString currency;
-    double  balance       = std::numeric_limits<double>::quiet_NaN();
-    double  available     = std::numeric_limits<double>::quiet_NaN();
-    double  margin        = std::numeric_limits<double>::quiet_NaN();
-    double  floatProfit   = std::numeric_limits<double>::quiet_NaN();
-    double  riskRatio     = std::numeric_limits<double>::quiet_NaN();
+    double  balance     = std::numeric_limits<double>::quiet_NaN();
+    double  available   = std::numeric_limits<double>::quiet_NaN();
+    double  margin      = std::numeric_limits<double>::quiet_NaN();
+    double  floatProfit = std::numeric_limits<double>::quiet_NaN();
+    double  riskRatio   = std::numeric_limits<double>::quiet_NaN();
 };
 
 struct Position {
     QString instrumentId;
-    qint64  volumeLong      = 0;
-    qint64  volumeShort     = 0;
-    double  openPriceLong   = std::numeric_limits<double>::quiet_NaN();
-    double  openPriceShort  = std::numeric_limits<double>::quiet_NaN();
-    double  lastPrice       = std::numeric_limits<double>::quiet_NaN();
-    double  floatProfit     = std::numeric_limits<double>::quiet_NaN();
-    double  margin          = std::numeric_limits<double>::quiet_NaN();
+    qint64  volumeLong     = 0;
+    qint64  volumeShort    = 0;
+    double  openPriceLong  = std::numeric_limits<double>::quiet_NaN();
+    double  openPriceShort = std::numeric_limits<double>::quiet_NaN();
+    double  lastPrice      = std::numeric_limits<double>::quiet_NaN();
+    double  floatProfit    = std::numeric_limits<double>::quiet_NaN();
+    double  margin         = std::numeric_limits<double>::quiet_NaN();
 };
 
 struct Order {
@@ -88,10 +94,10 @@ struct Order {
     QString offset;
     QString status;
     QString message;
-    double  limitPrice      = std::numeric_limits<double>::quiet_NaN();
-    qint64  volumeOrigin    = 0;
-    qint64  volumeLeft      = 0;
-    bool    isDead          = false;
+    double  limitPrice   = std::numeric_limits<double>::quiet_NaN();
+    qint64  volumeOrigin = 0;
+    qint64  volumeLeft   = 0;
+    bool    isDead       = false;
 };
 
 struct Trade {
@@ -99,20 +105,20 @@ struct Trade {
     QString instrumentId;
     QString direction;
     QString offset;
-    double  price           = std::numeric_limits<double>::quiet_NaN();
-    qint64  volume          = 0;
-    qint64  tradeDateTime   = 0;
+    double  price         = std::numeric_limits<double>::quiet_NaN();
+    qint64  volume        = 0;
+    qint64  tradeDateTime = 0;
 };
 
 /// 一次 snapshot/diff 中所有实体。
 struct MarketUpdate {
-    QVector<Quote> quotes;
+    QVector<Quote>                            quotes;
     QHash<QString, QHash<qint64, KlineFrame>> klines; // symbol -> duration -> frame
-    bool     hasAccount = false;
-    Account  account;
-    QVector<Position> positions;
-    QVector<Order>    orders;
-    QVector<Trade>    trades;
+    bool                                      hasAccount = false;
+    Account                                   account;
+    QVector<Position>                         positions;
+    QVector<Order>                            orders;
+    QVector<Trade>                            trades;
 };
 
 struct KlineSubscription {
@@ -122,21 +128,30 @@ struct KlineSubscription {
 };
 
 struct Subscription {
-    QStringList                  symbols;
-    QVector<KlineSubscription>   klines;
-    QStringList                  topics;
+    QStringList                symbols;
+    QVector<KlineSubscription> klines;
+    QStringList                topics;
 };
 
-enum class Direction { Buy, Sell };
-enum class Offset { Open, Close, CloseToday };
-enum class PriceType { Limit };
+enum class Direction {
+    Buy,
+    Sell
+};
+enum class Offset {
+    Open,
+    Close,
+    CloseToday
+};
+enum class PriceType {
+    Limit
+};
 
 struct OrderRequest {
     QString   instrumentId;
     QString   exchangeId;
-    Direction direction = Direction::Buy;
-    Offset    offset    = Offset::Open;
-    PriceType priceType = PriceType::Limit;
+    Direction direction  = Direction::Buy;
+    Offset    offset     = Offset::Open;
+    PriceType priceType  = PriceType::Limit;
     double    limitPrice = 0.0;
     qint64    volume     = 0;
     qint64    minVolume  = 0;
@@ -163,20 +178,21 @@ struct CatalogQuery {
 // JSON <-> typed models
 // ---------------------------------------------------------------------------
 
-std::optional<Quote>       parseQuote(const QJsonObject& object);
-std::optional<KlineBar>    parseKlineBar(const QJsonObject& object);
-std::optional<KlineFrame>  parseKlineFrame(const QJsonValue& value);
-std::optional<Instrument>  parseInstrument(const QJsonObject& object);
-std::optional<Account>     parseAccount(const QJsonObject& object);
-std::optional<Position>    parsePosition(const QJsonObject& object);
-std::optional<Order>       parseOrder(const QJsonObject& object);
-std::optional<Trade>       parseTrade(const QJsonObject& object);
+std::optional<Quote>      parseQuote(const QJsonObject& object);
+std::optional<KlineBar>   parseKlineBar(const QJsonObject& object);
+std::optional<KlineFrame> parseKlineFrame(const QJsonValue& value);
+std::optional<Instrument> parseInstrument(const QJsonObject& object);
+std::optional<Account>    parseAccount(const QJsonObject& object);
+std::optional<Position>   parsePosition(const QJsonObject& object);
+std::optional<Order>      parseOrder(const QJsonObject& object);
+std::optional<Trade>      parseTrade(const QJsonObject& object);
 
 MarketUpdate parseMarketData(const QJsonObject& data);
 
-QVector<Instrument> parseCatalog(const QJsonObject& response);
-QVector<KlineBar>   parseKlineHistory(const QJsonObject& response);
-std::optional<OrderAck> parseOrderAck(const QJsonObject& response);
+QVector<Instrument>        parseCatalog(const QJsonObject& response);
+std::optional<OptionChain> parseOptionChain(const QJsonObject& response);
+QVector<KlineBar>          parseKlineHistory(const QJsonObject& response);
+std::optional<OrderAck>    parseOrderAck(const QJsonObject& response);
 
 QJsonObject makeSubscribe(const Subscription& subscription);
 QJsonObject makeOrder(const OrderRequest& request);

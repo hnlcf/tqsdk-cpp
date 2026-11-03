@@ -1,6 +1,7 @@
 #include "model/InstrumentTableModel.h"
 
 #include <QFont>
+#include <QHash>
 #include <QString>
 
 #include <cmath>
@@ -22,6 +23,25 @@ void InstrumentTableModel::setInstruments(const QVector<Instrument>& instruments
     beginResetModel();
     instruments_ = instruments;
     endResetModel();
+}
+
+void InstrumentTableModel::applyQuotes(const QVector<Quote>& quotes) {
+    QHash<QString, const Quote*> bySymbol;
+    for (const auto& quote : quotes) {
+        bySymbol.insert(quote.instrumentId, &quote);
+    }
+    bool changed = false;
+    for (auto& instrument : instruments_) {
+        auto it = bySymbol.constFind(instrument.instrumentId);
+        if (it != bySymbol.constEnd() && std::isfinite(it.value()->lastPrice) &&
+            it.value()->lastPrice > 0.0) {
+            instrument.lastPrice = it.value()->lastPrice;
+            changed              = true;
+        }
+    }
+    if (changed && !instruments_.isEmpty()) {
+        emit dataChanged(index(0, 0), index(instruments_.size() - 1, ColumnCount - 1));
+    }
 }
 
 QString InstrumentTableModel::symbolAt(int row) const {

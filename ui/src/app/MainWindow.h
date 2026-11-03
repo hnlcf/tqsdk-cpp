@@ -1,12 +1,20 @@
 #pragma once
 
+#include "net/Protocol.h"
+
 #include <QMainWindow>
 #include <QStringList>
 
+class QCheckBox;
+class QComboBox;
+class QCompleter;
+class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSortFilterProxyModel;
+class QSpinBox;
+class QStringListModel;
 class QTabWidget;
 class QTableView;
 
@@ -16,7 +24,10 @@ class InstrumentTableModel;
 class KLineChartWidget;
 class MarketStore;
 class NodeClient;
+class OrderTableModel;
+class PositionTableModel;
 class QuoteTableModel;
+class TradeTableModel;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -29,37 +40,76 @@ private:
     void buildUi();
     void buildToolbar();
     void buildWorkspace();
+    void buildOrderPanel(QWidget* parent);
     void buildBottomDock();
     void connectNode();
     void selectSymbol(const QString& symbol);
+    void addSymbolToWatchlist(const QString& symbol, bool request = true);
+    void addSymbolFromInput(const QString& input);
+    QString resolveSymbol(const QString& input) const;
+    void updateSearchCompletions(const QString& input);
     void setInterval(qint64 durationNs, const QString& label);
     void updateQuotePanel();
+    void updateAccountPanel(const Account& account);
+    void updateOrderControls();
+    void submitOrder();
+    void cancelSelectedOrder();
+    void requestOptionChain();
     void applyTheme();
 
-    NodeClient*            nodeClient_   = nullptr;
-    MarketStore*           marketStore_  = nullptr;
-    QuoteTableModel*       watchModel_   = nullptr;
-    InstrumentTableModel*  futuresModel_ = nullptr;
-    QSortFilterProxyModel* futuresProxy_ = nullptr;
-    KLineChartWidget*      chart_        = nullptr;
+    NodeClient*            nodeClient_     = nullptr;
+    MarketStore*           marketStore_    = nullptr;
+    QuoteTableModel*       watchModel_     = nullptr;
+    InstrumentTableModel*  futuresModel_   = nullptr;
+    QSortFilterProxyModel* futuresProxy_   = nullptr;
+    InstrumentTableModel*  callsModel_     = nullptr;
+    InstrumentTableModel*  putsModel_      = nullptr;
+    PositionTableModel*    positionsModel_ = nullptr;
+    OrderTableModel*       ordersModel_    = nullptr;
+    TradeTableModel*       tradesModel_    = nullptr;
+    KLineChartWidget*      chart_          = nullptr;
 
-    QTableView* watchTable_   = nullptr;
-    QTableView* futuresTable_ = nullptr;
-    QTabWidget* centerTabs_   = nullptr;
-    QLineEdit*  search_       = nullptr;
+    QTableView* watchTable_    = nullptr;
+    QTableView* futuresTable_  = nullptr;
+    QTableView* callsTable_    = nullptr;
+    QTableView* putsTable_     = nullptr;
+    QTableView* positionTable_ = nullptr;
+    QTableView* orderTable_    = nullptr;
+    QTableView* tradeTable_    = nullptr;
+    QTabWidget* centerTabs_    = nullptr;
+    QLineEdit*  search_        = nullptr;
+    QCompleter* searchCompleter_ = nullptr;
+    QStringListModel* searchCompletions_ = nullptr;
+    QPushButton* addSymbolButton_ = nullptr;
 
-    QLabel*      connectionLabel_ = nullptr;
-    QLabel*      symbolLabel_     = nullptr;
-    QLabel*      lastLabel_       = nullptr;
-    QLabel*      changeLabel_     = nullptr;
-    QLabel*      bidAskLabel_     = nullptr;
-    QPushButton* themeButton_     = nullptr;
+    QLabel*      connectionLabel_  = nullptr;
+    QLabel*      symbolLabel_      = nullptr;
+    QLabel*      lastLabel_        = nullptr;
+    QLabel*      changeLabel_      = nullptr;
+    QLabel*      bidAskLabel_      = nullptr;
+    QLabel*      futuresStatus_    = nullptr;
+    QLabel*      orderStatus_      = nullptr;
+    QLabel*      accountBalance_   = nullptr;
+    QLabel*      accountAvailable_ = nullptr;
+    QLabel*      accountMargin_    = nullptr;
+    QLabel*      accountRisk_      = nullptr;
+    QPushButton* themeButton_      = nullptr;
+
+    QComboBox*      directionBox_ = nullptr;
+    QComboBox*      offsetBox_    = nullptr;
+    QDoubleSpinBox* priceBox_     = nullptr;
+    QSpinBox*       volumeBox_    = nullptr;
+    QCheckBox*      riskCheck_    = nullptr;
+    QPushButton*    submitButton_ = nullptr;
+    QPushButton*    cancelButton_ = nullptr;
 
     QStringList watchlist_;
     QString     selectedSymbol_     = QStringLiteral("SHFE.rb2701");
     qint64      selectedDurationNs_ = 60'000'000'000LL;
     QString     selectedInterval_   = QStringLiteral("1m");
     bool        dark_               = true;
+    bool        nodeReady_          = false;
+    bool        accountLoaded_      = false;
 };
 
 } // namespace tqsdk::ui

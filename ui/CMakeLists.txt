@@ -27,6 +27,8 @@ set(TQSDK_UI_SOURCES
     src/model/QuoteTableModel.h
     src/model/InstrumentTableModel.cpp
     src/model/InstrumentTableModel.h
+    src/model/TradingModels.cpp
+    src/model/TradingModels.h
     src/chart/KLineChartWidget.cpp
     src/chart/KLineChartWidget.h
 )
@@ -90,6 +92,8 @@ if(TQSDK_BUILD_UI_TESTS)
         src/model/QuoteTableModel.h
         src/model/InstrumentTableModel.cpp
         src/model/InstrumentTableModel.h
+        src/model/TradingModels.cpp
+        src/model/TradingModels.h
     )
     target_include_directories(tqsdk-ui-model-tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src

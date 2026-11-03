@@ -1,6 +1,7 @@
 #include "model/InstrumentTableModel.h"
 #include "model/MarketStore.h"
 #include "model/QuoteTableModel.h"
+#include "model/TradingModels.h"
 
 #include <QtTest>
 
@@ -13,6 +14,7 @@ private slots:
     void marketStoreQuotesAndKlines();
     void quoteModelFormatsRows();
     void instrumentModelFormatsRows();
+    void tradingModelsMerge();
 };
 
 void ModelTest::marketStoreQuotesAndKlines() {
@@ -79,6 +81,57 @@ void ModelTest::quoteModelFormatsRows() {
     QCOMPARE(model.data(model.index(1, QuoteTableModel::Last)).toString(), QString("—"));
 }
 
+void ModelTest::tradingModelsMerge() {
+    PositionTableModel positions;
+    Position           position;
+    position.instrumentId  = "SHFE.rb2701";
+    position.volumeLong    = 2;
+    position.openPriceLong = 3000.0;
+    position.lastPrice     = 3010.0;
+    position.floatProfit   = 200.0;
+    positions.applyPositions({position});
+    QCOMPARE(positions.rowCount(), 1);
+    QCOMPARE(positions.data(positions.index(0, PositionTableModel::Symbol)).toString(),
+             QString("SHFE.rb2701"));
+    position.floatProfit = 210.0;
+    positions.applyPositions({position});
+    QCOMPARE(positions.rowCount(), 1);
+    QCOMPARE(positions.data(positions.index(0, PositionTableModel::FloatProfit)).toString(),
+             QString("210.00"));
+
+    OrderTableModel orders;
+    Order           order;
+    order.orderId      = "1001";
+    order.instrumentId = "SHFE.rb2701";
+    order.direction    = "BUY";
+    order.offset       = "OPEN";
+    order.limitPrice   = 3000.0;
+    order.volumeOrigin = 1;
+    order.volumeLeft   = 1;
+    order.status       = "ALIVE";
+    order.isDead       = false;
+    orders.applyOrders({order});
+    QCOMPARE(orders.rowCount(), 1);
+    QCOMPARE(orders.orderIdAt(0), QString("1001"));
+    QVERIFY(orders.isOrderAlive(0));
+    order.isDead = true;
+    order.status = "FINISHED";
+    orders.applyOrders({order});
+    QCOMPARE(orders.rowCount(), 1);
+    QVERIFY(!orders.isOrderAlive(0));
+
+    TradeTableModel trades;
+    Trade           trade;
+    trade.tradeId      = "2001";
+    trade.instrumentId = "SHFE.rb2701";
+    trade.direction    = "BUY";
+    trade.price        = 3000.0;
+    trade.volume       = 1;
+    trades.applyTrades({trade});
+    QCOMPARE(trades.rowCount(), 1);
+    QCOMPARE(trades.data(trades.index(0, TradeTableModel::TradeId)).toString(), QString("2001"));
+}
+
 void ModelTest::instrumentModelFormatsRows() {
     InstrumentTableModel model;
     Instrument           instrument;
@@ -96,6 +149,13 @@ void ModelTest::instrumentModelFormatsRows() {
              QString("螺纹2701"));
     QCOMPARE(model.data(model.index(0, InstrumentTableModel::Multiplier)).toString(),
              QString("10"));
+
+    Quote quote;
+    quote.instrumentId = "SHFE.rb2701";
+    quote.lastPrice    = 3011.0;
+    model.applyQuotes({quote});
+    QCOMPARE(model.data(model.index(0, InstrumentTableModel::LastPrice)).toString(),
+             QString("3011.00"));
 }
 
 QTEST_APPLESS_MAIN(ModelTest)

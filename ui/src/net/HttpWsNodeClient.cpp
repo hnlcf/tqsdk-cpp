@@ -1,9 +1,9 @@
 #include "net/HttpWsNodeClient.h"
 
+#include <QAbstractSocket>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <QAbstractSocket>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrlQuery>
@@ -322,6 +322,42 @@ void HttpWsNodeClient::requestCatalog(const CatalogQuery& query) {
         }
         emit catalogLoaded(parseCatalog(response));
     });
+}
+
+void HttpWsNodeClient::requestQuotes(const QStringList& symbols) {
+    for (const QString& symbol : symbols) {
+        if (symbol.isEmpty()) {
+            continue;
+        }
+        const QString encoded = QString::fromLatin1(QUrl::toPercentEncoding(symbol));
+        getJson(apiUrl(QStringLiteral("/quote/%1").arg(encoded)),
+                [this, symbol](const QJsonObject& response, const QString& error) {
+                    if (!error.isEmpty()) {
+                        emit errorOccurred(error);
+                        return;
+                    }
+                    if (auto quote = parseQuote(response)) {
+                        if (quote->instrumentId.isEmpty()) {
+                            quote->instrumentId = symbol;
+                        }
+                        emit quotesUpdated({*quote});
+                    }
+                });
+    }
+}
+
+void HttpWsNodeClient::requestOptionChain(const QString& underlying) {
+    const QString encoded = QString::fromLatin1(QUrl::toPercentEncoding(underlying));
+    getJson(apiUrl(QStringLiteral("/catalog/option-chain/%1").arg(encoded)),
+            [this](const QJsonObject& response, const QString& error) {
+                if (!error.isEmpty()) {
+                    emit errorOccurred(error);
+                    return;
+                }
+                if (auto chain = parseOptionChain(response)) {
+                    emit optionChainLoaded(*chain);
+                }
+            });
 }
 
 void HttpWsNodeClient::requestKlineHistory(const QString& symbol,

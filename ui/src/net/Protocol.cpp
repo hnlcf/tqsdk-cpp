@@ -299,6 +299,37 @@ QVector<Instrument> parseCatalog(const QJsonObject& response) {
     return out;
 }
 
+std::optional<OptionChain> parseOptionChain(const QJsonObject& response) {
+    if (response.isEmpty()) {
+        return std::nullopt;
+    }
+    OptionChain chain;
+    chain.underlying     = stringValue(response.value("underlying"));
+    const auto parseSide = [](const QJsonValue& value, QVector<Instrument>& output) {
+        if (!value.isArray()) {
+            return;
+        }
+        for (const auto& item : value.toArray()) {
+            if (item.isObject()) {
+                const auto object = item.toObject();
+                if (auto instrument = parseInstrument(object)) {
+                    if (const auto quoteValue = object.value("quote"); quoteValue.isObject()) {
+                        if (auto quote = parseQuote(quoteValue.toObject())) {
+                            if (std::isfinite(quote->lastPrice)) {
+                                instrument->lastPrice = quote->lastPrice;
+                            }
+                        }
+                    }
+                    output.push_back(*instrument);
+                }
+            }
+        }
+    };
+    parseSide(response.value("calls"), chain.calls);
+    parseSide(response.value("puts"), chain.puts);
+    return chain;
+}
+
 QVector<KlineBar> parseKlineHistory(const QJsonObject& response) {
     QVector<KlineBar> out;
     const auto        array = response.value("bars");
