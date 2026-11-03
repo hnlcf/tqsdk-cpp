@@ -9,6 +9,7 @@
     "nlohmann-json",
     "openssl",
     "spdlog",
-    "tomlplusplus"
+    "tomlplusplus",
+    "sqlitecpp"
   ]
 }

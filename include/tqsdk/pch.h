@@ -49,4 +49,6 @@
 
 #include <CLI/CLI.hpp>
 
+#include <SQLiteCpp/SQLiteCpp.h>
+
 #include <gtest/gtest.h>

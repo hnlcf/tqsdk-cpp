@@ -34,3 +34,7 @@ latest.json
 
 # 天勤标准合约目录（由 node 下载/本地维护）
 symbol.json
+
+# Tauri/Rust 生成物
+web/apps/desktop/src-tauri/target/
+web/apps/desktop/src-tauri/gen/

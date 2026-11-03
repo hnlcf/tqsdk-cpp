@@ -20,6 +20,7 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(tomlplusplus CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
+find_package(SQLiteCpp CONFIG REQUIRED)
 
 # GoogleTest (仅在启用测试时)
 option(TQSDK_BUILD_TESTS "Build tests" OFF)
@@ -80,6 +81,7 @@ target_link_libraries(tqsdk_core PUBLIC
     tomlplusplus::tomlplusplus
     spdlog::spdlog
     CLI11::CLI11
+    SQLiteCpp
 )
 
 # ---------- CTP 网关 (可选，仅当找到 CTP SDK 时编译) ----------

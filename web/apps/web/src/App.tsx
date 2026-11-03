@@ -1,12 +1,18 @@
-import { For, Match, Switch, createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import KLineChart from "./chart/KLineChart";
 import {
   createMarketStream,
+  cancelOrder,
   getKline,
   getQuote,
+  insertOrder,
+  type AccountSnapshot,
   type KlineBar,
   type MarketStream,
+  type OrderSnapshot,
+  type PositionSnapshot,
   type Quote,
+  type TradeSnapshot,
 } from "./api/client";
 import FuturesPage from "./pages/FuturesPage";
 import OptionsPage from "./pages/OptionsPage";
@@ -49,6 +55,13 @@ function finitePrice(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
+function formatAccount(value: number): string {
+  return value.toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function readInitialView(): View {
   const value = new URLSearchParams(window.location.search).get("view");
   return value === "futures" || value === "options" ? value : "trade";
@@ -74,13 +87,17 @@ export default function App() {
   const [offset, setOffset] = createSignal<"OPEN" | "CLOSE">("OPEN");
   const [price, setPrice] = createSignal(2993);
   const [volume, setVolume] = createSignal(1);
-  const [ticketMsg, setTicketMsg] = createSignal("模拟模式 · 不会发送到柜台");
+  const [ticketMsg, setTicketMsg] = createSignal("行情就绪后可提交委托");
   const [theme, setTheme] = createSignal<Theme>(readInitialTheme());
   const [view, setView] = createSignal<View>(readInitialView());
   const [liveQuote, setLiveQuote] = createSignal<Quote>();
   const [liveBars, setLiveBars] = createSignal<Bar[]>([]);
   const [streamStatus, setStreamStatus] = createSignal<"connecting" | "online" | "offline">("connecting");
   const [mounted, setMounted] = createSignal(false);
+  const [account, setAccount] = createSignal<AccountSnapshot>();
+  const [livePositions, setLivePositions] = createSignal<Record<string, PositionSnapshot>>({});
+  const [liveOrders, setLiveOrders] = createSignal<Record<string, OrderSnapshot>>({});
+  const [liveTrades, setLiveTrades] = createSignal<Record<string, TradeSnapshot>>({});
   let stream: MarketStream | undefined;
   let loadGeneration = 0;
 
@@ -111,8 +128,67 @@ export default function App() {
     }
     return mockQuote();
   };
-  const positions = (): Position[] => MOCK_POSITIONS;
-  const orders = (): OrderRow[] => MOCK_ORDERS;
+  const hasTradeLive = () =>
+    (account()?.balance ?? 0) > 0 ||
+    Object.keys(livePositions()).length > 0 ||
+    Object.keys(liveOrders()).length > 0 ||
+    Object.keys(liveTrades()).length > 0;
+  const accountView = () => {
+    const live = account();
+    if (hasTradeLive() && live && typeof live.balance === "number") {
+      return {
+        balance: live.balance,
+        available: live.available ?? 0,
+        margin: live.margin ?? 0,
+        floatProfit: live.float_profit ?? 0,
+      };
+    }
+    return { balance: 916746.38, available: 668810.51, margin: 247552.0, floatProfit: 1600.0 };
+  };
+  const positions = (): Position[] => {
+    if (!hasTradeLive()) return MOCK_POSITIONS;
+    return Object.values(livePositions()).flatMap((position) => {
+      const longVolume = position.volume_long ?? 0;
+      const shortVolume = position.volume_short ?? 0;
+      const side: "LONG" | "SHORT" = longVolume >= shortVolume ? "LONG" : "SHORT";
+      const volume = Math.max(longVolume, shortVolume);
+      if (volume <= 0) return [];
+      const openPrice =
+        side === "LONG"
+          ? position.open_price_long ?? position.position_price_long ?? 0
+          : position.open_price_short ?? position.position_price_short ?? 0;
+      return [{
+        symbol: position.instrument_id,
+        side,
+        volume,
+        openPrice,
+        lastPrice: position.last_price ?? 0,
+        floatProfit: position.float_profit ?? 0,
+        margin: position.margin ?? 0,
+      }];
+    });
+  };
+  const orders = (): OrderRow[] => {
+    if (!hasTradeLive()) return MOCK_ORDERS;
+    return Object.values(liveOrders()).map((order) => ({
+      id: order.order_id,
+      symbol: order.instrument_id,
+      side: order.direction === "SELL" ? "SELL" : "BUY",
+      offset: order.offset === "CLOSE" ? "CLOSE" : "OPEN",
+      price: order.limit_price ?? 0,
+      volume: order.volume_orign ?? 0,
+      status: order.is_dead ? "FINISHED" : "ALIVE",
+      message: order.last_msg || (order.status === "ALIVE" ? "未成交" : order.status || "FINISHED"),
+    }));
+  };
+  const trades = () => Object.values(liveTrades()).map((trade) => ({
+    id: trade.trade_id,
+    symbol: trade.instrument_id,
+    side: trade.direction === "SELL" ? "SELL" : "BUY",
+    offset: trade.offset === "CLOSE" ? "CLOSE" : "OPEN",
+    price: trade.price ?? 0,
+    volume: trade.volume ?? 0,
+  }));
   const watchPrice = (symbol: string, fallback: number) =>
     symbol === selected() ? quote().price : fallback;
   const watchChange = (symbol: string, fallback: number) =>
@@ -155,6 +231,24 @@ export default function App() {
         const next = quotes[selected()];
         if (next) setLiveQuote(next);
       },
+      onTradeData: (data, snapshot) => {
+        if (data.account) setAccount(data.account);
+        if (snapshot) {
+          if (data.positions) setLivePositions(data.positions);
+          if (data.orders) setLiveOrders(data.orders);
+          if (data.trades) setLiveTrades(data.trades);
+          return;
+        }
+        if (data.positions) {
+          setLivePositions((previous) => ({ ...previous, ...data.positions }));
+        }
+        if (data.orders) {
+          setLiveOrders((previous) => ({ ...previous, ...data.orders }));
+        }
+        if (data.trades) {
+          setLiveTrades((previous) => ({ ...previous, ...data.trades }));
+        }
+      },
       onKline: (symbol, duration, payload) => {
         if (symbol !== selected() || duration !== "60000000000") return;
         const update = payload as { reset?: boolean; bars?: KlineBar[] };
@@ -195,7 +289,11 @@ export default function App() {
     if (!mounted()) return;
     const symbol = selected();
     void loadMarket(symbol);
-    stream?.subscribe([symbol], [{ symbol, duration_ns: 60_000_000_000 }]);
+    stream?.subscribe(
+      [symbol],
+      [{ symbol, duration_ns: 60_000_000_000 }],
+      ["account", "orders", "trades", "positions"],
+    );
   });
 
   async function loadMarket(symbol: string) {
@@ -216,11 +314,38 @@ export default function App() {
     }
   }
 
-  function submitDemoOrder(event: SubmitEvent) {
+  async function submitOrder(event: SubmitEvent) {
     event.preventDefault();
-    setTicketMsg(
-      `模拟${side() === "BUY" ? "买入" : "卖出"} ${selected()} ${offset() === "OPEN" ? "开仓" : "平仓"} ${volume()} 手 @ ${price()}`,
-    );
+    if (!hasTradeLive()) {
+      setTicketMsg("交易账户未连接，暂不能提交");
+      return;
+    }
+    setTicketMsg("提交中...");
+    try {
+      const result = await insertOrder({
+        instrument_id: selected(),
+        direction: side(),
+        offset: offset(),
+        price_type: "LIMIT",
+        limit_price: price(),
+        time_cond: "GFD",
+        volume_cond: "ANY",
+        volume: volume(),
+        min_volume: 0,
+      });
+      setTicketMsg(result.success ? `已提交 ${result.order_id}` : result.error || "提交失败");
+    } catch (error) {
+      setTicketMsg(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function cancelLiveOrder(orderId: string) {
+    try {
+      const result = await cancelOrder(orderId);
+      setTicketMsg(result.success ? `已发送撤单 ${orderId}` : result.error || "撤单失败");
+    } catch (error) {
+      setTicketMsg(error instanceof Error ? error.message : String(error));
+    }
   }
 
   return (
@@ -261,19 +386,19 @@ export default function App() {
         <div class="account-strip">
           <div>
             <small>权益</small>
-            <strong>916,746.38</strong>
+            <strong>{formatAccount(accountView().balance)}</strong>
           </div>
           <div>
             <small>可用</small>
-            <strong>668,810.51</strong>
+            <strong>{formatAccount(accountView().available)}</strong>
           </div>
           <div>
             <small>保证金</small>
-            <strong>247,552.00</strong>
+            <strong>{formatAccount(accountView().margin)}</strong>
           </div>
-          <div class={quote().change >= 0 ? "positive" : "negative"}>
+          <div class={accountView().floatProfit >= 0 ? "positive" : "negative"}>
             <small>浮动盈亏</small>
-            <strong>{quote().change >= 0 ? "+" : ""}1,600.00</strong>
+            <strong>{accountView().floatProfit >= 0 ? "+" : "-"}{formatAccount(Math.abs(accountView().floatProfit))}</strong>
           </div>
         </div>
         <button
@@ -414,12 +539,12 @@ export default function App() {
           <div class="panel-heading">
             <div>
               <span class="eyebrow">ORDER ENTRY</span>
-              <h2>模拟下单</h2>
+              <h2>{hasTradeLive() ? "交易下单" : "模拟面板"}</h2>
             </div>
-            <span class="demo-pill">DEMO</span>
+            <span class="demo-pill">{hasTradeLive() ? "API" : "DEMO"}</span>
           </div>
 
-          <form onSubmit={submitDemoOrder}>
+          <form onSubmit={submitOrder}>
             <div class="side-switch">
               <button
                 type="button"
@@ -490,8 +615,12 @@ export default function App() {
               <strong>{(price() * volume() * 10 * 0.12).toFixed(2)}</strong>
             </div>
 
-            <button type="submit" class={`submit-order ${side() === "BUY" ? "buy" : "sell"}`}>
-              {side() === "BUY" ? "买入开仓" : "卖出平仓"}
+            <button
+              type="submit"
+              class={`submit-order ${side() === "BUY" ? "buy" : "sell"}`}
+              disabled={!hasTradeLive()}
+            >
+              {side() === "BUY" ? "买入" : "卖出"}{offset() === "OPEN" ? "开仓" : "平仓"}
             </button>
             <p class="ticket-message">{ticketMsg()}</p>
           </form>
@@ -586,6 +715,7 @@ export default function App() {
                 <th>价格</th>
                 <th>数量</th>
                 <th>状态</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -605,6 +735,51 @@ export default function App() {
                         {order.message}
                       </span>
                     </td>
+                    <td>
+                      <Show when={hasTradeLive() && order.status === "ALIVE"}>
+                        <button class="table-action" type="button" onClick={() => cancelLiveOrder(order.id)}>
+                          撤单
+                        </button>
+                      </Show>
+                    </td>
+                  </tr>
+                )}
+              </For>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel table-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">TRADES</span>
+              <h2>当日成交</h2>
+            </div>
+            <span class="muted">{trades().length} 笔</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>成交号</th>
+                <th>合约</th>
+                <th>方向</th>
+                <th>开平</th>
+                <th>价格</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody>
+              <For each={trades()}>
+                {(trade) => (
+                  <tr>
+                    <td class="mono">{trade.id}</td>
+                    <td>{trade.symbol}</td>
+                    <td class={trade.side === "BUY" ? "positive" : "negative"}>
+                      {trade.side === "BUY" ? "买" : "卖"}
+                    </td>
+                    <td>{trade.offset === "OPEN" ? "开" : "平"}</td>
+                    <td>{trade.price.toFixed(1)}</td>
+                    <td>{trade.volume}</td>
                   </tr>
                 )}
               </For>
@@ -622,8 +797,8 @@ export default function App() {
       </Switch>
 
       <footer class="footer">
-        <span>Phase 0 · mock data</span>
-        <span>下一步：REST 快照 + WebSocket diff + 指标 Worker</span>
+        <span>{isLive() ? "LIVE · node market feed" : "MOCK fallback"}</span>
+        <span>REST 快照 + WebSocket diff · 账户/持仓/委托/成交</span>
         <span class="mono">SolidJS + Lightweight Charts</span>
       </footer>
     </div>

@@ -1,5 +1,5 @@
-import { For, createSignal, onMount } from "solid-js";
-import { getInstruments } from "../api/client";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { createMarketStream, getInstruments, type MarketStream, type Quote } from "../api/client";
 import { FUTURES_ROWS, type FuturesRow } from "../data/mock";
 
 interface Props {
@@ -11,8 +11,15 @@ export default function FuturesPage(props: Props) {
   const [exchange, setExchange] = createSignal("ALL");
   const [allRows, setAllRows] = createSignal<FuturesRow[]>(FUTURES_ROWS);
   const [live, setLive] = createSignal(false);
+  const [quotes, setQuotes] = createSignal<Record<string, Quote>>({});
+  const [visibleLimit, setVisibleLimit] = createSignal(100);
+  let stream: MarketStream | undefined;
 
   onMount(async () => {
+    stream = createMarketStream({
+      onQuote: (next) => setQuotes((previous) => ({ ...previous, ...next })),
+    });
+    onCleanup(() => stream?.close());
     try {
       const response = await getInstruments({
         classes: "FUTURE,FUTURE_CONT,FUTURE_INDEX",
@@ -38,7 +45,7 @@ export default function FuturesPage(props: Props) {
     }
   });
 
-  const rows = () => {
+  const rows = createMemo(() => {
     const q = query().trim().toLowerCase();
     return allRows().filter((row) => {
       const exchangeMatch = exchange() === "ALL" || row.exchange === exchange();
@@ -48,7 +55,28 @@ export default function FuturesPage(props: Props) {
         row.name.toLowerCase().includes(q);
       return exchangeMatch && queryMatch;
     });
+  });
+  const visibleRows = createMemo(() => rows().slice(0, visibleLimit()));
+  const quoteOf = (symbol: string) => quotes()[symbol];
+  const priceOf = (row: FuturesRow) => quoteOf(row.symbol)?.last_price ?? row.price;
+  const changeOf = (row: FuturesRow) => {
+    const quote = quoteOf(row.symbol);
+    if (quote && typeof quote.last_price === "number") {
+      const previous = quote.pre_settlement ?? quote.pre_close;
+      if (typeof previous === "number" && previous > 0) {
+        return ((quote.last_price - previous) / previous) * 100;
+      }
+    }
+    return row.changePct;
   };
+  const volumeOf = (row: FuturesRow) => quoteOf(row.symbol)?.volume ?? row.volume;
+  const openInterestOf = (row: FuturesRow) =>
+    quoteOf(row.symbol)?.open_interest ?? row.openInterest;
+
+  createEffect(() => {
+    if (!live() || !stream) return;
+    stream.subscribe(visibleRows().map((row) => row.symbol));
+  });
 
   return (
     <section class="page-view">
@@ -114,7 +142,7 @@ export default function FuturesPage(props: Props) {
             </tr>
           </thead>
           <tbody>
-            <For each={rows()}>
+            <For each={visibleRows()}>
               {(row) => (
                 <tr class="clickable-row" onClick={() => props.onSelect(row.symbol)}>
                   <td class="mono strong">{row.symbol}</td>
@@ -122,12 +150,12 @@ export default function FuturesPage(props: Props) {
                   <td>
                     <span class="exchange-tag">{row.exchange}</span>
                   </td>
-                  <td class="mono">{row.price > 0 ? row.price.toLocaleString("zh-CN") : "—"}</td>
-                  <td class={row.price > 0 ? (row.changePct >= 0 ? "positive" : "negative") : "muted"}>
-                    {row.price > 0 ? `${row.changePct >= 0 ? "+" : ""}${row.changePct.toFixed(2)}%` : "—"}
+                  <td class="mono">{priceOf(row) > 0 ? priceOf(row).toLocaleString("zh-CN") : "—"}</td>
+                  <td class={priceOf(row) > 0 ? (changeOf(row) >= 0 ? "positive" : "negative") : "muted"}>
+                    {priceOf(row) > 0 ? `${changeOf(row) >= 0 ? "+" : ""}${changeOf(row).toFixed(2)}%` : "—"}
                   </td>
-                  <td class="mono">{row.volume > 0 ? row.volume.toLocaleString("zh-CN") : "—"}</td>
-                  <td class="mono">{row.openInterest > 0 ? row.openInterest.toLocaleString("zh-CN") : "—"}</td>
+                  <td class="mono">{volumeOf(row) > 0 ? volumeOf(row).toLocaleString("zh-CN") : "—"}</td>
+                  <td class="mono">{openInterestOf(row) > 0 ? openInterestOf(row).toLocaleString("zh-CN") : "—"}</td>
                   <td class="mono">{row.marginRate > 0 ? `${(row.marginRate * 100).toFixed(0)}%` : "—"}</td>
                 </tr>
               )}
@@ -135,6 +163,13 @@ export default function FuturesPage(props: Props) {
           </tbody>
         </table>
         {rows().length === 0 && <div class="empty-state">没有匹配的合约</div>}
+        <Show when={rows().length > visibleRows().length}>
+          <div class="load-more-row">
+            <button type="button" class="load-more" onClick={() => setVisibleLimit((value) => value + 100)}>
+              加载更多（{visibleRows().length}/{rows().length}）
+            </button>
+          </div>
+        </Show>
       </div>
     </section>
   );

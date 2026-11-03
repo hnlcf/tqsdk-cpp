@@ -206,7 +206,7 @@ tqsdk_cpp/
           widgets/
           chart/                     Lightweight Charts 封装
           styles/
-      desktop/                   # Tauri 2 壳（后续）
+      desktop/                   # Tauri 2 桌面壳（脚手架）
         src-tauri/
           src/
           tauri.conf.json
@@ -306,8 +306,11 @@ WebSocket 客户端消息：
 - 不接真实交易；
 - Header 导航：交易终端 / 期货列表 / 期权链 / 研究（预留）；
 - dark/light 主题切换，偏好写入 localStorage；
-- 期货列表支持搜索、交易所筛选和点击进入终端；
-- 期权链预留 T 型报价布局。
+- 期货列表支持搜索、交易所筛选、可见行实时 quote 订阅和点击进入终端；
+- 期权链支持交易所/品种/合约/到期选择、T 型报价勾选、组合损益、
+  选中期权和标的 K 线；
+- 终端账户/持仓/委托/成交通过 `/stream` topics 订阅，WS 快照/增量合并；
+- 下单/撤单走 `/order` REST，失败保留错误提示并回退 mock 展示。
 
 落地位置：
 
@@ -326,7 +329,9 @@ npm install
 npm run dev
 ```
 
-`npm run build`（含 `tsc --noEmit`）已通过；当前是纯 mock，下单按钮只更新提示文案。
+`npm run build`（含 `tsc --noEmit`）已通过；当前行情/合约/账户/持仓/
+委托/成交已接 node，账户或网关不可用时回退 mock。下单/撤单使用
+`POST /order`、`DELETE /order/{id}`，委托状态由 WS 快照/增量刷新。
 
 ### Phase 1：只读行情客户端（3～5 天）
 
@@ -355,6 +360,41 @@ npm run dev
 - 多周期/多合约对比；
 - 深度图/成交明细；
 - 若 WebView 性能不足，再评估 Qt 或 Rust 直通行情。
+
+## 8.1 Tauri 桌面壳状态
+
+已添加 `web/apps/desktop` Tauri 2 脚手架：
+
+- 复用 `@tqsdk/web` 的 Vite UI；
+- dev URL `http://127.0.0.1:5173`；
+- 生产 `frontendDist` 指向 `web/apps/web/dist`；
+- 暂不打包 sidecar/图标，`bundle.active=false`。
+
+本机验证结果：
+
+```text
+tauri info
+  webkit2gtk-4.1: not installed
+  rsvg2: not installed
+  rustc/cargo: OK
+  @tauri-apps/cli: 2.12.4
+```
+
+Fedora 需先安装：
+
+```bash
+sudo dnf install webkit2gtk4.1-devel gtk3-devel libsoup3-devel librsvg2-devel
+```
+
+然后：
+
+```fish
+cd web
+nvm use lts
+npm --workspace @tqsdk/desktop run dev
+```
+
+下一步再接 `tqsdk-node` sidecar、动态端口和本地 token。
 
 ## 9. 待验证问题
 

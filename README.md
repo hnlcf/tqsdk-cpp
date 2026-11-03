@@ -446,5 +446,6 @@ config/                     gw.toml / node.toml
 tests/                      230 用例（CTP 构建 243；channel/data/gateway/ipc/serve/e2e/config）
 examples/demo.cpp           实时行情示例
 scripts/                    两进程冒烟 / 协议探测 / soak / perf baseline
-web/apps/web                SolidJS + Lightweight Charts Phase 0 原型
+web/apps/web                SolidJS + Lightweight Charts 实盘终端
+web/apps/desktop            Tauri 2 桌面壳脚手架
 ```

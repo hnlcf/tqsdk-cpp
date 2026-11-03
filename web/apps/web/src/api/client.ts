@@ -82,10 +82,71 @@ export interface CatalogStatus {
   options: number;
 }
 
+export interface AccountSnapshot {
+  balance?: number | null;
+  available?: number | null;
+  margin?: number | null;
+  float_profit?: number | null;
+  close_profit?: number | null;
+  commission?: number | null;
+  risk_ratio?: number | null;
+  currency?: string;
+}
+
+export interface PositionSnapshot {
+  instrument_id: string;
+  volume_long?: number;
+  volume_short?: number;
+  volume_long_today?: number;
+  volume_short_today?: number;
+  open_price_long?: number | null;
+  open_price_short?: number | null;
+  position_price_long?: number | null;
+  position_price_short?: number | null;
+  last_price?: number | null;
+  margin?: number | null;
+  float_profit?: number | null;
+  margin_long?: number | null;
+  margin_short?: number | null;
+}
+
+export interface OrderSnapshot {
+  order_id: string;
+  instrument_id: string;
+  direction?: string;
+  offset?: string;
+  status?: string;
+  last_msg?: string;
+  limit_price?: number | null;
+  volume_orign?: number;
+  volume_left?: number;
+  is_dead?: boolean;
+  is_error?: boolean;
+}
+
+export interface TradeSnapshot {
+  trade_id: string;
+  order_id?: string;
+  instrument_id: string;
+  direction?: string;
+  offset?: string;
+  price?: number | null;
+  volume?: number;
+  trade_date_time?: number;
+}
+
+export interface TradeData {
+  account?: AccountSnapshot;
+  positions?: Record<string, PositionSnapshot>;
+  orders?: Record<string, OrderSnapshot>;
+  trades?: Record<string, TradeSnapshot>;
+}
+
 export interface MarketHandlers {
   onStatus?: (status: "connecting" | "online" | "offline") => void;
   onQuote?: (quotes: Record<string, Quote>) => void;
   onKline?: (symbol: string, durationNs: string, payload: unknown) => void;
+  onTradeData?: (data: TradeData, snapshot: boolean) => void;
 }
 
 const RAW_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
@@ -168,8 +229,48 @@ export function getAccount(signal?: AbortSignal) {
   return getJson<Record<string, number | string | null>>("/account", signal);
 }
 
+export async function insertOrder(body: {
+  instrument_id: string;
+  exchange_id?: string;
+  direction: "BUY" | "SELL";
+  offset: "OPEN" | "CLOSE" | "CLOSETODAY";
+  price_type: "LIMIT";
+  limit_price: number;
+  time_cond: "GFD";
+  volume_cond: "ANY";
+  volume: number;
+  min_volume?: number;
+}) {
+  const response = await fetch(`${API_BASE}/order`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  const result = (await response.json()) as { success?: boolean; order_id?: string; error?: string };
+  if (!response.ok) {
+    throw new Error(result.error || `${response.status} ${response.statusText}`);
+  }
+  return result;
+}
+
+export async function cancelOrder(orderId: string) {
+  const response = await fetch(`${API_BASE}/order/${encodeURIComponent(orderId)}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  const result = (await response.json()) as { success?: boolean; order_id?: string; error?: string };
+  if (!response.ok) {
+    throw new Error(result.error || `${response.status} ${response.statusText}`);
+  }
+  return result;
+}
+
 export interface MarketStream {
-  subscribe(symbols: string[], klines?: Array<{ symbol: string; duration_ns: number }>): void;
+  subscribe(
+    symbols: string[],
+    klines?: Array<{ symbol: string; duration_ns: number }>,
+    topics?: string[],
+  ): void;
   close(): void;
 }
 
@@ -182,6 +283,7 @@ export function createMarketStream(handlers: MarketHandlers): MarketStream {
   let pingTimer: number | undefined;
   const symbols = new Set<string>();
   const klines = new Map<string, { symbol: string; duration_ns: number }>();
+  const topics = new Set<string>();
 
   const sendSubscribe = () => {
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
@@ -190,7 +292,7 @@ export function createMarketStream(handlers: MarketHandlers): MarketStream {
         op: "subscribe",
         symbols: [...symbols],
         klines: [...klines.values()],
-        topics: [],
+        topics: [...topics],
       }),
     );
   };
@@ -221,9 +323,11 @@ export function createMarketStream(handlers: MarketHandlers): MarketStream {
           break;
         case "snapshot":
           if (message.data?.quotes) handlers.onQuote?.(message.data.quotes);
+          handlers.onTradeData?.(message.data ?? {}, true);
           break;
         case "diff":
           if (message.data?.quotes) handlers.onQuote?.(message.data.quotes);
+          handlers.onTradeData?.(message.data ?? {}, false);
           if (message.data?.klines) {
             for (const [symbol, byDuration] of Object.entries(message.data.klines)) {
               for (const [duration, payload] of Object.entries(byDuration as object)) {
@@ -253,7 +357,7 @@ export function createMarketStream(handlers: MarketHandlers): MarketStream {
   connect();
 
   return {
-    subscribe(nextSymbols, nextKlines = []) {
+    subscribe(nextSymbols, nextKlines = [], nextTopics = []) {
       let changed = false;
       for (const symbol of nextSymbols) {
         if (!symbol) continue;
@@ -266,6 +370,12 @@ export function createMarketStream(handlers: MarketHandlers): MarketStream {
         const key = `${kline.symbol}|${kline.duration_ns}`;
         if (!klines.has(key)) {
           klines.set(key, kline);
+          changed = true;
+        }
+      }
+      for (const topic of nextTopics) {
+        if (!topics.has(topic)) {
+          topics.add(topic);
           changed = true;
         }
       }
