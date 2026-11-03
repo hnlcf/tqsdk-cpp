@@ -28,3 +28,6 @@ node_modules/
 web/apps/*/dist/
 web/**/node_modules/
 web/.vite/
+
+# tqsdk 运行期导出的合约快照
+latest.json

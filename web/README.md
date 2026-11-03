@@ -15,6 +15,13 @@ npm run dev
 
 打开 <http://127.0.0.1:5173>。
 
+可直接深链到页面/主题：
+
+```text
+http://127.0.0.1:5173/?view=futures&theme=light
+http://127.0.0.1:5173/?view=options&theme=dark
+```
+
 生产构建：
 
 ```fish
@@ -28,8 +35,9 @@ npm run preview
 web/
   apps/web/                 SolidJS 应用
     src/App.tsx             页面布局、mock 持仓/委托/下单面板
-    src/chart/KLineChart.tsx Lightweight Charts 封装
-    src/data/mock.ts        mock K 线/报价/持仓/委托
+    src/chart/KLineChart.tsx Lightweight Charts 封装（跟随主题）
+    src/pages/              期货列表 / 期权链页面
+    src/data/mock.ts        mock K 线/报价/持仓/委托/期货/期权
   package.json              npm workspace 根
 ```
 

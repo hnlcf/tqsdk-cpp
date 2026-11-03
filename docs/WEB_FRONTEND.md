@@ -294,7 +294,11 @@ WebSocket 客户端消息：
 - Vite + SolidJS + TS；
 - 用 mock 数据画 K 线 + 成交量 + 持仓表；
 - 验证 Lightweight Charts v5 的 API、主题、响应式；
-- 不接真实交易。
+- 不接真实交易；
+- Header 导航：交易终端 / 期货列表 / 期权链 / 研究（预留）；
+- dark/light 主题切换，偏好写入 localStorage；
+- 期货列表支持搜索、交易所筛选和点击进入终端；
+- 期权链预留 T 型报价布局。
 
 落地位置：
 

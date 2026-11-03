@@ -1,5 +1,7 @@
-import { For, createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Match, Switch, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import KLineChart from "./chart/KLineChart";
+import FuturesPage from "./pages/FuturesPage";
+import OptionsPage from "./pages/OptionsPage";
 import {
   MOCK_ORDERS,
   MOCK_POSITIONS,
@@ -13,6 +15,31 @@ import {
 } from "./data/mock";
 
 const PERIODS = ["1m", "5m", "15m", "1h", "1d"];
+const NAV_ITEMS = [
+  { id: "trade", label: "交易终端" },
+  { id: "futures", label: "期货列表" },
+  { id: "options", label: "期权链" },
+] as const;
+
+type View = (typeof NAV_ITEMS)[number]["id"] | "research";
+type Theme = "dark" | "light";
+
+function readInitialView(): View {
+  const value = new URLSearchParams(window.location.search).get("view");
+  return value === "futures" || value === "options" ? value : "trade";
+}
+
+function readInitialTheme(): Theme {
+  try {
+    const query = new URLSearchParams(window.location.search).get("theme");
+    if (query === "dark" || query === "light") return query;
+    const saved = window.localStorage.getItem("tqsdk.theme");
+    if (saved === "dark" || saved === "light") return saved;
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
 
 export default function App() {
   const [selected, setSelected] = createSignal(WATCHLIST[0].symbol);
@@ -23,6 +50,8 @@ export default function App() {
   const [price, setPrice] = createSignal(2993);
   const [volume, setVolume] = createSignal(1);
   const [ticketMsg, setTicketMsg] = createSignal("模拟模式 · 不会发送到柜台");
+  const [theme, setTheme] = createSignal<Theme>(readInitialTheme());
+  const [view, setView] = createSignal<View>(readInitialView());
 
   const activeMeta = () => WATCHLIST.find((item) => item.symbol === selected()) ?? WATCHLIST[0];
   const last = () => bars()[bars().length - 1];
@@ -37,6 +66,30 @@ export default function App() {
   createEffect(() => {
     setPrice(Math.round(last().close));
   });
+
+  createEffect(() => {
+    document.documentElement.dataset.theme = theme();
+    try {
+      window.localStorage.setItem("tqsdk.theme", theme());
+    } catch {
+      // localStorage can be unavailable in privacy mode; theme still works for this session.
+    }
+  });
+
+  createEffect(() => {
+    const url = new URL(window.location.href);
+    if (view() === "trade") {
+      url.searchParams.delete("view");
+    } else {
+      url.searchParams.set("view", view());
+    }
+    window.history.replaceState(null, "", url);
+  });
+
+  function openSymbol(symbol: string) {
+    setSelected(symbol);
+    setView("trade");
+  }
 
   onMount(() => {
     const timer = window.setInterval(() => {
@@ -67,6 +120,24 @@ export default function App() {
             <small>Futures workstation · Phase 0</small>
           </div>
         </div>
+
+        <nav class="main-nav" aria-label="主导航">
+          <For each={NAV_ITEMS}>
+            {(item) => (
+              <button
+                type="button"
+                class={view() === item.id ? "active" : ""}
+                onClick={() => setView(item.id)}
+              >
+                {item.label}
+              </button>
+            )}
+          </For>
+          <button type="button" class="disabled" disabled title="预留：研究/资讯">
+            研究
+          </button>
+        </nav>
+
         <div class="topbar-meta">
           <span class="status-dot" />
           <span>模拟行情</span>
@@ -92,9 +163,19 @@ export default function App() {
             <strong>{quote().change >= 0 ? "+" : ""}1,600.00</strong>
           </div>
         </div>
+        <button
+          type="button"
+          class="theme-toggle"
+          onClick={() => setTheme(theme() === "dark" ? "light" : "dark")}
+          title="切换明暗主题"
+        >
+          {theme() === "dark" ? "浅色" : "深色"}
+        </button>
       </header>
 
-      <main class="workspace">
+      <Switch>
+        <Match when={view() === "trade"}>
+          <main class="workspace">
         <aside class="panel watchlist">
           <div class="panel-heading">
             <div>
@@ -203,7 +284,7 @@ export default function App() {
           </div>
 
           <div class="chart-shell">
-            <KLineChart bars={bars()} last={last()} symbol={selected()} />
+            <KLineChart bars={bars()} last={last()} symbol={selected()} theme={theme()} />
           </div>
 
           <div class="chart-footer">
@@ -417,7 +498,15 @@ export default function App() {
             </tbody>
           </table>
         </div>
-      </section>
+          </section>
+        </Match>
+        <Match when={view() === "futures"}>
+          <FuturesPage onSelect={openSymbol} />
+        </Match>
+        <Match when={view() === "options"}>
+          <OptionsPage />
+        </Match>
+      </Switch>
 
       <footer class="footer">
         <span>Phase 0 · mock data</span>

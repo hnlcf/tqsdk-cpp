@@ -16,6 +16,29 @@ interface Props {
   bars: Bar[];
   last?: Bar;
   symbol: string;
+  theme: "dark" | "light";
+}
+
+function themeColors(theme: Props["theme"]) {
+  return theme === "light"
+    ? {
+        background: "#f6f8fc",
+        text: "#4d6077",
+        grid: "#e5ebf3",
+        border: "#d5dfeb",
+        crosshair: "#7e91a8",
+        crosshairLabel: "#dce6f2",
+        volume: "#9db1c7",
+      }
+    : {
+        background: "#0b1016",
+        text: "#9aa7b8",
+        grid: "#151f2b",
+        border: "#223043",
+        crosshair: "#52657a",
+        crosshairLabel: "#223043",
+        volume: "#38506a",
+      };
 }
 
 export default function KLineChart(props: Props) {
@@ -28,29 +51,30 @@ export default function KLineChart(props: Props) {
   onMount(() => {
     if (!container) return;
 
+    const colors = themeColors(props.theme);
     chart = createChart(container, {
       autoSize: true,
       layout: {
-        background: { type: ColorType.Solid, color: "#0b1016" },
-        textColor: "#9aa7b8",
+        background: { type: ColorType.Solid, color: colors.background },
+        textColor: colors.text,
         fontFamily: "Inter, SFMono-Regular, Menlo, monospace",
         attributionLogo: true,
       },
       grid: {
-        vertLines: { color: "#151f2b" },
-        horzLines: { color: "#151f2b" },
+        vertLines: { color: colors.grid },
+        horzLines: { color: colors.grid },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: "#52657a", labelBackgroundColor: "#223043" },
-        horzLine: { color: "#52657a", labelBackgroundColor: "#223043" },
+        vertLine: { color: colors.crosshair, labelBackgroundColor: colors.crosshairLabel },
+        horzLine: { color: colors.crosshair, labelBackgroundColor: colors.crosshairLabel },
       },
       rightPriceScale: {
-        borderColor: "#223043",
+        borderColor: colors.border,
         scaleMargins: { top: 0.08, bottom: 0.28 },
       },
       timeScale: {
-        borderColor: "#223043",
+        borderColor: colors.border,
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 4,
@@ -75,7 +99,7 @@ export default function KLineChart(props: Props) {
     volume = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "",
-      color: "#38506a",
+      color: colors.volume,
       lastValueVisible: false,
       priceLineVisible: false,
     });
@@ -129,6 +153,31 @@ export default function KLineChart(props: Props) {
     const bar = props.last;
     if (!bar || !candle) return;
     upsertLast(bar);
+  });
+
+  createEffect(() => {
+    const colors = themeColors(props.theme);
+    if (!chart) return;
+    chart.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: colors.background },
+        textColor: colors.text,
+      },
+      grid: {
+        vertLines: { color: colors.grid },
+        horzLines: { color: colors.grid },
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: { color: colors.crosshair, labelBackgroundColor: colors.crosshairLabel },
+        horzLine: { color: colors.crosshair, labelBackgroundColor: colors.crosshairLabel },
+      },
+      rightPriceScale: { borderColor: colors.border },
+      timeScale: { borderColor: colors.border },
+    });
+    if (volume) {
+      volume.applyOptions({ color: colors.volume });
+    }
   });
 
   function upsertLast(bar: Bar) {
