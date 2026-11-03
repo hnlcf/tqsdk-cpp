@@ -15,6 +15,7 @@ private slots:
     void quoteModelFormatsRows();
     void instrumentModelFormatsRows();
     void tradingModelsMerge();
+    void tradeTapeFromQuoteDeltas();
 };
 
 void ModelTest::marketStoreQuotesAndKlines() {
@@ -130,6 +131,33 @@ void ModelTest::tradingModelsMerge() {
     trades.applyTrades({trade});
     QCOMPARE(trades.rowCount(), 1);
     QCOMPARE(trades.data(trades.index(0, TradeTableModel::TradeId)).toString(), QString("2001"));
+}
+
+void ModelTest::tradeTapeFromQuoteDeltas() {
+    TradeTapeModel tape;
+    Quote          quote;
+    quote.instrumentId = "SHFE.rb2701";
+    quote.datetime     = 1'700'000'000'000'000'000LL;
+    quote.lastPrice    = 3010.0;
+    quote.volume       = 100;
+    tape.applyQuote(quote);
+    QCOMPARE(tape.rowCount(), 0);
+
+    quote.lastPrice = 3011.0;
+    quote.volume    = 105;
+    tape.applyQuote(quote);
+    QCOMPARE(tape.rowCount(), 1);
+    QCOMPARE(tape.data(tape.index(0, TradeTapeModel::Volume)).toString(), QString("5"));
+    QCOMPARE(tape.data(tape.index(0, TradeTapeModel::Direction)).toString(), QString("买"));
+
+    quote.lastPrice = 3009.0;
+    quote.volume    = 109;
+    tape.applyQuote(quote);
+    QCOMPARE(tape.rowCount(), 2);
+    QCOMPARE(tape.data(tape.index(1, TradeTapeModel::Direction)).toString(), QString("卖"));
+
+    tape.clear();
+    QCOMPARE(tape.rowCount(), 0);
 }
 
 void ModelTest::instrumentModelFormatsRows() {

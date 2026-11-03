@@ -131,6 +131,27 @@ QVariant InstrumentTableModel::data(const QModelIndex& index, int role) const {
                    ? QString::number(quote->openInterest, 'f', 0)
                    : QStringLiteral("—");
     }
+    case OiChange: {
+        const auto quote = quotes_.constFind(instrument.instrumentId);
+        if (quote == quotes_.constEnd() || !std::isfinite(quote->openInterest) ||
+            !std::isfinite(quote->preOpenInterest)) {
+            return QStringLiteral("—");
+        }
+        const double change = quote->openInterest - quote->preOpenInterest;
+        return QStringLiteral("%1%2").arg(change >= 0.0 ? "+" : "").arg(change, 0, 'f', 0);
+    }
+    case UpperLimit: {
+        const auto quote = quotes_.constFind(instrument.instrumentId);
+        return quote != quotes_.constEnd() && std::isfinite(quote->upperLimit)
+                   ? QString::number(quote->upperLimit, 'f', 2)
+                   : QStringLiteral("—");
+    }
+    case LowerLimit: {
+        const auto quote = quotes_.constFind(instrument.instrumentId);
+        return quote != quotes_.constEnd() && std::isfinite(quote->lowerLimit)
+                   ? QString::number(quote->lowerLimit, 'f', 2)
+                   : QStringLiteral("—");
+    }
     default:
         return {};
     }
@@ -167,6 +188,12 @@ InstrumentTableModel::headerData(int section, Qt::Orientation orientation, int r
             return QStringLiteral("成交量");
         case OpenInterest:
             return QStringLiteral("持仓量");
+        case OiChange:
+            return QStringLiteral("增仓");
+        case UpperLimit:
+            return QStringLiteral("涨停价");
+        case LowerLimit:
+            return QStringLiteral("跌停价");
         default:
             return {};
         }

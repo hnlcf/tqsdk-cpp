@@ -270,6 +270,115 @@ QVariant OrderTableModel::headerData(int section, Qt::Orientation orientation, i
     return section + 1;
 }
 
+TradeTapeModel::TradeTapeModel(QObject* parent)
+    : QAbstractTableModel(parent) {}
+
+int TradeTapeModel::rowCount(const QModelIndex& parent) const {
+    return parent.isValid() ? 0 : ticks_.size();
+}
+
+int TradeTapeModel::columnCount(const QModelIndex& parent) const {
+    return parent.isValid() ? 0 : ColumnCount;
+}
+
+void TradeTapeModel::clear() {
+    beginResetModel();
+    ticks_.clear();
+    lastVolume_.clear();
+    lastPrice_.clear();
+    endResetModel();
+}
+
+void TradeTapeModel::applyQuote(const Quote& quote) {
+    if (quote.instrumentId.isEmpty()) {
+        return;
+    }
+    const auto   previousVolume = lastVolume_.constFind(quote.instrumentId);
+    const auto   previousPrice  = lastPrice_.constFind(quote.instrumentId);
+    const qint64 volume         = quote.volume;
+    if (previousVolume == lastVolume_.constEnd()) {
+        lastVolume_[quote.instrumentId] = volume;
+        lastPrice_[quote.instrumentId]  = quote.lastPrice;
+        return;
+    }
+    const qint64 delta              = volume - previousVolume.value();
+    lastVolume_[quote.instrumentId] = volume;
+    if (delta <= 0 || !std::isfinite(quote.lastPrice)) {
+        lastPrice_[quote.instrumentId] = quote.lastPrice;
+        return;
+    }
+
+    TickTrade tick;
+    tick.datetime = quote.datetime;
+    tick.price    = quote.lastPrice;
+    tick.volume   = delta;
+    tick.buy = previousPrice != lastPrice_.constEnd() && std::isfinite(previousPrice.value()) &&
+               quote.lastPrice >= previousPrice.value();
+    lastPrice_[quote.instrumentId] = quote.lastPrice;
+
+    if (ticks_.size() >= maxRows_) {
+        beginRemoveRows({}, 0, 0);
+        ticks_.removeFirst();
+        endRemoveRows();
+    }
+    const int row = ticks_.size();
+    beginInsertRows({}, row, row);
+    ticks_.push_back(tick);
+    endInsertRows();
+}
+
+QVariant TradeTapeModel::data(const QModelIndex& index, int role) const {
+    if (!index.isValid() || index.row() < 0 || index.row() >= ticks_.size()) {
+        return {};
+    }
+    const auto& tick = ticks_.at(index.row());
+    if (role == Qt::TextAlignmentRole) {
+        return index.column() == Time ? QVariant(Qt::AlignLeft | Qt::AlignVCenter)
+                                      : QVariant(Qt::AlignRight | Qt::AlignVCenter);
+    }
+    if (role == Qt::ForegroundRole && (index.column() == Price || index.column() == Direction)) {
+        return tick.buy ? QColor("#e43c4a") : QColor("#2fbf71");
+    }
+    if (role != Qt::DisplayRole) {
+        return {};
+    }
+    switch (index.column()) {
+    case Time:
+        return tick.datetime > 0 ? QDateTime::fromMSecsSinceEpoch(tick.datetime / 1'000'000)
+                                       .toString(QStringLiteral("HH:mm:ss"))
+                                 : QStringLiteral("—");
+    case Price:
+        return number(tick.price);
+    case Volume:
+        return QString::number(tick.volume);
+    case Direction:
+        return tick.buy ? QStringLiteral("买") : QStringLiteral("卖");
+    default:
+        return {};
+    }
+}
+
+QVariant TradeTapeModel::headerData(int section, Qt::Orientation orientation, int role) const {
+    if (role != Qt::DisplayRole) {
+        return {};
+    }
+    if (orientation == Qt::Horizontal) {
+        switch (section) {
+        case Time:
+            return QStringLiteral("时间");
+        case Price:
+            return QStringLiteral("价格");
+        case Volume:
+            return QStringLiteral("手数");
+        case Direction:
+            return QStringLiteral("方向");
+        default:
+            return {};
+        }
+    }
+    return section + 1;
+}
+
 TradeTableModel::TradeTableModel(QObject* parent)
     : QAbstractTableModel(parent) {}
 

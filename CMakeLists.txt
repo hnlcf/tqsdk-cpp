@@ -336,7 +336,7 @@ endif()
 install(FILES config/gw.toml config/node.toml
         DESTINATION share/tqsdk/config)
 install(FILES README.md docs/CTP.md docs/SOAK_PERF.md docs/THREADING.md
-              docs/IPC_RECOVERY.md docs/HA.md docs/WEB_FRONTEND.md docs/INSTRUMENTS.md docs/KLINE_CACHE.md docs/ARCHITECTURE_REVIEW.md docs/UI_QT.md
+              docs/IPC_RECOVERY.md docs/HA.md docs/WEB_FRONTEND.md docs/INSTRUMENTS.md docs/KLINE_CACHE.md docs/ARCHITECTURE_REVIEW.md docs/UI_QT.md docs/INDICATOR_PLUGINS.md
         DESTINATION share/doc/tqsdk)
 
 # ==========================================================

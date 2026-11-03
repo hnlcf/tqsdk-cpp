@@ -11,7 +11,6 @@
 #include <QAbstractItemView>
 #include <QAction>
 #include <QApplication>
-#include <QCheckBox>
 #include <QComboBox>
 #include <QCompleter>
 #include <QDockWidget>
@@ -179,6 +178,7 @@ MainWindow::MainWindow(NodeClient* nodeClient, QWidget* parent)
     positionsModel_ = new PositionTableModel(this);
     ordersModel_    = new OrderTableModel(this);
     tradesModel_    = new TradeTableModel(this);
+    tapeModel_      = new TradeTapeModel(this);
     futuresProxy_   = new QSortFilterProxyModel(this);
     futuresProxy_->setSourceModel(futuresModel_);
     futuresProxy_->setFilterCaseSensitivity(Qt::CaseInsensitive);
@@ -365,7 +365,8 @@ void MainWindow::buildWorkspace() {
     });
     splitter->addWidget(centerTabs_);
 
-    auto* quoteContainer = new QWidget(splitter);
+    auto* rightSplitter  = new QSplitter(Qt::Vertical, splitter);
+    auto* quoteContainer = new QWidget(rightSplitter);
     auto* quoteForm      = new QFormLayout(quoteContainer);
     quoteForm->setContentsMargins(12, 12, 12, 12);
     symbolLabel_       = new QLabel(selectedSymbol_, quoteContainer);
@@ -389,7 +390,13 @@ void MainWindow::buildWorkspace() {
     quoteForm->addRow(tr("持仓"), openInterestLabel_);
     quoteForm->addRow(tr("增仓"), oiChangeLabel_);
     quoteForm->addRow(tr("高/低"), highLowLabel_);
-    splitter->addWidget(panel(tr("行情快照"), quoteContainer, splitter));
+    tapeTable_ = makeTable(rightSplitter, tapeModel_);
+    installColumnMenu(tapeTable_, QStringLiteral("tape"));
+    tapeTable_->setMinimumHeight(120);
+    rightSplitter->addWidget(panel(tr("行情快照"), quoteContainer, rightSplitter));
+    rightSplitter->addWidget(panel(tr("分笔成交"), tapeTable_, rightSplitter));
+    rightSplitter->setSizes({520, 220});
+    splitter->addWidget(rightSplitter);
 
     splitter->setStretchFactor(0, 1);
     splitter->setStretchFactor(1, 6);
@@ -409,7 +416,34 @@ void MainWindow::buildOrderPanel(QWidget* parent) {
     volumeBox_ = new QSpinBox(parent);
     volumeBox_->setRange(1, 1000);
     volumeBox_->setValue(1);
-    riskCheck_ = new QCheckBox(tr("我确认柜台与合约，允许下单"), parent);
+
+    tradeSymbolEdit_ = new QLineEdit(parent);
+    tradeSymbolEdit_->setText(selectedSymbol_);
+    tradeSymbolEdit_->setPlaceholderText(tr("输入或搜索合约，回车切换图表"));
+    tradeCompletions_ = new QStringListModel(this);
+    tradeCompleter_   = new QCompleter(tradeCompletions_, this);
+    tradeCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
+    tradeCompleter_->setFilterMode(Qt::MatchContains);
+    tradeCompleter_->setCompletionMode(QCompleter::PopupCompletion);
+    tradeCompleter_->setMaxVisibleItems(16);
+    tradeSymbolEdit_->setCompleter(tradeCompleter_);
+    const auto applyTradeSymbol = [this] {
+        const QString symbol = resolveSymbol(tradeSymbolEdit_->text());
+        if (symbol.isEmpty()) {
+            orderStatus_->setText(tr("没有匹配的交易合约"));
+            return;
+        }
+        addSymbolToWatchlist(symbol);
+        tradeSymbolEdit_->setText(symbol);
+    };
+    connect(tradeSymbolEdit_, &QLineEdit::returnPressed, this, applyTradeSymbol);
+    connect(tradeCompleter_,
+            QOverload<const QString&>::of(&QCompleter::activated),
+            this,
+            [this](const QString& text) {
+                addSymbolFromInput(text);
+                tradeSymbolEdit_->setText(selectedSymbol_);
+            });
 
     auto* buttons      = new QWidget(parent);
     auto* buttonLayout = new QHBoxLayout(buttons);
@@ -432,13 +466,11 @@ void MainWindow::buildOrderPanel(QWidget* parent) {
     orderStatus_->setWordWrap(true);
     orderStatus_->setStyleSheet("color: #8b93a3;");
 
+    form->addRow(tr("合约"), tradeSymbolEdit_);
     form->addRow(tr("三键"), buttons);
     form->addRow(tr("价格"), priceBox_);
     form->addRow(tr("数量"), volumeBox_);
-    form->addRow(riskCheck_);
     form->addRow(orderStatus_);
-
-    connect(riskCheck_, &QCheckBox::toggled, this, [this] { updateOrderControls(); });
     connect(buyButton_, &QPushButton::clicked, this, [this] {
         submitOrder(Direction::Buy, Offset::Open);
     });
@@ -472,7 +504,8 @@ void MainWindow::buildBottomDock() {
     auto* content       = new QWidget(dock);
     auto* contentLayout = new QHBoxLayout(content);
     contentLayout->setContentsMargins(0, 0, 0, 0);
-    auto* tabs = new QTabWidget(content);
+    auto* bottomSplitter = new QSplitter(Qt::Horizontal, content);
+    auto* tabs           = new QTabWidget(bottomSplitter);
 
     positionTable_ = makeTable(tabs, positionsModel_);
     installColumnMenu(positionTable_, QStringLiteral("positions"));
@@ -524,10 +557,12 @@ void MainWindow::buildBottomDock() {
     accountForm->addRow(tr("风险度"), accountRisk_);
     tabs->addTab(accountPage, tr("账户"));
 
-    auto* orderBox = new QWidget(content);
+    auto* orderBox = new QWidget(bottomSplitter);
     buildOrderPanel(orderBox);
-    contentLayout->addWidget(tabs, 1);
-    contentLayout->addWidget(panel(tr("三键下单"), orderBox, content), 0);
+    bottomSplitter->addWidget(tabs);
+    bottomSplitter->addWidget(panel(tr("三键下单"), orderBox, bottomSplitter));
+    bottomSplitter->setSizes({920, 360});
+    contentLayout->addWidget(bottomSplitter, 1);
 
     dock->setWidget(content);
     addDockWidget(Qt::BottomDockWidgetArea, dock);
@@ -639,6 +674,15 @@ void MainWindow::connectNode() {
             this,
             [this](const QVector<Instrument>& instruments) {
                 futuresModel_->setInstruments(instruments);
+                if (tradeCompletions_ != nullptr) {
+                    QStringList suggestions;
+                    suggestions.reserve(instruments.size());
+                    for (const auto& instrument : instruments) {
+                        suggestions.push_back(instrument.instrumentId + QStringLiteral("  ") +
+                                              instrument.name);
+                    }
+                    tradeCompletions_->setStringList(suggestions);
+                }
                 updateQuotePanel();
                 if (futuresStatus_ != nullptr) {
                     futuresStatus_->setText(tr("合约目录 %1 条").arg(instruments.size()));
@@ -835,6 +879,12 @@ void MainWindow::selectSymbol(const QString& symbol) {
         return;
     }
     selectedSymbol_ = symbol;
+    if (tradeSymbolEdit_ != nullptr) {
+        tradeSymbolEdit_->setText(symbol);
+    }
+    if (tapeModel_ != nullptr) {
+        tapeModel_->clear();
+    }
     if (!watchlist_.contains(symbol)) {
         watchlist_.push_back(symbol);
         watchModel_->setSymbols(watchlist_);
@@ -923,6 +973,9 @@ void MainWindow::updateQuotePanel() {
     }
 
     chart_->setQuote(*quote);
+    if (tapeModel_ != nullptr) {
+        tapeModel_->applyQuote(*quote);
+    }
     lastLabel_->setText(priceText(quote->lastPrice));
     const double  change  = std::isfinite(quote->lastPrice) && std::isfinite(quote->preSettlement)
                                 ? quote->lastPrice - quote->preSettlement
@@ -979,7 +1032,7 @@ void MainWindow::updateOrderControls() {
     if (buyButton_ == nullptr) {
         return;
     }
-    const bool canSubmit = nodeReady_ && accountLoaded_ && riskCheck_->isChecked();
+    const bool canSubmit = nodeReady_ && accountLoaded_;
     buyButton_->setEnabled(canSubmit);
     sellButton_->setEnabled(canSubmit);
     qint64 longVolume  = 0;
@@ -998,8 +1051,8 @@ void MainWindow::updateOrderControls() {
 }
 
 void MainWindow::submitOrder(Direction direction, Offset offset) {
-    if (nodeClient_ == nullptr || !nodeReady_ || !accountLoaded_ || !riskCheck_->isChecked()) {
-        orderStatus_->setText(tr("交易未就绪或未确认风险"));
+    if (nodeClient_ == nullptr || !nodeReady_ || !accountLoaded_) {
+        orderStatus_->setText(tr("交易未就绪"));
         return;
     }
     if (priceBox_->value() <= 0.0 || volumeBox_->value() <= 0) {

@@ -5,7 +5,6 @@
 #include <QMainWindow>
 #include <QStringList>
 
-class QCheckBox;
 class QComboBox;
 class QCompleter;
 class QDoubleSpinBox;
@@ -28,6 +27,7 @@ class OrderTableModel;
 class PositionTableModel;
 class QuoteTableModel;
 class TradeTableModel;
+class TradeTapeModel;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -69,6 +69,7 @@ private:
     PositionTableModel*    positionsModel_ = nullptr;
     OrderTableModel*       ordersModel_    = nullptr;
     TradeTableModel*       tradesModel_    = nullptr;
+    TradeTapeModel*        tapeModel_      = nullptr;
     KLineChartWidget*      chart_          = nullptr;
 
     QTableView*       watchTable_        = nullptr;
@@ -78,10 +79,14 @@ private:
     QTableView*       positionTable_     = nullptr;
     QTableView*       orderTable_        = nullptr;
     QTableView*       tradeTable_        = nullptr;
+    QTableView*       tapeTable_         = nullptr;
     QTabWidget*       centerTabs_        = nullptr;
     QLineEdit*        search_            = nullptr;
+    QLineEdit*        tradeSymbolEdit_   = nullptr;
     QCompleter*       searchCompleter_   = nullptr;
     QStringListModel* searchCompletions_ = nullptr;
+    QCompleter*       tradeCompleter_    = nullptr;
+    QStringListModel* tradeCompletions_  = nullptr;
     QPushButton*      addSymbolButton_   = nullptr;
 
     QLabel*      connectionLabel_   = nullptr;
@@ -105,7 +110,6 @@ private:
 
     QDoubleSpinBox* priceBox_     = nullptr;
     QSpinBox*       volumeBox_    = nullptr;
-    QCheckBox*      riskCheck_    = nullptr;
     QPushButton*    buyButton_    = nullptr;
     QPushButton*    sellButton_   = nullptr;
     QPushButton*    closeButton_  = nullptr;
@@ -113,8 +117,8 @@ private:
 
     QStringList watchlist_;
     QString     selectedSymbol_     = QStringLiteral("SHFE.rb2701");
-    qint64      selectedDurationNs_ = 60'000'000'000LL;
-    QString     selectedInterval_   = QStringLiteral("1m");
+    qint64      selectedDurationNs_ = 86'400'000'000'000LL;
+    QString     selectedInterval_   = QStringLiteral("1d");
     bool        dark_               = true;
     bool        nodeReady_          = false;
     bool        accountLoaded_      = false;

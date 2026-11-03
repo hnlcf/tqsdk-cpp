@@ -3,7 +3,8 @@
 独立的 Qt 6 Widgets 桌面前端。它只通过 node 的 REST + WebSocket 获取行情/
 交易数据，**不链接 `tqsdk_core`**。
 
-完整设计见 [`../docs/UI_QT.md`](../docs/UI_QT.md)。
+完整设计见 [`../docs/UI_QT.md`](../docs/UI_QT.md)；指标插件设计见
+[`../docs/INDICATOR_PLUGINS.md`](../docs/INDICATOR_PLUGINS.md)。
 
 ## 依赖
 
@@ -64,9 +65,9 @@ Phase 1（已完成）：
 Phase 2（已完成基础版）：
 
 - 期权链 CALL/PUT 表格，双击合约加入自选；
-- 限价单下单、撤单，带风险确认；
+- 限价单下单、撤单，三键直接提交；
 - 账户、持仓、委托、成交表，REST 快照 + WS diff；
-- 交易面板在 node ready、账户加载和风险确认后才可提交。
+- 交易面板在 node ready + 账户加载后才可提交；底部三键面板与持仓/委托面板可拖动分界。
 
 启动时指定 node：
 

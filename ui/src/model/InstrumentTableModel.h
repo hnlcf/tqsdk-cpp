@@ -25,6 +25,9 @@ public:
         Ask1,
         Volume,
         OpenInterest,
+        OiChange,
+        UpperLimit,
+        LowerLimit,
         ColumnCount,
     };
 

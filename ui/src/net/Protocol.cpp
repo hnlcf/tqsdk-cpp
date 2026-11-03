@@ -82,6 +82,8 @@ std::optional<Quote> parseQuote(const QJsonObject& object) {
     q.open            = numberValue(object.value("open"));
     q.high            = numberValue(object.value("highest"));
     q.low             = numberValue(object.value("lowest"));
+    q.upperLimit      = numberValue(object.value("upper_limit"));
+    q.lowerLimit      = numberValue(object.value("lower_limit"));
     q.volume          = integerValue(object.value("volume"));
     q.datetime        = integerValue(object.value("datetime"));
     return q;

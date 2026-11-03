@@ -24,6 +24,8 @@ struct Quote {
     double  preSettlement   = std::numeric_limits<double>::quiet_NaN();
     double  preOpenInterest = std::numeric_limits<double>::quiet_NaN();
     double  openInterest    = std::numeric_limits<double>::quiet_NaN();
+    double  upperLimit      = std::numeric_limits<double>::quiet_NaN();
+    double  lowerLimit      = std::numeric_limits<double>::quiet_NaN();
     double  preClose        = std::numeric_limits<double>::quiet_NaN();
     double  open            = std::numeric_limits<double>::quiet_NaN();
     double  high            = std::numeric_limits<double>::quiet_NaN();

@@ -33,7 +33,7 @@ void ProtocolTest::parsesMarketData() {
       "quotes": {
         "SHFE.rb2701": {"last_price":"2991.5","pre_settlement":2980,"bid_price1":2991,"ask_price1":2992,
                          "volume":702802,"open_interest":1878506,"pre_open_interest":1878000,
-                         "highest":2999,"lowest":2970}
+                         "highest":2999,"lowest":2970,"upper_limit":3100,"lower_limit":2900}
       },
       "klines": {
         "SHFE.rb2701": {
@@ -63,6 +63,8 @@ void ProtocolTest::parsesMarketData() {
     QVERIFY(qFuzzyCompare(update.quotes[0].preOpenInterest, 1'878'000.0));
     QVERIFY(qFuzzyCompare(update.quotes[0].high, 2999.0));
     QVERIFY(qFuzzyCompare(update.quotes[0].low, 2970.0));
+    QVERIFY(qFuzzyCompare(update.quotes[0].upperLimit, 3100.0));
+    QVERIFY(qFuzzyCompare(update.quotes[0].lowerLimit, 2900.0));
     QVERIFY(update.quotes[0].volume == 702802);
     QVERIFY(update.klines.size() == 1);
     QVERIFY(update.klines["SHFE.rb2701"].size() == 1);

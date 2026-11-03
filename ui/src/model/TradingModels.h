@@ -3,6 +3,7 @@
 #include "net/Protocol.h"
 
 #include <QAbstractTableModel>
+#include <QDateTime>
 #include <QHash>
 #include <QVector>
 
@@ -68,6 +69,41 @@ private:
     QVector<Order>      orders_;
     QHash<QString, int> indexById_;
     void                rebuildIndex();
+};
+
+struct TickTrade {
+    qint64 datetime = 0;
+    double price    = std::numeric_limits<double>::quiet_NaN();
+    qint64 volume   = 0;
+    bool   buy      = false;
+};
+
+class TradeTapeModel final : public QAbstractTableModel {
+    Q_OBJECT
+
+public:
+    enum Column {
+        Time = 0,
+        Price,
+        Volume,
+        Direction,
+        ColumnCount
+    };
+
+    explicit TradeTapeModel(QObject* parent = nullptr);
+    int      rowCount(const QModelIndex& parent = {}) const override;
+    int      columnCount(const QModelIndex& parent = {}) const override;
+    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+    QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
+
+    void clear();
+    void applyQuote(const Quote& quote);
+
+private:
+    QVector<TickTrade>     ticks_;
+    QHash<QString, qint64> lastVolume_;
+    QHash<QString, double> lastPrice_;
+    int                    maxRows_ = 500;
 };
 
 class TradeTableModel final : public QAbstractTableModel {
