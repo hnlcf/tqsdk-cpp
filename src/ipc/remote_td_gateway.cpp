@@ -102,6 +102,7 @@ void RemoteTdGateway::on_frame(ReceivedFrame&& frame) {
             TradeEvent ev;
             ev.kind    = TradeEvent::Kind::Snapshot;
             ev.payload = std::move(body.data);
+            ev.ready   = body.ready;
             push(std::move(ev));
         } catch (const std::exception& e) {
             SPDLOG_WARN("RemoteTdGateway: bad TradeSnapshot: {}", e.what());

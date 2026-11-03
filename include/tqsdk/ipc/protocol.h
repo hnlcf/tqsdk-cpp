@@ -272,14 +272,16 @@ inline void from_json(const json& j, TradePushBody& m) {
 /// data 为完整 trade diff，可带 "reset": true 让消费端先清空本地交易实体。
 struct TradeSnapshotBody {
     StreamMeta meta; ///< epoch + seq（快照本身也占一个 td seq）
-    json       data = json::object();
+    json       data  = json::object();
+    bool       ready = true; ///< false: 网关重连时下发的旧缓存，尚未完成最新查询
 };
 inline void to_json(json& j, const TradeSnapshotBody& m) {
-    j = json{{"meta", m.meta}, {"data", m.data}};
+    j = json{{"meta", m.meta}, {"data", m.data}, {"ready", m.ready}};
 }
 inline void from_json(const json& j, TradeSnapshotBody& m) {
-    m.meta = j.value("meta", StreamMeta{});
-    m.data = j.value("data", json::object());
+    m.meta  = j.value("meta", StreamMeta{});
+    m.data  = j.value("data", json::object());
+    m.ready = j.value("ready", true);
 }
 
 // ---------------------------------------------------------------------------

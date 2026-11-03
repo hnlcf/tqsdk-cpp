@@ -32,6 +32,7 @@ public:
     boost::asio::awaitable<CommandAck> cancel_order(const CancelOrderReq& req) override;
 
     nlohmann::json snapshot() const override;
+    bool           snapshot_ready() const override;
 
     Channel<TradeEvent>& event_output() override { return ch_; }
 
@@ -181,6 +182,7 @@ private:
     std::map<std::string, std::string>  ref_to_rid_;
     std::map<std::string, std::string>  rid_to_ref_;
     std::unique_ptr<ctp::CtpOrderStore> order_store_;
+    std::atomic<bool>                   snapshot_ready_{false};
 
     int                                   pending_queries_            = 0;
     bool                                  query_in_flight_            = false;

@@ -137,7 +137,10 @@ td 不允许静默丢事件。`RemoteTdGateway` 的 gap handler 会发送
   `flow_path/ctp_orders_<user>.json`，网关重启后同一 rid 直接回放 ack；
 - 重启后仍以 CTP 查询为权威：登录/结算后 `ReqQryOrder` 刷新订单状态，
   node 收到新的 `TradeSnapshot` 后再对账；
-- node `/readyz` 在快照完成前返回 503，调度器/前端不得在此窗口内下单。
+- node `/readyz` 在快照完成前返回 503，调度器/前端不得在此窗口内下单；
+- `TradeSnapshotBody.ready` 区分“网关重启时下发的旧缓存”(false) 与“最新查询
+  确认的快照”(true)；node 只在收到 ready=true 后重新置 td_ready，避免重连窗口
+  被旧缓存误判为就绪。旧网关缺省该字段时按 true 兼容。
 
 ## 6. 兼容性
 

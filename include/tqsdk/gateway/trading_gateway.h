@@ -84,9 +84,10 @@ struct TradeEvent {
         Disconnected, // 与柜台断开
     } kind;
 
-    nlohmann::json payload;   // Kind::Diff / Snapshot 时有效
-    CommandAck     ack;       // Kind::Ack 时有效
-    std::string    error_msg; // Kind::Error 时有效
+    nlohmann::json payload;      // Kind::Diff / Snapshot 时有效
+    CommandAck     ack;          // Kind::Ack 时有效
+    std::string    error_msg;    // Kind::Error 时有效
+    bool           ready = true; // Snapshot 是否已由最新查询确认
 };
 
 /// TradingGateway 是交易网关的抽象接口。
@@ -119,6 +120,9 @@ public:
 
     // 可选指标；无指标的网关返回空 object。
     virtual nlohmann::json metrics() const { return nlohmann::json::object(); }
+
+    // 当前缓存快照是否已由“最新一轮查询”确认。远端 Resume 下发的旧快照为 false。
+    virtual bool snapshot_ready() const { return true; }
 
     // 远端网关需要先收到一次完整 Snapshot 才算就绪；本地/mock 网关默认无需。
     virtual bool requires_initial_trade_snapshot() const { return false; }

@@ -274,6 +274,18 @@ Market Front: tcp://182.254.243.31:30012
   文件内含当日 rid/OrderRef/订单 JSON；网关重启会加载同一交易日映射；
 - 实盘就绪观测：node 启动后、行情未到时 `/readyz` 返回 503；订阅并收到
   `SHFE.rb2701` tick 后返回 200，`/metrics` 显示 md_frames/td_frames/td_gaps；
+- 收盘前回归进一步验证：
+  - 远价限价单 `ALIVE/未成交` -> 撤单 `FINISHED/已撤单`；
+  - 连续 3 笔限价单 + 3 笔撤单全部成功，验证报单节流不会误拒；
+  - 过期合约返回 `is_error=true / CTP:找不到合约`；
+  - 网关重启后从持久化文件恢复 20 笔订单，原 rid 的挂单仍为 `ALIVE`，
+    重启后撤单成功；
+  - 用原始 IPC 重放同一 rid 的 InsertOrder，网关直接回放 persisted ack，
+    日志为 `duplicate insert ... replayed from persisted store`，未再次发往 CTP；
+  - 网关重启窗口内 `/readyz` 持续 503，直到新一轮 CTP 查询 Snapshot 完成才
+    恢复 200（约 3.3s），避免旧缓存被误判为已就绪；
+- `TradeSnapshotBody.ready` 已加入协议：网关 Resume 下发的旧缓存为 false，
+  最新查询完成的快照为 true；node 只在 true 时恢复 td_ready；
 - 过期合约 `SHFE.rb2601` 返回“CTP:找不到合约”，验证了合约名校验/错误映射；
 - CTP 返回的 GBK 中文 `StatusMsg/ErrorMsg` 已转为 UTF-8，JSON 不再因
   `invalid UTF-8 byte` 中断；

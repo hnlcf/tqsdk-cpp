@@ -70,7 +70,8 @@ asio::awaitable<void> GatewayIpcServer::send_td_snapshot() {
     body.meta = td_stream_.next_meta();
     // td_->snapshot() 访问共享交易网关状态，必须在 gateway core strand 上执行。
     co_await asio::dispatch(gateway_ex_, asio::use_awaitable);
-    body.data = td_->snapshot();
+    body.data  = td_->snapshot();
+    body.ready = td_->snapshot_ready();
     co_await asio::dispatch(ex_, asio::use_awaitable);
     const auto enc     = session_->encoding();
     auto       payload = encode_body(body, enc);

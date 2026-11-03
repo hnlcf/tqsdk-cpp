@@ -187,7 +187,7 @@ asio::awaitable<void> TqApi::td_loop() {
             // 对账快照：先清空交易实体，再按完整 diff 建库，避免旧订单残留。
             data_.clear_trading();
             td_connected_.store(true, std::memory_order_relaxed);
-            td_ready_.store(true, std::memory_order_relaxed);
+            td_ready_.store(ev->ready, std::memory_order_relaxed);
             merger_.apply(ev->payload);
             update_signal_.notify();
             break;

@@ -113,10 +113,19 @@ TEST(ProtocolCodec, TradeSnapshotRoundtrip) {
     TradeSnapshotBody in;
     in.meta  = StreamMeta{"epoch-z", 10};
     in.data  = {{"trade", {{"", {{"user", {{"orders", json::object()}}}}}}}};
+    in.ready = false;
     auto out = roundtrip_json(in);
     EXPECT_EQ(out.meta.epoch, in.meta.epoch);
     EXPECT_EQ(out.meta.seq, in.meta.seq);
     EXPECT_EQ(out.data, in.data);
+    EXPECT_FALSE(out.ready);
+
+    // 旧 gateway 不发送 ready 字段时默认视为最新快照。
+    ReceivedFrame legacy_frame{};
+    legacy_frame.encoding = FrameEncoding::Json;
+    legacy_frame.payload  = encode_body(json{{"meta", in.meta}, {"data", in.data}});
+    auto legacy           = decode_body<TradeSnapshotBody>(legacy_frame);
+    EXPECT_TRUE(legacy.ready);
 }
 
 TEST(ProtocolCodec, CommandInsertRoundtrip) {
