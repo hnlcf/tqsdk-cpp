@@ -361,3 +361,36 @@ TEST(SimTdE2E, SingleUpdateSeesAllFills) {
 
     f.finish_and_check();
 }
+
+// snapshot() 提供完整交易截面，可被 DiffMergeEngine 重建成等价 DataManager。
+TEST(SimTdE2E, SnapshotContainsFullTradingState) {
+    SimFixture f;
+
+    f.spawn([&]() -> asio::awaitable<void> {
+        f.sim->on_tick("SHFE.rb2610", 3800.0);
+        co_await f.api->insert_order(make_market(Direction::BUY, Offset::OPEN, 2));
+        co_await f.api->wait_update();
+        co_return;
+    });
+    f.finish_and_check();
+
+    const json snap = f.sim->snapshot();
+    ASSERT_TRUE(snap.contains("trade"));
+    const auto& user = snap["trade"][""]["user"];
+    ASSERT_TRUE(user.contains("orders"));
+    ASSERT_TRUE(user.contains("trades"));
+    ASSERT_TRUE(user.contains("positions"));
+    ASSERT_TRUE(user.contains("accounts"));
+    EXPECT_EQ(user["orders"].size(), 1u);
+    EXPECT_EQ(user["trades"].size(), 1u);
+    EXPECT_EQ(user["positions"].size(), 1u);
+
+    DataManager     dm;
+    DiffMergeEngine eng(dm);
+    eng.apply(snap);
+    EXPECT_EQ(dm.orders.size(), 1u);
+    EXPECT_EQ(dm.trades.size(), 1u);
+    EXPECT_EQ(dm.positions.size(), 1u);
+    EXPECT_DOUBLE_EQ(dm.account.balance, 999996.0);
+    EXPECT_DOUBLE_EQ(dm.account.margin, 7600.0);
+}

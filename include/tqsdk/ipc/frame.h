@@ -27,6 +27,9 @@ namespace ipc {
 /// | `0x0E` |	    `Heartbeat`        | 双向	                            | 每 30s 空闲	           | `HeartbeatAck`	   | 可丢 |
 /// | `0x0F` |	    `HeartbeatAck`     | 双向	                            | 收到心跳	               | —	               | 可丢 |
 /// | `0x10` |	    `Goodbye`          | 双向	                            | 优雅关闭	               | —	               | 尽力 |
+/// | `0x11` | `Resume`        | node → gateway | 重连后恢复 seq | `ResumeAck` | 必达 |
+/// | `0x12` | `ResumeAck`     | gateway → node | 恢复策略（replay/snapshot） | — | 必达 |
+/// | `0x13` | `TradeSnapshot` | gateway → node | 交易状态对账 | — | 必达 |
 enum class FrameType : uint8_t {
     Hello          = 0x01,
     HelloAck       = 0x02,
@@ -44,6 +47,9 @@ enum class FrameType : uint8_t {
     Heartbeat      = 0x0E,
     HeartbeatAck   = 0x0F,
     Goodbye        = 0x10,
+    Resume         = 0x11,
+    ResumeAck      = 0x12,
+    TradeSnapshot  = 0x13,
 };
 
 enum class FrameEncoding : uint8_t {

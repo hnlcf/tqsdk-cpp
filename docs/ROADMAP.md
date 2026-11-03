@@ -21,7 +21,14 @@
 - ✅ **阶段 7 WebSocket 推送**：`serve/ws_protocol`（强类型 WsClientMessage/WsServerMessage）、
   `serve/ws_stream`（`/stream` 升级、welcome/subscribe/snapshot/diff/ping、每连接单写者 +
   有界队列、订阅引用计数）、`serve/json_convert`（REST/WS 共用字段映射）。
-- ⬜ 未完成：CTP（阶段4）、seq/gap 检测与断线补发（4.6）、共享内存快通道、多线程/strand、soak。
+- ✅ **阶段 8 可靠性（4.6）**：md/td 独立 epoch+seq、`StreamTracker` 缺口/重复/epoch 检测、
+  `OutboundStream` replay buffer、`Resume/ResumeAck/TradeSnapshot`、IpcClient 指数退避重连、
+  md 重订阅 resync、td replay/快照对账。详见 [`IPC_RECOVERY.md`](./IPC_RECOVERY.md)。
+- ✅ **阶段 8 多线程**：`[runtime].threads` / `--threads`，node 每连接 HTTP strand +
+  单 core strand 数据面，gw 单 core strand；4 worker 并发 HTTP、WebSocket、两进程
+  断线重启恢复已实测；TSan 覆盖核心并发用例。详见 [`THREADING.md`](./THREADING.md)。
+- ⬜ 未完成：CTP（阶段4）、共享内存快通道、多 node 广播 fan-out、
+  WebSocket 每客户端独立 strand、24h soak/perf baseline。
 
 > 下方 4~10 章保留为**设计意图与原始规划**，与已实现代码若有出入，以 `docs/MODULES.md` 为准。
 
@@ -97,8 +104,8 @@
 - Channel 家族：basic/bounded/multiplex/close 全覆盖测试。
 - UDS IPC 通道：帧编解码、大 payload(1MB)、对端关闭、非法帧、幂等 close、双向并发。
 - 日志分级与文件轮转；测试 `main()` 统一初始化。
-- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 208 项
-  （其中 2 个联网行情测试默认跳过）。
+- 构建：`TQSDK_BUILD_EXAMPLES`、clang++、mold、ASan 全绿；当前 ctest 共 222 项
+  （其中 2 个联网行情测试默认跳过），TSan 并发用例全绿。
 
 ### 2.5 测试规模快照（阶段 3 历史快照；当前总数见上）
 
@@ -135,8 +142,8 @@
 | 区域 | 缺口描述 | 优先级 |
 |---|---|---|
 | **CTP 网关** | 完全无实现、无测试；`third_party/ctp` 有 SDK 头/so，但 `src/gateway/ctp/*` 不存在。TaskQueue/SPI 桥接、断线重连、报单回报时序全空白。 | ★★★★★ |
-| **多线程 io_context** | 当前所有测试单线程。strand 串行化、网关内部状态并发保护、Channel 跨线程投递均未验证。 | ★★★★★ |
-| **重连与容错** | `TqMdGateway` 重连逻辑（补发订阅、chart_id 复用、peek 循环恢复）无针对性测试（联网测试仅覆盖"一次成功订阅"）。 | ★★★★☆ |
+| **多线程 io_context** | node/gw 已实现 core strand + 每连接 HTTP strand，4 worker/TSan 覆盖；剩余：WebSocket 每客户端独立 strand、gw 多连接 fan-out、`Channel` 跨线程投递。 | ★★☆☆☆ |
+| **重连与容错** | IpcClient 重连/Resume/TradeSnapshot 已实现并测；`TqMdGateway` 直连天勤的断线重连（chart_id 复用、peek 恢复）仍无针对性测试。 | ★★★☆☆ |
 | **wait_update 并发语义** | 多个协程同时 wait_update、close 时挂起者唤醒、清位时序在并发下是否正确，未测。 | ★★★★☆ |
 | **KlineStream 裁剪/边界** | capacity 裁剪最旧 bar、Appended 位、首帧全量覆盖、空序列读取，仅有分散断言，无系统测试。 | ★★★☆☆ |
 | **insert_order 竞态** | 占位单在 ack 前可见、ack 失败转错误终态、网关无响应超时，边界未测。 | ★★★☆☆ |
@@ -238,9 +245,13 @@
 
 两进程架构下，需要处理的断线场景只有 **gw<->node** 一条：
 
-1. **gw<->core 断线**：core 需缓存"当前有效订阅集合"，重连 gw 后重发 Subscribe；gw 侧网关需重连柜台并重放订阅（已有 pending_subs_ 机制，需扩展到命令）。
-2. **gap 检测**：每个 push 带单调递增 `seq`（core 维护全局序列号）。gw/node 检测 seq 跳变 -> 请求补发；行情可重建（重新订阅拿快照），交易回报**不可丢**（重连后 QueryOrders/持仓对齐）。
-3. **交易命令必达**：`Command` 走"应用层重传 + Ack 确认 + QueryOrders 兜底"（协议表已设计，需实现）。
+> **进度**：1/2 已实现（见 `IPC_RECOVERY.md`）：md/td 独立 epoch+seq、Resume/replay、
+> md 重订阅 resync、td TradeSnapshot 对账、IpcClient 自动重连。3 的命令重传
+> 依赖 CTP/真实柜台幂等语义，仍属阶段 4/8 待办。
+
+1. **gw<->core 断线**：core 缓存"当前有效订阅集合"，重连 gw 后重发 Subscribe（`RemoteMdGateway::resync`）；gw 侧网关需重连柜台并重放订阅（已有 pending_subs_ 机制，需扩展到命令）。
+2. **gap 检测**：每个 push 带单调递增 `seq`（md/td 各自独立）。gw/node 检测 seq 跳变 -> 请求补发；行情可重建（重新订阅拿快照），交易回报**不可丢**（replay 或 TradeSnapshot 对账）。
+3. **交易命令必达**：`Command` 走"应用层重传 + Ack 确认 + QueryOrders 兜底"（协议 rid 关联已实现，重传/去重仍需真实网关落地）。
 4. **core/serve 同进程无断线问题**：serve 直接读内存，无需 Snapshot 重建逻辑——这是两进程架构相对三进程的**显著简化**。
 
 ---
@@ -352,10 +363,13 @@
 **目标**：让拆分后的系统可运维、可回归。
 
 **工作项**：
-- [ ] 多线程 io_context + strand 并发测试。
-- [ ] 重连/断线/gap/命令重传的系统测试（假服务器注入故障）。
-- [ ] soak test（长稳、内存、句柄泄漏）。
-- [ ] CTP 模拟柜台回归测试。
+- [x] 多线程 io_context + strand 并发测试（4 worker / 32 并发 HTTP / TSan）。
+- [x] md/td seq + gap 单测与集成测试（Tracker/replay/重复/epoch）。
+- [x] 断线重连与 Resume/TradeSnapshot 系统测试（真实 TCP，gw 重启 epoch 变化）。
+- [x] 两进程 4 worker 冒烟：并发 REST、WebSocket subscribe/ping、杀 gw 重启后自动恢复。
+- [ ] 24h soak（内存、句柄、队列水位）。
+- [ ] 命令重传/ack 去重的 CTP 专项回归（依赖阶段4）。
+- [ ] 多 node 同时连接时的广播 fan-out 正确性测试。
 
 **验收**：故障注入下数据不丢（交易）/可重建（行情），长稳 24h 无泄漏。
 
@@ -393,6 +407,7 @@ config/
 | core.router | order_seq_prefix / command_timeout_ms / retry | 命令路由 | rid_ |
 | serve.http | bind / port / auth_token / rate_limit_qps / cors_origin | HTTP 服务 | 127.0.0.1:8080 |
 | serve.ws | path / heartbeat_interval_ms / max_clients / max_queue | WebSocket | /stream, 30s, 256, 1024 |
+| runtime | threads | io_context worker 数（1..64） | 1 |
 
 ### 7.3 配置实现建议
 - 引入 TOML 解析（`toml++`，轻量、header-only）或继续 JSON（已有 nlohmann）。**优先 toml++**（可读性好，适合运维）。
@@ -478,9 +493,9 @@ include/tqsdk/
     frame.h               帧类型表（已经为拆分设计好）
     ipc_channle.h         IIpcChannel 抽象
     uds_channel.h         UDS 实现
-  util/                   log / serde / async_mutex / spawn_logged
+  util/                   log / serde / async_mutex / spawn_logged / runtime
 src/                      对应实现
-tests/                    ~208 用例
+tests/                    ~222 用例
 examples/demo.cpp
 scripts/probe_*.py        协议探测
 third_party/ctp/          CTP SDK（有头与 so，网关未实现）

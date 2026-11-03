@@ -47,6 +47,12 @@ public:
         dirty_list_.clear();
     }
 
+    /// 清空全部实体（用于交易状态对账重建）。
+    void clear() noexcept {
+        data_.clear();
+        dirty_list_.clear();
+    }
+
     std::size_t size() const noexcept { return data_.size(); }
     bool        empty() const noexcept { return data_.empty(); }
 

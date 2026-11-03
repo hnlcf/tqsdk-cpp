@@ -62,15 +62,60 @@ TEST(ProtocolCodec, SubscribeRoundtrip) {
 
 TEST(ProtocolCodec, MarketDataPushRoundtrip) {
     MarketDataPushBody in;
+    in.meta  = StreamMeta{"epoch-x", 17};
     in.data  = {{"quotes", {{"SHFE.rb2610", {{"last_price", 3800.0}, {"volume", 100}}}}}};
     auto out = roundtrip_json(in);
     EXPECT_EQ(out.data, in.data);
+    EXPECT_EQ(out.meta.epoch, "epoch-x");
+    EXPECT_EQ(out.meta.seq, 17u);
 }
 
 TEST(ProtocolCodec, TradePushRoundtrip) {
     TradePushBody in;
+    in.meta  = StreamMeta{"epoch-y", 3};
     in.data  = {{"trade", {{"", {{"user", {{"orders", json::object()}}}}}}}};
     auto out = roundtrip_json(in);
+    EXPECT_EQ(out.data, in.data);
+    EXPECT_EQ(out.meta.epoch, "epoch-y");
+    EXPECT_EQ(out.meta.seq, 3u);
+}
+
+TEST(ProtocolCodec, ResumeRoundtrip) {
+    ResumeBody in;
+    in.epoch       = "epoch-z";
+    in.md_next_seq = 101;
+    in.td_next_seq = 9;
+    auto out       = roundtrip_json(in);
+    EXPECT_EQ(out.epoch, in.epoch);
+    EXPECT_EQ(out.md_next_seq, 101u);
+    EXPECT_EQ(out.td_next_seq, 9u);
+}
+
+TEST(ProtocolCodec, ResumeAckRoundtrip) {
+    ResumeAckBody in;
+    in.epoch                = "epoch-z";
+    in.md_replay            = true;
+    in.td_replay            = false;
+    in.md_from_seq          = 101;
+    in.td_from_seq          = 9;
+    in.td_snapshot_required = true;
+    in.error                = "";
+    auto out                = roundtrip_json(in);
+    EXPECT_EQ(out.epoch, in.epoch);
+    EXPECT_TRUE(out.md_replay);
+    EXPECT_FALSE(out.td_replay);
+    EXPECT_EQ(out.md_from_seq, 101u);
+    EXPECT_EQ(out.td_from_seq, 9u);
+    EXPECT_TRUE(out.td_snapshot_required);
+}
+
+TEST(ProtocolCodec, TradeSnapshotRoundtrip) {
+    TradeSnapshotBody in;
+    in.meta  = StreamMeta{"epoch-z", 10};
+    in.data  = {{"trade", {{"", {{"user", {{"orders", json::object()}}}}}}}};
+    auto out = roundtrip_json(in);
+    EXPECT_EQ(out.meta.epoch, in.meta.epoch);
+    EXPECT_EQ(out.meta.seq, in.meta.seq);
     EXPECT_EQ(out.data, in.data);
 }
 

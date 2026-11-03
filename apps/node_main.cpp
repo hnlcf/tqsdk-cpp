@@ -44,8 +44,10 @@ int main(int argc, char** argv) {
     CLI::App    app{"tqsdk-node: data service process (gw proxy + HTTP serve)"};
     std::string config_path;
     std::string log_level;
+    int         threads = 0;
     app.add_option("-c,--config", config_path, "Path to node config TOML")->required();
     app.add_option("-l,--log-level", log_level, "Log level (overrides TQSDK_LOG_LEVEL)");
+    app.add_option("-t,--threads", threads, "IO worker threads (overrides [runtime].threads)");
     CLI11_PARSE(app, argc, argv);
 
     tqsdk::setup_logging(tqsdk::LogOptions{log_level});
@@ -58,15 +60,22 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    if (threads > 0) {
+        cfg.runtime.threads = normalize_worker_threads(threads);
+    }
+
     asio::io_context io;
-    auto             ex = io.get_executor();
-    auto             rt = std::make_shared<NodeRuntime>();
+    auto             io_ex   = io.get_executor();
+    auto             core_ex = asio::make_strand(io);
+    auto             rt      = std::make_shared<NodeRuntime>();
 
     // 引导协程：建连 gw -> 建 TqApi -> 预订阅 -> 起 HTTP serve。
     // 失败（gw 未就绪/握手失败）记错误并停止 io。
-    auto bootstrap = [&io, ex, rt, &cfg]() -> asio::awaitable<void> {
+    // TqApi/网关/DataManager 全部绑定 core_ex；HTTP 连接 I/O 在 io_ex 的
+    // 每连接 strand 上并行，进入路由 handler 前切回 core_ex。
+    auto bootstrap = [&io, io_ex, core_ex, rt, &cfg]() -> asio::awaitable<void> {
         try {
-            rt->api = co_await make_tqapi(io, cfg.upstream);
+            rt->api = co_await make_tqapi(io, cfg.upstream, core_ex);
         } catch (const std::exception& e) {
             SPDLOG_CRITICAL("[node] failed to connect/init upstream gw: {}", e.what());
             io.stop();
@@ -86,7 +95,7 @@ int main(int argc, char** argv) {
         ws_opts.max_clients        = cfg.ws.max_clients;
         ws_opts.max_queue          = cfg.ws.max_queue;
 
-        rt->http = std::make_unique<serve::HttpServer>(rt->api.get(), ex, ws_opts);
+        rt->http = std::make_unique<serve::HttpServer>(rt->api.get(), io_ex, ws_opts, core_ex);
         try {
             rt->http->listen(cfg.serve_bind, cfg.serve_port);
         } catch (const std::exception& e) {
@@ -101,7 +110,7 @@ int main(int argc, char** argv) {
         co_return;
     };
 
-    co_spawn_logged(ex, bootstrap, "node.bootstrap");
+    co_spawn_logged(core_ex, bootstrap, "node.bootstrap");
 
     // 优雅退出。
     asio::signal_set signals(io, SIGINT, SIGTERM);
@@ -112,8 +121,8 @@ int main(int argc, char** argv) {
         }
     });
 
-    SPDLOG_INFO("[node] running");
-    io.run();
+    SPDLOG_INFO("[node] running with {} io worker thread(s)", cfg.runtime.threads);
+    run_io_context(io, cfg.runtime.threads);
 
     // 收尾：关闭 serve 与 TqApi，驱动 io 跑完后台协程后再析构。
     if (rt->http) {

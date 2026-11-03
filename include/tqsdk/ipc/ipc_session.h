@@ -66,8 +66,9 @@ public:
     /// 优雅/强制关闭。幂等，可在任意时刻调用。
     void close() noexcept;
 
-    bool is_open() const noexcept { return !closed_; }
-    bool is_ready() const noexcept { return ready_; }
+    bool          is_open() const noexcept { return !closed_; }
+    bool          is_ready() const noexcept { return ready_; }
+    FrameEncoding encoding() const noexcept { return opts_.encoding; }
 
     uint64_t tx_frames() const noexcept { return tx_frames_; }
     uint64_t rx_frames() const noexcept { return rx_frames_; }
@@ -102,8 +103,8 @@ private:
     uint64_t tx_frames_{0};
     uint64_t rx_frames_{0};
 
-    // 后台协程的存活计数（用于析构前判断是否还在跑；这里仅记录，不 join）。
-    std::atomic<bool> loops_running_{false};
+    // 仍在运行的后台协程数；start() 失败时会等待其归零，避免悬空 this。
+    std::atomic<int> loops_running_{0};
 
     // 串行化所有出站写：底层 socket 不允许并发 async_write（会破坏帧序列）。
     // 心跳循环、业务 send、控制帧应答可能并发，必须经过本互斥。

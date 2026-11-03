@@ -46,6 +46,7 @@ public:
 
 private:
     void push(TradeEvent ev);
+    void install_handlers();
 
     std::shared_ptr<IpcClient> client_owner_; ///< 拥有模式下的共享所有权（可空）
     IpcClient&                 client_;

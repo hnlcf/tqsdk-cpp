@@ -77,6 +77,14 @@ struct DataManager {
         klines.clear_changes();
         account.changed_fields = 0;
     }
+
+    /// 交易状态对账前清空交易实体（行情/K 线保留）。
+    void clear_trading() noexcept {
+        orders.clear();
+        trades.clear();
+        positions.clear();
+        account = Account{};
+    }
 };
 
 } // namespace tqsdk

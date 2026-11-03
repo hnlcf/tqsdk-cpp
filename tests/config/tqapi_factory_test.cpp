@@ -286,4 +286,17 @@ TEST(TqApiFactoryTest, RemoteMdAndTdEndToEnd) {
     ::unlink(path.c_str());
 }
 
+TEST(TqApiFactoryConfig, ParsesRuntimeThreads) {
+    auto node = parse_node_config("[runtime]\nthreads = 4\n");
+    EXPECT_EQ(node.runtime.threads, 4);
+
+    auto gw = parse_gw_config("[runtime]\nthreads = 2\n");
+    EXPECT_EQ(gw.runtime.threads, 2);
+
+    // 0/负值收敛为 1，超大值封顶 64。
+    EXPECT_EQ(parse_node_config("[runtime]\nthreads = 0\n").runtime.threads, 1);
+    EXPECT_EQ(parse_gw_config("[runtime]\nthreads = -8\n").runtime.threads, 1);
+    EXPECT_EQ(parse_node_config("[runtime]\nthreads = 1000\n").runtime.threads, 64);
+}
+
 } // namespace

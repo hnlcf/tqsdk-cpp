@@ -42,7 +42,8 @@ struct WsOptions {
 ///     最后一个客户端取消/断开时才 release，与网关引用计数语义对称。
 ///   - **每连接单写者**：每个连接仅 writer 协程写 socket（消息 + 心跳 ping），
 ///     reader 只处理入站命令并投递到该连接的待写队列，避免并发 async_write。
-///   - 单 io_context 线程；队列/订阅表不加锁。
+///   - Hub 全部状态、订阅表、队列、reader/writer 协程绑定同一 core strand；
+///     多 worker 下仍串行，因此内部不加锁。
 ///
 /// 客户端协议（文本帧，UTF-8 JSON）。消息结构定义在 `serve/ws_protocol.h`：
 /// `WsClientMessage` / `WsServerMessage` 为强类型 variant，带 to_json/from_json。

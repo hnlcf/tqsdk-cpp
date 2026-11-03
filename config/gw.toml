@@ -46,3 +46,9 @@ commission_per_lot = 2.0 # 每手 2 元
 # SimTdGateway 初始撮合价（市价单/限价单据此撮合）
 [td.last_prices]
 "SHFE.rb2610" = 3800.0
+
+# ---- 运行时线程 ----
+# 网关/会话状态共享 core strand；worker > 1 时 I/O 可多线程，
+# 但业务状态更新仍严格串行。
+[runtime]
+threads = 2

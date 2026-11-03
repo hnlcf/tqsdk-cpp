@@ -191,8 +191,9 @@ TqApiConfig load_tqapi_config(const std::string& path) {
     return build_from_toml(root);
 }
 
-asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context& ctx, const TqApiConfig& cfg) {
-    auto ex = ctx.get_executor();
+asio::awaitable<std::unique_ptr<TqApi>>
+make_tqapi(asio::io_context& ctx, const TqApiConfig& cfg, asio::any_io_executor core_ex) {
+    auto ex = core_ex ? std::move(core_ex) : asio::any_io_executor(ctx.get_executor());
 
     const bool need_md_remote = cfg.md.kind == MdKind::Remote;
     const bool need_td_remote = cfg.td.kind == TdKind::Remote;
@@ -216,8 +217,6 @@ asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context& ctx, const 
             ep = td_ep;
         }
 
-        auto channel = connect_channel(ctx, cfg.ipc, ep);
-
         ipc::IpcSession::Options opts;
         opts.local_role         = cfg.ipc.role;
         opts.local_name         = cfg.ipc.local_name;
@@ -226,10 +225,18 @@ asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context& ctx, const 
         opts.heartbeat_timeout  = cfg.ipc.heartbeat_timeout;
         opts.encoding           = cfg.ipc.encoding;
 
-        auto session = std::make_unique<ipc::IpcSession>(std::move(channel), ex, opts);
-        co_await session->start(); // 握手；失败抛异常
+        auto ipc_cfg         = cfg.ipc;
+        auto endpoint        = ep;
+        auto session_factory = [&ctx, ex, ipc_cfg, endpoint, opts]()
+            -> asio::awaitable<std::unique_ptr<ipc::IpcSession>> {
+            auto channel = connect_channel(ctx, ipc_cfg, endpoint);
+            auto session = std::make_unique<ipc::IpcSession>(std::move(channel), ex, opts);
+            co_await session->start(); // 握手；失败抛异常
+            co_return session;
+        };
 
-        client = std::make_shared<ipc::IpcClient>(std::move(session), ex);
+        client = std::make_shared<ipc::IpcClient>(session_factory, ex);
+        co_await client->connect(); // 首连失败直接抛错（保持启动 fail-fast）
     }
 
     // ---- 造行情网关 ----
@@ -307,6 +314,14 @@ TqApiConfig::Td parse_gw_td(const toml::table& root) {
     return td;
 }
 
+RuntimeConfig parse_runtime(const toml::table& root) {
+    RuntimeConfig rt;
+    if (const auto& t = require_table(root, "runtime"); !t.empty()) {
+        rt.threads = normalize_worker_threads(static_cast<int>(get_int(t, "threads", rt.threads)));
+    }
+    return rt;
+}
+
 GwConfig build_gw_from_toml(const toml::table& root) {
     GwConfig cfg;
     if (const auto& l = require_table(root, "listen"); !l.empty()) {
@@ -324,8 +339,9 @@ GwConfig build_gw_from_toml(const toml::table& root) {
             std::chrono::milliseconds(get_int(i, "heartbeat_timeout_ms", 15000));
         cfg.local_name = get_str(i, "local_name", cfg.local_name);
     }
-    cfg.md = parse_gw_md(root);
-    cfg.td = parse_gw_td(root);
+    cfg.md      = parse_gw_md(root);
+    cfg.td      = parse_gw_td(root);
+    cfg.runtime = parse_runtime(root);
 
     // [td.specs."SYMBOL"] -> SpecSeed（仅 sim 用）
     if (const auto& td_t = require_table(root, "td"); !td_t.empty()) {
@@ -390,6 +406,7 @@ NodeConfig build_node_from_toml(const toml::table& root) {
                 std::max<int64_t>(1, get_int(w, "max_queue", cfg.ws.max_queue)));
         }
     }
+    cfg.runtime = parse_runtime(root);
     return cfg;
 }
 

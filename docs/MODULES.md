@@ -346,6 +346,28 @@
 - **关键文件**：`include/tqsdk/ipc/remote_md_gateway.h`、`remote_td_gateway.h`、对应 `.cpp`
 - **测试**：`tests/ipc/gateway_server_test.cpp`（含真实 UDS 往返）、`ipc_proxy_test.cpp`。
 
+### 4.9 序号、缺口与重连恢复（stream_seq.h / IpcClient）
+
+- **目标**：在不可靠断线窗口内检测丢失/重复，并让 md/td 各自用正确方式恢复。
+- **负责**：
+  - `StreamMeta{epoch,seq}` 随 MarketDataPush/TradePush 上推；md/td 独立 seq。
+  - `StreamTracker` 状态机：Started/InOrder/Duplicate/Gap/EpochChanged/Ignored。
+  - `OutboundStream` 分配 seq + ring buffer replay；容量按帧数/字节双限制。
+  - `IpcClient` 缺口回调、重复帧丢弃、Resume 发送、指数退避重连、
+    `retired_sessions_` 生命周期保护。
+  - `RemoteMdGateway::resync()` 重放已记录订阅；`RemoteTdGateway` gap 触发
+    Resume replay 或 TradeSnapshot。
+- **关键约定**：
+  - seq 分配顺序必须等于发送顺序；生产侧单 writer。
+  - md 缺口 -> 重订阅 + 全量快照；td 缺口 -> replay，失败 -> 全量快照对账。
+  - epoch 变化 -> 不 replay，md 重放订阅、td 直接快照。
+  - `seq=0` 兼容旧 peer（Ignored）。
+- **关键文件**：`include/tqsdk/ipc/stream_seq.h`、`ipc_client.h`、`remote_md_gateway.*`、
+  `remote_td_gateway.*`、`gateway_server.*`
+- **测试**：`tests/ipc/stream_seq_test.cpp`、`protocol_test.cpp`、
+  `gateway_server_test.cpp`、`tests/e2e/sim_td_e2e_test.cpp`。
+- **详细文档**：[`IPC_RECOVERY.md`](./IPC_RECOVERY.md)。
+
 ---
 
 ## 5. 服务层（node 进程内 serve）
@@ -393,13 +415,33 @@
 - **关键约定**：
   - quote diff 只含变化字段；K 线 `{"reset":bool,"bars":[...]}`，reset=false 时仅最后一根。
   - 交易类 topic（account/orders/trades/positions）首次订阅未显式给出 `topics` 时默认全开。
-  - 单 io_context 线程，订阅表/队列不加锁。
+  - Hub 状态、订阅表、队列、reader/writer 全部绑定 core strand，不加锁。
   - 后台 `push_loop` 与客户端协程都用 `co_spawn_logged`，异常不静默吞掉。
   - 协议解析失败统一抛 `WsProtocolError`，连接层回 `WsError` 文本帧。
 - **关键文件**：`include/tqsdk/serve/ws_protocol.h`、`include/tqsdk/serve/ws_stream.h`、
   `src/serve/ws_stream.cpp`、`include/tqsdk/serve/json_convert.h`、`src/serve/json_convert.cpp`
 - **测试**：`tests/serve/ws_protocol_test.cpp`（解析/序列化/异常）、
   `tests/serve/ws_stream_test.cpp`（快照/部分 diff/K 线 reset/退订 release/ping/config）。
+
+### 5.4 多线程执行器与 strand（runtime.h / HttpServer 双 executor）
+
+- **目标**：允许多 worker 线程推进传输层 I/O，同时保持数据面单线程模型不变。
+- **负责**：
+  - `RuntimeConfig{threads}` + `run_io_context(io, N)`；N 收敛到 `[1,64]`。
+  - node：`io_ex` 负责 accept；每条 HTTP 连接一个 `make_strand(io_ex)`；
+    `core_ex` 承载 TqApi/DataManager/网关/IPC/WebSocketHub。
+  - `HttpServer(api, io_ex, ws, data_ex)`：session 在连接 strand 读/写，
+    handler 前 `dispatch(data_ex)`，写回前切回连接 strand。
+  - gw：所有网关/会话绑定单 core strand，多 worker 下状态仍串行。
+- **关键约定**：
+  - core strand 上的对象禁止在其他 executor 直接修改；新增路由必须遵守 dispatch 边界。
+  - `Channel<T>` 仍是单消费者、executor-affine；`TqApi::wait_update` 仍单 waiter。
+  - 关闭顺序：stop IO -> close api/gateways -> restart/run 排空回调 -> 析构。
+- **关键文件**：`include/tqsdk/util/runtime.h`、`include/tqsdk/serve/http_server.h`、
+  `src/serve/http_server.cpp`、`apps/node_main.cpp`、`apps/gw_main.cpp`
+- **测试**：`tests/serve/threading_test.cpp`（4 worker + 32 并发 HTTP）、
+  TSan 下跑 `Threading.* / WsStream.* / GatewayIpcServerTest.* / IpcClientTest.*`。
+- **详细文档**：[`THREADING.md`](./THREADING.md)。
 
 ---
 
@@ -409,11 +451,14 @@
 
 - **目标**：统一配置模型（TOML），屏蔽"进程内直连 / 远程代理"的差异。
 - **负责**：`load/parse_tqapi_config`、`parse/load_gw_config`、`parse/load_node_config`；
-  `make_tqapi(ctx, cfg)` 协程化构造 TqApi（远程模式需先建连握手）。
+  `make_tqapi(ctx, cfg, core_ex = {})` 协程化构造 TqApi（远程模式需先建连握手）；
+  `[runtime].threads` 解析为 `RuntimeConfig`。
 - **关键约定**：
   - 每个网关独立选 kind：`MdKind{Tq,Remote,Mock,None}`、`TdKind{Sim,Remote,Mock,None}`。
   - 远程模式 md/td 共享同一条 IpcSession（一个 gw 连接同时承载行情与交易）。
   - 两端 Hello 角色必须不同（连 gw 用 Node，策略连 node.serve 用 Gateway）。
+  - `core_ex` 为空时使用 `ctx.get_executor()`；多线程 node 传 core strand。
+  - `[runtime].threads` 收敛到 `[1,64]`，0/负值按 1 处理。
   - 缺必填项/语法错误 fail-fast 抛 `std::runtime_error`。
 - **关键文件**：`include/tqsdk/config/tqapi_factory.h`、`src/config/tqapi_factory.cpp`、
   `config/gw.toml`、`config/node.toml`
@@ -491,9 +536,10 @@
 
 ## 9. 已知约束与 TODO
 
-- **线程模型**：当前全链路单 io_context 线程，内部状态不加锁。多线程/strand 未验证（roadmap 阶段8）。
-- **自动重连**：`TqMdGateway` 断线暂不自动重连（投递 Disconnected 后关闭）；重连补发机制已有雏形（pending_subs_/pending_klines_）。
-- **seq / gap 检测**：帧 body 尚无单调 seq；断线补发/重放未实现（roadmap 4.6）。
+- **线程模型**：node 为“多 worker 传输 + 单 core strand 数据面”；gw 仍把所有网关/会话收敛到单 core strand。TCP/UDP 之外的每网关/每客户端独立 strand 需要先实现 Channel fan-out，见 `THREADING.md` §7。
+- **自动重连**：`IpcClient`（远程 md/td）已支持指数退避重连 + Resume；`TqMdGateway`/`TqTdGateway` 直连天勤/CTP 的重连仍由各自网关实现（当前 TqMdGateway 投递 Disconnected 后不自动重连）。
+- **seq / gap 检测**：md/td 已实现 epoch+seq、重复丢弃、gap 回调、Resume/replay、md resync、td TradeSnapshot 对账；跨版本旧 peer 按 seq=0 兼容。
+- **多 node 广播**：gw 的 md/td `Channel<T>` 仍是单消费者；多个 GatewayIpcServer 共享同一网关时当前事件会被分摊而非广播，需要独立 fan-out 层（roadmap 阶段 D 后续）。
 - **CTP 网关**：未实现（roadmap 阶段4）。
 - **共享内存快通道**：未实现（性能阶段可选项）。
 - **WebSocket 与 wait_update**：`HttpServer` 内的 `WebSocketHub::push_loop` 是 serve 层

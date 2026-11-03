@@ -322,7 +322,10 @@ websocat -t ws://127.0.0.1:8080/stream
   最后一个客户端退订/断开时才 `release`（与网关引用计数语义对称）。
 - **每连接单写者 + 有界队列**：writer 协程独占 socket 写（消息与心跳 ping），
   慢消费者队列满时丢最旧消息；服务端按 `heartbeat_interval_ms` 发 WebSocket ping。
-- 配置见 `config/node.toml` 的 `[serve.ws]`。
+- **executor 归属**：Hub 全部状态与 reader/writer 协程运行在 core strand；
+  多 worker 下 HTTP 连接并行，但 WebSocket 数据面仍由 core 串行（详见
+  [`docs/THREADING.md`](./THREADING.md)）。
+- 配置见 `config/node.toml` 的 `[serve.ws]` 与 `[runtime]`。
 - 单测：`tests/serve/ws_stream_test.cpp`（真实 TCP + WebSocket 往返）。
 
 ### IPC 帧协议（跨语言契约，勿改）
@@ -335,14 +338,39 @@ length = 2 + payload.size()          # 含 type+encoding
 - 消息体先序列化为 `nlohmann::json` DOM，再由 `codec`（JSON / MessagePack）转字节，
   帧头 `encoding` 字节选择编解码器 —— 消息体不耦合具体线格式。
 - 帧类型：Hello/HelloAck/Heartbeat/HeartbeatAck/Goodbye/Subscribe/SubscribeAck/
-  MarketDataPush/TradePush/Command/CommandAck/GatewayEvent。
+  MarketDataPush/TradePush/Command/CommandAck/GatewayEvent/Resume/ResumeAck/TradeSnapshot。
 - `SubscribeBody.release=false` 为订阅（默认）；`true` 表示退订 symbols/klines
   （WebSocket 下游引用计数归零时用，网关按连接内计数释放真实订阅）。
+- `MarketDataPush` / `TradePush` 带 `meta{epoch,seq}`，md/td 各自独立序号；
+  旧 peer 缺省 `seq=0` 时按 `Ignored` 兼容。
+
+### 序号、断线重连与恢复
+
+- **缺口检测**：`IpcClient` 对 md/td 分别维护 `StreamTracker`，识别
+  `InOrder/Duplicate/Gap/EpochChanged`；重复帧丢弃，缺口回调上层。
+- **md 恢复**：`RemoteMdGateway` 记录订阅集合，gap/重连时重新下发订阅，
+  用上游全量快照重建，不尝试补发旧行情。
+- **td 恢复**：优先从 gw 的 `OutboundStream` ring buffer replay；buffer 已淘汰
+  或 epoch 变化时，gw 发送 `TradeSnapshot`，node 先 `clear_trading()` 再整体合并。
+- **自动重连**：`IpcClient(SessionFactory, ...)` 指数退避重连，成功后重放订阅
+  并发送 `Resume`；旧 session 保留到后台协程收尾，避免 UAF。
+- 详细设计、状态机、兼容性与观测点见 [`docs/IPC_RECOVERY.md`](./IPC_RECOVERY.md)。
+
+### 多线程运行时
+
+- `[runtime].threads` / `--threads N` 控制 io_context worker 数（默认 1，上限 64）；
+- node 使用「每连接 strand 做 HTTP I/O + 单 core strand 做数据面」：
+  handler 前 `dispatch(core)`，写回前切回连接 strand；
+- TqApi/DataManager/网关/IPC/WebSocketHub 全部绑定 core strand，跨组件无锁；
+- gw 当前把网关与会话收敛到一条 core strand，优先保证多连接状态安全；
+- 执行器边界、关闭顺序、TSan 命令与后续演进见 [`docs/THREADING.md`](./THREADING.md)。
 
 ## 模块文档
 
 逐模块的**目标 / 边界 / 关键约定 / 生命周期**见 [`docs/MODULES.md`](./MODULES.md)；
-两进程拆分、阶段路线、性能与风险见 [`docs/ROADMAP.md`](./ROADMAP.md)。
+两进程拆分、阶段路线、性能与风险见 [`docs/ROADMAP.md`](./ROADMAP.md)；
+可靠性恢复见 [`docs/IPC_RECOVERY.md`](./IPC_RECOVERY.md)；
+多线程模型见 [`docs/THREADING.md`](./THREADING.md)。
 
 ### 源码地图
 
@@ -366,8 +394,9 @@ include/tqsdk/
     uds_channel.h tcp_channel.h
     codec.h                 ICodec：JSON/MessagePack 抽象
     protocol.h              各 FrameType 消息体 schema + encode/decode 辅助
+    stream_seq.h            epoch/seq、缺口检测、OutboundStream replay buffer
     ipc_session.h           会话：握手 / 心跳 / 看门狗 / 帧路由
-    ipc_client.h            帧分发 + 命令 rid 关联（node 侧）
+    ipc_client.h            帧分发 + 命令 rid 关联 + 缺口/重连/Resume
     gateway_server.h        gw 侧桥接（真实网关 <-> IPC）
     remote_md_gateway.h     远端行情代理（node 侧）
     remote_td_gateway.h     远端交易代理（node 侧）
@@ -378,11 +407,11 @@ include/tqsdk/
     ws_stream.h             WebSocketHub：/stream 增量推送 + 订阅引用计数
     json_convert.h          DataManager 实体 -> JSON（REST/WS 共用）
   config/tqapi_factory.h    配置解析 + make_tqapi + 两进程配置
-  util/                     spawn_logged / async_mutex / serde / log
+  util/                     spawn_logged / async_mutex / serde / log / runtime
 src/                        对应实现
 apps/                       gw_main.cpp / node_main.cpp
 config/                     gw.toml / node.toml
-tests/                      ~208 用例（channel/data/gateway/ipc/serve/e2e/config）
+tests/                      ~222 用例（channel/data/gateway/ipc/serve/e2e/config）
 examples/demo.cpp           实时行情示例
 scripts/                    两进程冒烟 / 协议探测
 ```

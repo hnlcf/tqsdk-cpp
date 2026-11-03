@@ -31,17 +31,39 @@ asio::awaitable<void> IpcSession::start() {
     co_await send_body<FrameType::Hello>(
         HelloBody{kIpcProtocolVersion, opts_.local_role, opts_.local_name});
 
-    // 2) 启动读循环 / 心跳 / 看门狗（后台运行）
-    loops_running_ = true;
-    co_spawn_logged(
-        ex_, [this]() -> asio::awaitable<void> { co_await read_loop(); }, "IpcSession.read");
+    // 2) 启动读循环 / 心跳 / 看门狗（后台运行）。
+    // loops_running_ 记录仍在收尾的协程数：start() 失败时先 close，再等它们
+    // 全部退出后才把异常抛给调用方，避免调用方立即析构 session 造成 UAF。
+    loops_running_ = 3;
     co_spawn_logged(
         ex_,
-        [this]() -> asio::awaitable<void> { co_await heartbeat_loop(); },
+        [this]() -> asio::awaitable<void> {
+            try {
+                co_await read_loop();
+            } catch (...) {
+            }
+            --loops_running_;
+        },
+        "IpcSession.read");
+    co_spawn_logged(
+        ex_,
+        [this]() -> asio::awaitable<void> {
+            try {
+                co_await heartbeat_loop();
+            } catch (...) {
+            }
+            --loops_running_;
+        },
         "IpcSession.heartbeat");
     co_spawn_logged(
         ex_,
-        [this]() -> asio::awaitable<void> { co_await watchdog_loop(); },
+        [this]() -> asio::awaitable<void> {
+            try {
+                co_await watchdog_loop();
+            } catch (...) {
+            }
+            --loops_running_;
+        },
         "IpcSession.watchdog");
 
     // 看门狗：启动即 arm，收到任意帧会重置
@@ -53,8 +75,15 @@ asio::awaitable<void> IpcSession::start() {
     co_await ready_timer_.async_wait(asio::redirect_error(asio::use_awaitable, ec));
 
     if (!ready_) {
-        // 超时或握手中途被关闭
+        // 超时或握手中途被关闭：先 close，再等后台协程全部退出。
+        // 调用方通常在 catch 后立即析构 session，若此时 read/heartbeat/watchdog
+        // 仍持有 this，会在后续事件循环里触发 UAF。
         close();
+        while (loops_running_.load() > 0) {
+            asio::steady_timer        wait_timer(ex_, std::chrono::milliseconds(1));
+            boost::system::error_code wait_ec;
+            co_await wait_timer.async_wait(asio::redirect_error(asio::use_awaitable, wait_ec));
+        }
         throw IpcError("IpcSession: handshake timeout / failed");
     }
     co_return;
@@ -246,7 +275,6 @@ void IpcSession::on_peer_closed() noexcept {
     rx_watchdog_.cancel();
     heartbeat_timer_.cancel();
     incoming_.close();
-    loops_running_ = false;
 }
 
 void IpcSession::close() noexcept {
@@ -265,7 +293,6 @@ void IpcSession::close() noexcept {
     rx_watchdog_.cancel();
     heartbeat_timer_.cancel();
     incoming_.close();
-    loops_running_ = false;
 }
 
 } // namespace ipc

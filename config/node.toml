@@ -44,3 +44,9 @@ heartbeat_interval_ms = 30000
 max_clients = 256
 # 单连接待发送队列上限；慢消费者丢最旧行情
 max_queue = 1024
+
+# ---- 运行时线程 ----
+# io_context worker 数。数据面（TqApi/DataManager/网关）绑定 core strand 串行；
+# HTTP 每连接独立 strand，可在多个 worker 上并行处理 socket 读写。
+[runtime]
+threads = 4

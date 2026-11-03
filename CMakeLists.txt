@@ -170,6 +170,7 @@ if(TQSDK_BUILD_TESTS)
         tests/ipc/tcp_channel_test.cpp
         tests/ipc/protocol_test.cpp
         tests/ipc/protocol_e2e_test.cpp
+        tests/ipc/stream_seq_test.cpp
         tests/ipc/ipc_session_test.cpp
         tests/ipc/ipc_proxy_test.cpp
         tests/ipc/gateway_server_test.cpp
@@ -183,6 +184,7 @@ if(TQSDK_BUILD_TESTS)
         tests/gateway/tq_md_protocol_test.cpp
         tests/serve/ws_protocol_test.cpp
         tests/serve/ws_stream_test.cpp
+        tests/serve/threading_test.cpp
         tests/e2e/tq_md_network_test.cpp
     )
     target_include_directories(tqsdk_tests PRIVATE

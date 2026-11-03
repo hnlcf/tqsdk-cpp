@@ -51,6 +51,9 @@ public:
     asio::awaitable<CommandAck> cancel_order(const CancelOrderReq& req) override;
     Channel<TradeEvent>&        event_output() override { return ch_; }
 
+    /// 完整交易截面（供断线重连对账）。
+    nlohmann::json snapshot() const override;
+
     // ---- 撮合驱动（供回测 driver 调用，非 TradingGateway 抽象的一部分）----
     // 更新某合约最新价并触发挂单簿撮合。返回本次产生的 diff 数量（便于测试断言）。
     void on_tick(const InstrumentId& symbol, double last_price);
@@ -126,10 +129,14 @@ private:
     // 依据方向/开平更新持仓（供 apply_fill 调用）。
     void update_position(const LiveOrder& order, uint64_t volume, double price, FillBatch& batch);
     nlohmann::json position_json(const InstrumentId& symbol) const;
+    nlohmann::json account_json() const;
+    void           remember_order(const OrderId& rid, nlohmann::json json);
 
     asio::any_io_executor                          ex_;
     Channel<TradeEvent>                            ch_;
     std::unordered_map<OrderId, LiveOrder>         live_orders_;
+    std::unordered_map<OrderId, nlohmann::json>    order_history_;
+    std::unordered_map<TradeId, nlohmann::json>    trade_history_;
     std::unordered_map<InstrumentId, double>       last_price_;
     std::unordered_map<InstrumentId, ContractSpec> specs_;
     std::unordered_map<InstrumentId, SimPosition>  positions_;

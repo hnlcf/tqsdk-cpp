@@ -115,6 +115,7 @@ asio::awaitable<CommandAck> SimTdGateway::insert_order(const InsertOrderReq& req
                                              {"status", magic_enum::enum_name(OrderStatus::ALIVE)},
                                              {"is_dead", false},
                                              {"last_msg", "已报"}};
+        remember_order(rid, batch.orders[rid]);
         batch.account_dirty = true; // 冻结保证金变化
     }
 
@@ -146,7 +147,8 @@ asio::awaitable<CommandAck> SimTdGateway::cancel_order(const CancelOrderReq& req
                       {"is_dead", true},
                       {"last_msg", "已撤销"}};
     batch.orders[order.rid] = oj;
-    batch.account_dirty     = true; // 冻结保证金释放
+    remember_order(order.rid, batch.orders[order.rid]);
+    batch.account_dirty = true; // 冻结保证金释放
 
     recompute_available();
     emit(batch);
@@ -249,7 +251,8 @@ void SimTdGateway::apply_fill(LiveOrder& order,
                       {"price", fill_price},
                       {"commission", fee},
                       {"trade_date_time", order.insert_time}};
-    batch.trades[tid] = tj;
+    batch.trades[tid]   = tj;
+    trade_history_[tid] = batch.trades[tid];
 
     // ---- 订单状态 ----
     OrderStatus    status = order.volume_left == 0 ? OrderStatus::FINISHED : OrderStatus::ALIVE;
@@ -264,6 +267,7 @@ void SimTdGateway::apply_fill(LiveOrder& order,
                       {"is_dead", order.volume_left == 0},
                       {"last_msg", order.volume_left == 0 ? "全部成交" : "部分成交"}};
     batch.orders[order.rid] = oj;
+    remember_order(order.rid, batch.orders[order.rid]);
 }
 
 void SimTdGateway::update_position(const LiveOrder& order,
@@ -397,6 +401,45 @@ void SimTdGateway::recompute_available() {
     account_.risk_ratio = account_.balance > 0 ? 1.0 - account_.available / account_.balance : 0.0;
 }
 
+nlohmann::json SimTdGateway::account_json() const {
+    return nlohmann::json{{"balance", account_.balance},
+                          {"pre_balance", account_.pre_balance},
+                          {"close_profit", account_.close_profit},
+                          {"commission", account_.commission},
+                          {"margin", account_.margin},
+                          {"frozen_margin", account_.frozen_margin},
+                          {"available", account_.available},
+                          {"risk_ratio", account_.risk_ratio}};
+}
+
+void SimTdGateway::remember_order(const OrderId& rid, nlohmann::json json) {
+    if (!json.is_object()) {
+        return;
+    }
+    order_history_[rid] = std::move(json);
+}
+
+nlohmann::json SimTdGateway::snapshot() const {
+    nlohmann::json user = nlohmann::json::object();
+
+    user["orders"] = nlohmann::json::object();
+    for (const auto& [rid, o] : order_history_) {
+        user["orders"][rid] = o;
+    }
+    user["trades"] = nlohmann::json::object();
+    for (const auto& [tid, t] : trade_history_) {
+        user["trades"][tid] = t;
+    }
+    user["positions"] = nlohmann::json::object();
+    for (const auto& [symbol, p] : positions_) {
+        (void)p;
+        user["positions"][symbol] = position_json(symbol);
+    }
+    user["accounts"] = nlohmann::json{{"CNY", account_json()}};
+
+    return nlohmann::json{{"trade", {{"", {{"user", std::move(user)}}}}}};
+}
+
 // ---------- 投递 ----------
 void SimTdGateway::emit(const FillBatch& batch) {
     if (batch.empty()) {
@@ -411,15 +454,7 @@ void SimTdGateway::emit(const FillBatch& batch) {
     if (!batch.positions.empty())
         user["positions"] = batch.positions;
     if (batch.account_dirty) {
-        user["accounts"] = {{"CNY",
-                             {{"balance", account_.balance},
-                              {"pre_balance", account_.pre_balance},
-                              {"close_profit", account_.close_profit},
-                              {"commission", account_.commission},
-                              {"margin", account_.margin},
-                              {"frozen_margin", account_.frozen_margin},
-                              {"available", account_.available},
-                              {"risk_ratio", account_.risk_ratio}}}};
+        user["accounts"] = {{"CNY", account_json()}};
     }
 
     nlohmann::json diff{{"trade", {{"", {{"user", user}}}}}};
@@ -442,6 +477,7 @@ void SimTdGateway::emit_reject(const OrderId&      rid,
                       {"is_error", true},
                       {"is_dead", true},
                       {"last_msg", msg}};
+    remember_order(rid, oj);
     nlohmann::json diff{{"trade", {{"", {{"user", {{"orders", {{rid, oj}}}}}}}}}};
 
     TradeEvent ev{TradeEvent::Kind::Diff, std::move(diff), {}, {}};

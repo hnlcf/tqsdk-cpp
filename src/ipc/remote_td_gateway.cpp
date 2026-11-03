@@ -12,7 +12,7 @@ RemoteTdGateway::RemoteTdGateway(IpcClient&                client,
       ex_(ex),
       ch_(ex),
       ack_timeout_(ack_timeout) {
-    client_.set_td_handler([this](ReceivedFrame&& f) { on_frame(std::move(f)); });
+    install_handlers();
 }
 
 RemoteTdGateway::RemoteTdGateway(std::shared_ptr<IpcClient> client,
@@ -23,12 +23,39 @@ RemoteTdGateway::RemoteTdGateway(std::shared_ptr<IpcClient> client,
       ex_(ex),
       ch_(ex),
       ack_timeout_(ack_timeout) {
-    client_.set_td_handler([this](ReceivedFrame&& f) { on_frame(std::move(f)); });
+    install_handlers();
 }
 
 RemoteTdGateway::~RemoteTdGateway() {
     // 清空自己在 client 上的处理器，避免 std::function 持有悬空 this。
     client_.set_td_handler(nullptr);
+    client_.set_td_gap_handler(nullptr);
+}
+
+void RemoteTdGateway::install_handlers() {
+    client_.set_td_handler([this](ReceivedFrame&& f) { on_frame(std::move(f)); });
+    client_.set_td_gap_handler([this](const StreamGap& gap) {
+        SPDLOG_WARN(
+            "[RemoteTd] seq gap: epoch={} expected={} received={} missing={}; request replay",
+            gap.epoch,
+            gap.expected,
+            gap.received,
+            gap.missing);
+        co_spawn_logged(
+            ex_,
+            [this, gap]() -> asio::awaitable<void> {
+                ResumeBody body;
+                body.epoch       = gap.epoch;
+                body.md_next_seq = 0;
+                body.td_next_seq = gap.expected;
+                try {
+                    co_await client_.send_resume(body);
+                } catch (const std::exception& e) {
+                    SPDLOG_WARN("[RemoteTd] resume request failed: {}", e.what());
+                }
+            },
+            "RemoteTd.resume");
+    });
 }
 
 asio::awaitable<void> RemoteTdGateway::start() {
@@ -69,6 +96,18 @@ void RemoteTdGateway::push(TradeEvent ev) {
 
 void RemoteTdGateway::on_frame(ReceivedFrame&& frame) {
     switch (frame.type) {
+    case FrameType::TradeSnapshot: {
+        try {
+            auto       body = decode_as<FrameType::TradeSnapshot>(frame);
+            TradeEvent ev;
+            ev.kind    = TradeEvent::Kind::Snapshot;
+            ev.payload = std::move(body.data);
+            push(std::move(ev));
+        } catch (const std::exception& e) {
+            SPDLOG_WARN("RemoteTdGateway: bad TradeSnapshot: {}", e.what());
+        }
+        break;
+    }
     case FrameType::TradePush: {
         try {
             auto       body = decode_as<FrameType::TradePush>(frame);

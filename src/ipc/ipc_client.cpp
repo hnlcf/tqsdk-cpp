@@ -6,10 +6,32 @@ namespace ipc {
 IpcClient::IpcClient(std::unique_ptr<IpcSession> session, asio::any_io_executor ex)
     : session_(std::move(session)),
       ex_(std::move(ex)),
-      encoding_(kDefaultEncoding) {}
+      encoding_(session_ ? session_->encoding() : kDefaultEncoding),
+      reconnect_timer_(ex_) {}
+
+IpcClient::IpcClient(SessionFactory factory, asio::any_io_executor ex)
+    : IpcClient(std::move(factory), std::move(ex), ReconnectOptions{}) {}
+
+IpcClient::IpcClient(SessionFactory factory, asio::any_io_executor ex, ReconnectOptions reconnect)
+    : ex_(std::move(ex)),
+      encoding_(kDefaultEncoding),
+      factory_(std::move(factory)),
+      reconnect_opts_(reconnect),
+      reconnect_timer_(ex_) {}
 
 IpcClient::~IpcClient() {
     stop();
+}
+
+asio::awaitable<void> IpcClient::connect() {
+    if (session_) {
+        co_return;
+    }
+    if (!factory_) {
+        throw IpcError("IpcClient::connect: no session factory");
+    }
+    session_  = co_await factory_();
+    encoding_ = session_ ? session_->encoding() : kDefaultEncoding;
 }
 
 void IpcClient::start() {
@@ -17,8 +39,112 @@ void IpcClient::start() {
         return;
     }
     started_ = true;
-    co_spawn_logged(
-        ex_, [this]() -> asio::awaitable<void> { co_await read_loop(); }, "IpcClient.read");
+    if (factory_) {
+        co_spawn_logged(
+            ex_, [this]() -> asio::awaitable<void> { co_await run_loop(); }, "IpcClient.run");
+    } else {
+        co_spawn_logged(
+            ex_, [this]() -> asio::awaitable<void> { co_await read_loop(); }, "IpcClient.read");
+    }
+}
+
+asio::awaitable<void> IpcClient::wait_backoff(std::chrono::milliseconds delay) {
+    reconnect_timer_.expires_after(delay);
+    boost::system::error_code ec;
+    co_await reconnect_timer_.async_wait(asio::redirect_error(asio::use_awaitable, ec));
+    co_return;
+}
+
+void IpcClient::notify_disconnected() {
+    if (stopped_) {
+        return;
+    }
+    GatewayEventBody body{GatewayEventKind::Disconnected, "ipc connection lost"};
+    auto             bytes = encode_body(body, encoding_);
+    if (md_handler_) {
+        md_handler_(ReceivedFrame{FrameType::GatewayEvent, encoding_, bytes});
+    }
+    if (td_handler_) {
+        td_handler_(ReceivedFrame{FrameType::GatewayEvent, encoding_, std::move(bytes)});
+    }
+}
+
+asio::awaitable<void> IpcClient::send_resume_if_possible() {
+    ResumeBody body;
+    if (md_tracker_.initialized() && md_tracker_.expected_seq() > 1) {
+        body.epoch       = md_tracker_.epoch();
+        body.md_next_seq = md_tracker_.expected_seq();
+    }
+    if (td_tracker_.initialized() && td_tracker_.expected_seq() > 1) {
+        if (body.epoch.empty()) {
+            body.epoch = td_tracker_.epoch();
+        }
+        body.td_next_seq = td_tracker_.expected_seq();
+    }
+    // 即使没有任何历史 seq，也请求一次 td 快照（td_next_seq=1 时 gw 会走
+    // reconcile 分支），保证重连后的交易状态与柜台对齐。
+    if (body.td_next_seq == 0) {
+        body.td_next_seq = 1;
+    }
+    SPDLOG_INFO("[IpcClient] resume: epoch={} md_next={} td_next={}",
+                body.epoch,
+                body.md_next_seq,
+                body.td_next_seq);
+    co_await send_resume(body);
+}
+
+asio::awaitable<void> IpcClient::run_loop() {
+    auto delay          = reconnect_opts_.initial_delay;
+    bool had_connection = session_ != nullptr;
+
+    while (!stopped_) {
+        if (!session_) {
+            std::string connect_error;
+            try {
+                session_  = co_await factory_();
+                encoding_ = session_ ? session_->encoding() : kDefaultEncoding;
+                delay     = reconnect_opts_.initial_delay;
+            } catch (const std::exception& e) {
+                connect_error = e.what();
+            }
+            if (!connect_error.empty()) {
+                SPDLOG_WARN("[IpcClient] reconnect failed: {}; retry in {}ms",
+                            connect_error,
+                            delay.count());
+                co_await wait_backoff(delay);
+                delay = std::min(delay * 2, reconnect_opts_.max_delay);
+                continue;
+            }
+
+            if (had_connection) {
+                if (reconnect_handler_) {
+                    reconnect_handler_();
+                }
+                try {
+                    co_await send_resume_if_possible();
+                } catch (const std::exception& e) {
+                    SPDLOG_WARN("[IpcClient] send Resume failed: {}", e.what());
+                }
+            }
+            had_connection = true;
+        }
+
+        co_await read_loop();
+        if (session_) {
+            session_->close();
+            retired_sessions_.push_back(std::move(session_));
+        }
+
+        if (stopped_ || !reconnect_opts_.enabled) {
+            break;
+        }
+
+        notify_disconnected();
+        SPDLOG_INFO("[IpcClient] disconnected; reconnect in {}ms", delay.count());
+        co_await wait_backoff(delay);
+        delay = std::min(delay * 2, reconnect_opts_.max_delay);
+    }
+    co_return;
 }
 
 asio::awaitable<void> IpcClient::send_bytes(FrameType type, const std::vector<uint8_t>& payload) {
@@ -31,6 +157,57 @@ asio::awaitable<void> IpcClient::send_bytes(FrameType type, const std::vector<ui
 asio::awaitable<void> IpcClient::subscribe(const SubscribeBody& body) {
     auto bytes = encode_body(body, encoding_);
     co_await send_bytes(FrameType::Subscribe, bytes);
+}
+
+asio::awaitable<void> IpcClient::send_resume(const ResumeBody& body) {
+    auto bytes = encode_body(body, encoding_);
+    co_await send_bytes(FrameType::Resume, bytes);
+}
+
+bool IpcClient::observe_stream(StreamTracker&    tracker,
+                               const StreamMeta& meta,
+                               GapHandler&       handler) noexcept {
+    StreamGap gap;
+    switch (tracker.observe(meta, &gap)) {
+    case StreamTracker::Result::Ignored:
+    case StreamTracker::Result::Started:
+    case StreamTracker::Result::InOrder:
+        return true; // 新流/正常帧：继续投递
+    case StreamTracker::Result::EpochChanged:
+        if (tracker.kind() == StreamKind::Md) {
+            ++metrics_.md_epoch_changes;
+        } else {
+            ++metrics_.td_epoch_changes;
+        }
+        return true;
+    case StreamTracker::Result::Duplicate:
+        if (tracker.kind() == StreamKind::Md) {
+            ++metrics_.md_duplicates;
+        } else {
+            ++metrics_.td_duplicates;
+        }
+        return false; // 重复帧丢弃
+    case StreamTracker::Result::Gap:
+        if (tracker.kind() == StreamKind::Md) {
+            ++metrics_.md_gaps;
+        } else {
+            ++metrics_.td_gaps;
+        }
+        SPDLOG_WARN("[IpcClient] {} seq gap: epoch={} expected={} received={} missing={}",
+                    magic_enum::enum_name(tracker.kind()),
+                    meta.epoch,
+                    gap.expected,
+                    gap.received,
+                    gap.missing);
+        if (handler) {
+            handler(gap);
+        }
+        // 缺口意味着旧 baseline 已断裂：md 走 resync，td 走 replay/快照。
+        // 重建后的第一帧会以自身 seq 重新建立基线。
+        tracker.reset();
+        return true; // 缺口帧仍交付；恢复由 handler 负责
+    }
+    return true;
 }
 
 asio::awaitable<CommandAck> IpcClient::send_command_and_wait(const CommandBody&        body,
@@ -103,19 +280,85 @@ asio::awaitable<void> IpcClient::read_loop() {
             ReceivedFrame f = std::move(*opt);
 
             switch (f.type) {
-            case FrameType::MarketDataPush:
-                if (md_handler_) {
-                    // 拷贝一份给 md（frame 需保留给可能的其它处理器；此处帧不共享，move 即可）
+            case FrameType::MarketDataPush: {
+                bool deliver = true;
+                try {
+                    auto body = decode_as<FrameType::MarketDataPush>(f);
+                    ++metrics_.md_frames;
+                    deliver = observe_stream(md_tracker_, body.meta, md_gap_handler_);
+                } catch (const std::exception& e) {
+                    SPDLOG_WARN("IpcClient: bad MarketDataPush: {}", e.what());
+                }
+                if (deliver && md_handler_) {
                     ReceivedFrame copy{f.type, f.encoding, f.payload};
                     md_handler_(std::move(copy));
                 }
                 break;
+            }
 
-            case FrameType::TradePush:
-                if (td_handler_) {
+            case FrameType::TradePush: {
+                bool deliver = true;
+                try {
+                    auto body = decode_as<FrameType::TradePush>(f);
+                    ++metrics_.td_frames;
+                    deliver = observe_stream(td_tracker_, body.meta, td_gap_handler_);
+                } catch (const std::exception& e) {
+                    SPDLOG_WARN("IpcClient: bad TradePush: {}", e.what());
+                }
+                if (deliver && td_handler_) {
                     td_handler_(std::move(f));
                 }
                 break;
+            }
+
+            case FrameType::TradeSnapshot: {
+                // 快照是权威截面：直接以它的 seq 重建 td 基线，并忽略 gap 回调。
+                bool deliver = true;
+                try {
+                    auto body = decode_as<FrameType::TradeSnapshot>(f);
+                    ++metrics_.td_frames;
+                    td_tracker_.reset();
+                    td_tracker_.observe(body.meta);
+                } catch (const std::exception& e) {
+                    SPDLOG_WARN("IpcClient: bad TradeSnapshot: {}", e.what());
+                    deliver = false;
+                }
+                if (deliver && td_handler_) {
+                    ReceivedFrame copy{f.type, f.encoding, f.payload};
+                    td_handler_(std::move(copy));
+                }
+                break;
+            }
+
+            case FrameType::ResumeAck: {
+                try {
+                    auto ack = decode_as<FrameType::ResumeAck>(f);
+                    ++metrics_.md_resume_requests;
+                    ++metrics_.td_resume_requests;
+                    if (!ack.md_replay) {
+                        md_tracker_.reset();
+                        // 重连时上层会通过 reconnect_handler 重放订阅；
+                        // 只有确实请求过 md 历史时才在此重复触发 resync。
+                        if (ack.md_from_seq != 0 && md_gap_handler_) {
+                            md_gap_handler_(
+                                StreamGap{StreamKind::Md, ack.epoch, ack.md_from_seq, 0, 0});
+                        }
+                    }
+                    if (!ack.td_replay) {
+                        td_tracker_.reset();
+                        if (ack.td_from_seq > 1 && !ack.td_snapshot_required && td_gap_handler_) {
+                            td_gap_handler_(
+                                StreamGap{StreamKind::Td, ack.epoch, ack.td_from_seq, 0, 0});
+                        }
+                    }
+                    if (resume_ack_handler_) {
+                        resume_ack_handler_(ack);
+                    }
+                } catch (const std::exception& e) {
+                    SPDLOG_WARN("IpcClient: bad ResumeAck: {}", e.what());
+                }
+                break;
+            }
 
             case FrameType::CommandAck: {
                 // 直接完成等待者，同时把 ack 事件也交给 td（TqApi 可能想感知）。
@@ -183,6 +426,7 @@ void IpcClient::stop() noexcept {
         return;
     }
     stopped_ = true;
+    reconnect_timer_.cancel();
 
     // 唤醒所有 pending 请求（session 关闭后 read_loop 也会做一次）。
     for (auto& [rid, w] : pending_acks_) {

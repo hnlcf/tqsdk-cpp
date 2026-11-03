@@ -7,6 +7,7 @@
 #include "tqsdk/ipc/ipc_session.h"
 #include "tqsdk/ipc/remote_md_gateway.h"
 #include "tqsdk/ipc/remote_td_gateway.h"
+#include "tqsdk/ipc/tcp_channel.h"
 #include "tqsdk/ipc/uds_channel.h"
 
 #include "support/test_helpers.h"
@@ -223,6 +224,16 @@ public:
         : ex_(ex),
           ch_(ex) {}
 
+    void inject(nlohmann::json diff) {
+        MarketDataEvent ev{MarketDataEvent::Kind::Diff, std::move(diff), {}};
+        co_spawn_logged(
+            ex_,
+            [this, e = std::move(ev)]() mutable -> asio::awaitable<void> {
+                co_await ch_.async_send(std::move(e));
+            },
+            "RecordingMd.inject");
+    }
+
     asio::awaitable<void> start() override { co_return; }
     asio::awaitable<void> stop() override {
         ch_.close();
@@ -402,6 +413,354 @@ TEST(GatewayIpcServerTest, ReleaseFrameUpdatesConnectionRefCounts) {
 
     client.stop();
     test::drive_for(io, std::chrono::milliseconds(50));
+    ::unlink(path.c_str());
+}
+
+// md push 序号连续性 + Resume 从指定 seq replay。
+TEST(GatewayIpcServerTest, SequenceNumbersAndResumeReplay) {
+    const std::string path = make_uds_path("seq_resume");
+    asio::io_context  io;
+    auto              pair = make_uds_pair(io, path);
+
+    RecordingMdGateway md(io.get_executor());
+
+    auto gw_sess = std::make_unique<IpcSession>(
+        std::move(pair.srv), io.get_executor(), opt(IpcRole::Gateway, "gw"));
+    auto gw_start =
+        test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await gw_sess->start(); });
+
+    auto node_sess = std::make_unique<IpcSession>(
+        std::move(pair.cli), io.get_executor(), opt(IpcRole::Node, "node"));
+    auto node_start =
+        test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await node_sess->start(); });
+
+    test::wait_all(io, std::chrono::seconds(2), gw_start, node_start);
+    gw_start.get();
+    node_start.get();
+
+    auto gw_server =
+        std::make_shared<GatewayIpcServer>(std::move(gw_sess), &md, nullptr, io.get_executor());
+    gw_server->start();
+
+    bool        got_ack      = false;
+    bool        got_push1    = false;
+    bool        got_push2    = false;
+    bool        got_resume   = false;
+    bool        got_replayed = false;
+    uint64_t    seq1 = 0, seq2 = 0, replayed_seq = 0;
+    std::string epoch1, epoch2, replayed_epoch;
+
+    auto task = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
+        SubscribeBody sub;
+        sub.symbols = {"SHFE.rb2610"};
+        co_await node_sess->send_body<FrameType::Subscribe>(sub);
+
+        auto ack_frame = co_await node_sess->incoming().async_receive();
+        if (ack_frame.has_value()) {
+            auto ack = decode_as<FrameType::SubscribeAck>(*ack_frame);
+            got_ack  = ack.ok;
+        }
+
+        md.inject(nlohmann::json{{"quotes", {{"SHFE.rb2610", {{"last_price", 3800.0}}}}}});
+        md.inject(nlohmann::json{{"quotes", {{"SHFE.rb2610", {{"volume", 42}}}}}});
+
+        auto f1 = co_await node_sess->incoming().async_receive();
+        if (f1.has_value()) {
+            auto b    = decode_as<FrameType::MarketDataPush>(*f1);
+            got_push1 = true;
+            seq1      = b.meta.seq;
+            epoch1    = b.meta.epoch;
+        }
+        auto f2 = co_await node_sess->incoming().async_receive();
+        if (f2.has_value()) {
+            auto b    = decode_as<FrameType::MarketDataPush>(*f2);
+            got_push2 = true;
+            seq2      = b.meta.seq;
+            epoch2    = b.meta.epoch;
+        }
+
+        ResumeBody resume;
+        resume.epoch       = epoch1;
+        resume.md_next_seq = 2;
+        resume.td_next_seq = 0;
+        co_await node_sess->send_body<FrameType::Resume>(resume);
+
+        auto ra = co_await node_sess->incoming().async_receive();
+        if (ra.has_value()) {
+            auto ack   = decode_as<FrameType::ResumeAck>(*ra);
+            got_resume = ack.md_replay && ack.epoch == epoch1;
+        }
+
+        auto rf = co_await node_sess->incoming().async_receive();
+        if (rf.has_value() && rf->type == FrameType::MarketDataPush) {
+            auto b         = decode_as<FrameType::MarketDataPush>(*rf);
+            got_replayed   = true;
+            replayed_seq   = b.meta.seq;
+            replayed_epoch = b.meta.epoch;
+        }
+    });
+    test::wait_all(io, std::chrono::seconds(3), task);
+    task.rethrow_if_error();
+
+    EXPECT_TRUE(got_ack);
+    ASSERT_TRUE(got_push1);
+    ASSERT_TRUE(got_push2);
+    EXPECT_EQ(seq1, 1u);
+    EXPECT_EQ(seq2, 2u);
+    EXPECT_EQ(epoch1, epoch2);
+    EXPECT_FALSE(epoch1.empty());
+
+    EXPECT_TRUE(got_resume);
+    EXPECT_TRUE(got_replayed);
+    EXPECT_EQ(replayed_seq, 2u);
+    EXPECT_EQ(replayed_epoch, epoch1);
+
+    gw_server->close();
+    test::drive_for(io, std::chrono::milliseconds(50));
+    ::unlink(path.c_str());
+}
+
+// IpcClient 对 md seq 跳变做 gap 检测（1 -> 3），并给上层 resync 回调。
+TEST(IpcClientTest, DetectsMdSequenceGap) {
+    const std::string path = make_uds_path("client_gap");
+    asio::io_context  io;
+    auto              pair = make_uds_pair(io, path);
+
+    auto server_sess = std::make_unique<IpcSession>(
+        std::move(pair.srv), io.get_executor(), opt(IpcRole::Gateway, "gw"));
+    auto server_start =
+        test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await server_sess->start(); });
+
+    auto client_sess = std::make_unique<IpcSession>(
+        std::move(pair.cli), io.get_executor(), opt(IpcRole::Node, "node"));
+    auto client_start =
+        test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await client_sess->start(); });
+
+    test::wait_all(io, std::chrono::seconds(2), server_start, client_start);
+    server_start.get();
+    client_start.get();
+
+    IpcClient client(std::move(client_sess), io.get_executor());
+    int       md_frames   = 0;
+    bool      got_gap     = false;
+    uint64_t  gap_missing = 0;
+    client.set_md_handler([&](ReceivedFrame&&) { ++md_frames; });
+    client.set_md_gap_handler([&](const StreamGap& gap) {
+        got_gap     = true;
+        gap_missing = gap.missing;
+    });
+    client.start();
+
+    auto sender = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
+        MarketDataPushBody p1;
+        p1.meta = StreamMeta{"epoch-test", 1};
+        p1.data = nlohmann::json{{"quotes", {{"SHFE.rb2610", {{"last_price", 3800.0}}}}}};
+        co_await server_sess->send_body<FrameType::MarketDataPush>(p1);
+
+        MarketDataPushBody p3;
+        p3.meta = StreamMeta{"epoch-test", 3};
+        p3.data = nlohmann::json{{"quotes", {{"SHFE.rb2610", {{"volume", 42}}}}}};
+        co_await server_sess->send_body<FrameType::MarketDataPush>(p3);
+    });
+    test::wait_all(io, std::chrono::seconds(2), sender);
+    sender.rethrow_if_error();
+    test::drive_until(
+        io, [&]() { return got_gap && md_frames >= 2; }, std::chrono::milliseconds(500));
+
+    EXPECT_TRUE(got_gap);
+    EXPECT_EQ(gap_missing, 1u);
+    EXPECT_EQ(md_frames, 2);
+    EXPECT_EQ(client.metrics().md_gaps, 1u);
+
+    client.stop();
+    server_sess->close();
+    test::drive_for(io, std::chrono::milliseconds(50));
+    ::unlink(path.c_str());
+}
+
+// 可重连 IpcClient：第一条连接断开后自动建新连接并发送 Resume，
+// 新连接上的 seq 继续递增，客户端 gap 检测不报错。
+TEST(IpcClientTest, ReconnectsAndResumes) {
+    asio::io_context        io;
+    asio::ip::tcp::acceptor acc(io, {asio::ip::tcp::v4(), 0});
+    const uint16_t          port = acc.local_endpoint().port();
+
+    bool        server_done = false;
+    std::string server_error;
+    uint64_t    resume_md_seq = 0;
+    std::string resume_epoch;
+
+    // 保持 server 侧 session 活到测试收尾，避免后台 read_loop 使用已析构对象。
+    std::shared_ptr<IpcSession> peer1;
+    std::shared_ptr<IpcSession> peer2;
+
+    asio::co_spawn(
+        io,
+        [&]() -> asio::awaitable<void> {
+            try {
+                auto s1_sock = co_await acc.async_accept(asio::use_awaitable);
+                auto s1 =
+                    std::make_shared<IpcSession>(std::make_unique<TcpChannel>(std::move(s1_sock)),
+                                                 io.get_executor(),
+                                                 opt(IpcRole::Gateway, "gw1"));
+                peer1 = s1;
+                co_await s1->start();
+
+                for (uint64_t seq = 1; seq <= 2; ++seq) {
+                    MarketDataPushBody p;
+                    p.meta = StreamMeta{"epoch-r", seq};
+                    p.data = nlohmann::json{
+                        {"quotes", {{"SHFE.rb2610", {{"last_price", 3800.0 + seq}}}}}};
+                    co_await s1->send_body<FrameType::MarketDataPush>(p);
+                }
+                s1->close(); // 模拟 gw 断线
+
+                auto s2_sock = co_await acc.async_accept(asio::use_awaitable);
+                auto s2 =
+                    std::make_shared<IpcSession>(std::make_unique<TcpChannel>(std::move(s2_sock)),
+                                                 io.get_executor(),
+                                                 opt(IpcRole::Gateway, "gw2"));
+                peer2 = s2;
+                co_await s2->start();
+
+                auto f = co_await s2->incoming().async_receive();
+                if (f.has_value() && f->type == FrameType::Resume) {
+                    auto rb       = decode_as<FrameType::Resume>(*f);
+                    resume_md_seq = rb.md_next_seq;
+                    resume_epoch  = rb.epoch;
+                }
+
+                ResumeAckBody ack;
+                ack.epoch       = resume_epoch;
+                ack.md_replay   = true;
+                ack.md_from_seq = resume_md_seq;
+                co_await s2->send_body<FrameType::ResumeAck>(ack);
+
+                MarketDataPushBody p3;
+                p3.meta = StreamMeta{resume_epoch, 3};
+                p3.data = nlohmann::json{{"quotes", {{"SHFE.rb2610", {{"last_price", 3803.0}}}}}};
+                co_await s2->send_body<FrameType::MarketDataPush>(p3);
+                s2->close();
+            } catch (const std::exception& e) {
+                server_error = e.what();
+            }
+            server_done = true;
+        },
+        asio::detached);
+
+    IpcClient::SessionFactory factory = [&io,
+                                         port]() -> asio::awaitable<std::unique_ptr<IpcSession>> {
+        auto channel = TcpChannel::connect(io, "127.0.0.1", port);
+        auto session = std::make_unique<IpcSession>(
+            std::move(channel), io.get_executor(), opt(IpcRole::Node, "node"));
+        co_await session->start();
+        co_return session;
+    };
+
+    IpcClient client(factory,
+                     io.get_executor(),
+                     IpcClient::ReconnectOptions{
+                         true, std::chrono::milliseconds(20), std::chrono::milliseconds(100)});
+
+    int      md_frames  = 0;
+    uint64_t last_seq   = 0;
+    int      resume_ack = 0;
+    client.set_md_handler([&](ReceivedFrame&& f) {
+        if (f.type != FrameType::MarketDataPush) {
+            return;
+        }
+        auto body = decode_as<FrameType::MarketDataPush>(f);
+        ++md_frames;
+        last_seq = body.meta.seq;
+    });
+    client.set_resume_ack_handler([&](const ResumeAckBody&) { ++resume_ack; });
+
+    test::run_coro(io, [&]() -> asio::awaitable<void> {
+        co_await client.connect();
+        client.start();
+
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (md_frames >= 3 && resume_ack >= 1) {
+                break;
+            }
+            asio::steady_timer t(co_await asio::this_coro::executor, std::chrono::milliseconds(10));
+            co_await t.async_wait(asio::use_awaitable);
+        }
+        co_return;
+    }());
+
+    EXPECT_TRUE(server_error.empty()) << server_error;
+    EXPECT_TRUE(server_done);
+    EXPECT_EQ(md_frames, 3);
+    EXPECT_EQ(last_seq, 3u);
+    EXPECT_EQ(resume_ack, 1);
+    EXPECT_EQ(resume_md_seq, 3u);
+    EXPECT_EQ(resume_epoch, "epoch-r");
+
+    client.stop();
+    acc.close();
+    test::drive_for(io, std::chrono::milliseconds(50));
+}
+
+// gw 重启后 epoch 变化：Resume 不再 replay，直接要求完整 td 快照。
+TEST(GatewayIpcServerTest, ResumeEpochMismatchTriggersTradeSnapshot) {
+    const std::string path = make_uds_path("epoch_snapshot");
+    asio::io_context  io;
+    auto              pair = make_uds_pair(io, path);
+
+    RecordingMdGateway md(io.get_executor());
+    SimTdGateway       td(io.get_executor(), 1'000'000.0);
+
+    auto gw_sess = std::make_unique<IpcSession>(
+        std::move(pair.srv), io.get_executor(), opt(IpcRole::Gateway, "gw"));
+    auto gw_start =
+        test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await gw_sess->start(); });
+    auto node_sess = std::make_unique<IpcSession>(
+        std::move(pair.cli), io.get_executor(), opt(IpcRole::Node, "node"));
+    auto node_start =
+        test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await node_sess->start(); });
+    test::wait_all(io, std::chrono::seconds(2), gw_start, node_start);
+    gw_start.get();
+    node_start.get();
+
+    auto gw_server =
+        std::make_shared<GatewayIpcServer>(std::move(gw_sess), &md, &td, io.get_executor());
+    gw_server->start();
+
+    ResumeAckBody ack;
+    bool          got_snapshot = false;
+    bool          decode_ok    = false;
+    auto          task         = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
+        ResumeBody resume;
+        resume.epoch       = "old-epoch";
+        resume.md_next_seq = 7;
+        resume.td_next_seq = 5;
+        co_await node_sess->send_body<FrameType::Resume>(resume);
+
+        auto ack_frame = co_await node_sess->incoming().async_receive();
+        if (ack_frame.has_value()) {
+            ack = decode_as<FrameType::ResumeAck>(*ack_frame);
+        }
+        auto snap_frame = co_await node_sess->incoming().async_receive();
+        if (snap_frame.has_value() && snap_frame->type == FrameType::TradeSnapshot) {
+            auto body    = decode_as<FrameType::TradeSnapshot>(*snap_frame);
+            got_snapshot = body.data.contains("trade");
+            decode_ok    = true;
+        }
+    });
+    test::wait_all(io, std::chrono::seconds(2), task);
+    task.rethrow_if_error();
+
+    EXPECT_EQ(ack.error, "epoch changed");
+    EXPECT_FALSE(ack.md_replay);
+    EXPECT_FALSE(ack.td_replay);
+    EXPECT_TRUE(ack.td_snapshot_required);
+    EXPECT_TRUE(got_snapshot);
+    EXPECT_TRUE(decode_ok);
+
+    gw_server->close();
+    test::drive_for(io, std::chrono::milliseconds(100));
     ::unlink(path.c_str());
 }
 

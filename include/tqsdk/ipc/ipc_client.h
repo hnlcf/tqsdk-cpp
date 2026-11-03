@@ -6,6 +6,7 @@
 #include "tqsdk/gateway/trading_gateway.h"
 #include "tqsdk/ipc/ipc_session.h"
 #include "tqsdk/ipc/protocol.h"
+#include "tqsdk/ipc/stream_seq.h"
 #include "tqsdk/util/spawn_logged.h"
 
 namespace tqsdk {
@@ -32,24 +33,72 @@ public:
     /// 交易侧入站处理器：把一帧（TradePush / CommandAck / GatewayEvent）
     /// 翻译成 TradeEvent 并推入网关 event_output()。
     using TdHandler = std::function<void(ReceivedFrame&&)>;
+    /// 序号缺口处理器（md 触发 resync，td 触发 replay/reconcile）。
+    using GapHandler = std::function<void(const StreamGap&)>;
+    /// ResumeAck 处理器（重连后由上层决定是否恢复完成）。
+    using ResumeAckHandler = std::function<void(const ResumeAckBody&)>;
+    /// 新连接建立（重连成功）时通知上层重放订阅。
+    using ReconnectHandler = std::function<void()>;
+
+    struct Metrics {
+        uint64_t md_frames          = 0;
+        uint64_t td_frames          = 0;
+        uint64_t md_gaps            = 0;
+        uint64_t td_gaps            = 0;
+        uint64_t md_duplicates      = 0;
+        uint64_t td_duplicates      = 0;
+        uint64_t md_epoch_changes   = 0;
+        uint64_t td_epoch_changes   = 0;
+        uint64_t md_resume_requests = 0;
+        uint64_t td_resume_requests = 0;
+    };
+
+    /// 建连工厂：返回一个已完成握手（ready）的新 session。
+    /// 重连模式由 IpcClient 在连接断开后调用它重新建连并发送 Resume。
+    using SessionFactory = std::function<asio::awaitable<std::unique_ptr<IpcSession>>()>;
+
+    struct ReconnectOptions {
+        bool                      enabled = true;
+        std::chrono::milliseconds initial_delay{200};
+        std::chrono::milliseconds max_delay{5'000};
+    };
 
     /// 接管一个已就绪的 session（调用方保证 start() 已成功返回）。
     IpcClient(std::unique_ptr<IpcSession> session, asio::any_io_executor ex);
+
+    /// 可重连模式：调用 connect() 建首条连接，start() 启动读循环与重连循环。
+    IpcClient(SessionFactory factory, asio::any_io_executor ex);
+    IpcClient(SessionFactory factory, asio::any_io_executor ex, ReconnectOptions reconnect);
 
     ~IpcClient();
 
     IpcClient(const IpcClient&)            = delete;
     IpcClient& operator=(const IpcClient&) = delete;
 
+    /// 可重连模式的首连：factory 建连并握手。成功返回后调用 start()。
+    asio::awaitable<void> connect();
+
     /// 启动分发读循环（幂等，只启动一次）。须在设置 md/td 处理器之后调用。
+    /// 可重连模式会额外启动连接监督循环。
     void start();
 
     /// 注册行情/交易侧入站处理器（覆盖式）。应在 start() 前调用。
     void set_md_handler(MdHandler h) { md_handler_ = std::move(h); }
     void set_td_handler(TdHandler h) { td_handler_ = std::move(h); }
+    void set_md_gap_handler(GapHandler h) { md_gap_handler_ = std::move(h); }
+    void set_td_gap_handler(GapHandler h) { td_gap_handler_ = std::move(h); }
+    void set_resume_ack_handler(ResumeAckHandler h) { resume_ack_handler_ = std::move(h); }
+    void set_reconnect_handler(ReconnectHandler h) { reconnect_handler_ = std::move(h); }
 
     /// 发送订阅（md 方向）。成功发出即返回；受理结果由 SubscribeAck 异步到达。
     asio::awaitable<void> subscribe(const SubscribeBody& body);
+
+    /// 发送 Resume（重连后由上层调用）。
+    asio::awaitable<void> send_resume(const ResumeBody& body);
+
+    const StreamTracker& md_tracker() const noexcept { return md_tracker_; }
+    const StreamTracker& td_tracker() const noexcept { return td_tracker_; }
+    Metrics              metrics() const noexcept { return metrics_; }
 
     /// 发送一条命令并等待对端 CommandAck（按 rid 关联，带超时）。
     /// 超时 / 会话关闭 抛 IpcError。
@@ -68,7 +117,11 @@ public:
 
 private:
     asio::awaitable<void> read_loop();
+    asio::awaitable<void> run_loop();
     asio::awaitable<void> send_bytes(FrameType type, const std::vector<uint8_t>& payload);
+    asio::awaitable<void> send_resume_if_possible();
+    void                  notify_disconnected();
+    asio::awaitable<void> wait_backoff(std::chrono::milliseconds delay);
 
     // 等待 ack 的挂起者：用 timer 当一次性"信号量"，close 时 cancel 唤醒。
     struct AckWaiter {
@@ -83,12 +136,30 @@ private:
 
     void complete_ack(const OrderId& rid, const CommandAck& ack) noexcept;
 
+    /// 跟踪一条入站 push 的 seq；duplicate 返回 false（调用方可丢弃）。
+    bool
+    observe_stream(StreamTracker& tracker, const StreamMeta& meta, GapHandler& handler) noexcept;
+
     std::unique_ptr<IpcSession> session_;
     asio::any_io_executor       ex_;
     FrameEncoding               encoding_;
+    SessionFactory              factory_;
+    ReconnectOptions            reconnect_opts_;
+    asio::steady_timer          reconnect_timer_;
+    // 断线后的旧 session 仍有后台 heartbeat/watchdog 协程在收尾；
+    // 保留到 IpcClient 析构，避免其协程访问已释放对象。
+    std::vector<std::unique_ptr<IpcSession>> retired_sessions_;
 
-    MdHandler md_handler_;
-    TdHandler td_handler_;
+    MdHandler        md_handler_;
+    TdHandler        td_handler_;
+    GapHandler       md_gap_handler_;
+    GapHandler       td_gap_handler_;
+    ResumeAckHandler resume_ack_handler_;
+    ReconnectHandler reconnect_handler_;
+
+    StreamTracker md_tracker_{StreamKind::Md};
+    StreamTracker td_tracker_{StreamKind::Td};
+    Metrics       metrics_;
 
     // rid -> 挂起中的命令等待者
     std::unordered_map<OrderId, AckWaiter*> pending_acks_;

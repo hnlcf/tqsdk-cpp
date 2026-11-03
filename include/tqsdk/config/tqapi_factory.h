@@ -4,6 +4,7 @@
 
 #include "tqsdk/ipc/protocol.h"
 #include "tqsdk/tqapi.h"
+#include "tqsdk/util/runtime.h"
 
 namespace tqsdk {
 
@@ -95,7 +96,10 @@ TqApiConfig parse_tqapi_config(std::string_view toml_text);
 /// 由 RemoteMdGateway / RemoteTdGateway 通过 shared_ptr<IpcClient> 共享持有。
 ///
 /// 失败（建连/握手超时、文件缺失等）抛异常。
-asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context& ctx, const TqApiConfig& cfg);
+/// core_ex 为空时使用 ctx 的 executor；多线程运行时调用方应传入 core strand，
+/// TqApi/DataManager/网关事件循环全部绑定到该 executor。
+asio::awaitable<std::unique_ptr<TqApi>>
+make_tqapi(asio::io_context& ctx, const TqApiConfig& cfg, asio::any_io_executor core_ex = {});
 
 // ============================================================================
 // 两进程（tqsdk-gw / tqsdk-node）的配置
@@ -138,6 +142,9 @@ struct GwConfig {
     /// SimTdGateway 的初始撮合价（[td.last_prices]）。用于让市价单/限价单在启动即有
     /// 可撮合价格；对应 on_tick(symbol, price)。
     std::map<std::string, double> last_prices;
+
+    /// [runtime] worker 线程数（io_context 线程；数据面仍由 core strand 串行）。
+    RuntimeConfig runtime;
 };
 
 /// tqsdk-node（数据服务进程）配置。
@@ -158,6 +165,9 @@ struct NodeConfig {
         std::size_t               max_clients = 256;
         std::size_t               max_queue   = 1024;
     } ws;
+
+    /// [runtime] worker 线程数（io_context 线程；数据面仍由 core strand 串行）。
+    RuntimeConfig runtime;
 };
 
 /// 解析 gw 配置（TOML 文本）。

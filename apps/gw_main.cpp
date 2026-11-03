@@ -67,8 +67,10 @@ int main(int argc, char** argv) {
     CLI::App    app{"tqsdk-gw: gateway access process (tq md / sim td -> IPC)"};
     std::string config_path;
     std::string log_level;
+    int         threads = 0;
     app.add_option("-c,--config", config_path, "Path to gw config TOML")->required();
     app.add_option("-l,--log-level", log_level, "Log level (overrides TQSDK_LOG_LEVEL)");
+    app.add_option("-t,--threads", threads, "IO worker threads (overrides [runtime].threads)");
     CLI11_PARSE(app, argc, argv);
 
     tqsdk::setup_logging(tqsdk::LogOptions{log_level});
@@ -81,8 +83,13 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    if (threads > 0) {
+        cfg.runtime.threads = normalize_worker_threads(threads);
+    }
+
     asio::io_context io;
-    auto             ex = io.get_executor();
+    // 所有网关/会话共享同一条 core strand：多 worker 下状态更新严格串行。
+    auto ex = asio::make_strand(io);
 
     // 真实网关（进程生命周期内常驻，被所有连接共享）。
     auto md = make_real_md(cfg.md, ex);
@@ -283,8 +290,8 @@ int main(int argc, char** argv) {
         }
     });
 
-    SPDLOG_INFO("[gw] running");
-    io.run();
+    SPDLOG_INFO("[gw] running with {} io worker thread(s)", cfg.runtime.threads);
+    run_io_context(io, cfg.runtime.threads);
     SPDLOG_INFO("[gw] exited");
     return 0;
 }

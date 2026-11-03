@@ -43,13 +43,21 @@ public:
     /// 供 IpcClient 调用：把一帧翻译成事件推入 output()。
     void on_frame(ReceivedFrame&& frame);
 
+    /// md 发现 seq gap / Resume 失败时重放当前有效订阅（触发全量首帧）。
+    asio::awaitable<void> resync();
+
 private:
     void push(MarketDataEvent ev);
+    void install_handlers();
 
     std::shared_ptr<IpcClient> client_owner_; ///< 拥有模式下的共享所有权（可空）
     IpcClient&                 client_;
     asio::any_io_executor      ex_;
     Channel<MarketDataEvent>   ch_;
+
+    // node 侧当前有效订阅，供断线 resync 重放。
+    std::set<std::string>                          symbols_;
+    std::map<std::pair<std::string, int64_t>, int> klines_; // key -> view_width
 };
 
 } // namespace ipc

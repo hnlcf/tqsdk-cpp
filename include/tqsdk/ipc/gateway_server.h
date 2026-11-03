@@ -6,6 +6,7 @@
 #include "tqsdk/gateway/trading_gateway.h"
 #include "tqsdk/ipc/ipc_session.h"
 #include "tqsdk/ipc/protocol.h"
+#include "tqsdk/ipc/stream_seq.h"
 
 namespace tqsdk {
 namespace ipc {
@@ -46,11 +47,23 @@ namespace ipc {
 ///     因为另一侧可能仍在工作。整条连接的关闭由 close()/对端 Goodbye/断线驱动。
 class GatewayIpcServer : public std::enable_shared_from_this<GatewayIpcServer> {
 public:
+    /// replay buffer 容量（md 可较小，td 需要覆盖断线窗口）。
+    struct Options {
+        ReplayConfig md_replay{4096, 16u << 20};
+        ReplayConfig td_replay{16384, 64u << 20};
+    };
+
     /// 接管一条已就绪的 session；md/td 可为 nullptr。
     GatewayIpcServer(std::unique_ptr<IpcSession> session,
                      MarketDataGateway*          md,
                      TradingGateway*             td,
                      asio::any_io_executor       ex);
+
+    GatewayIpcServer(std::unique_ptr<IpcSession> session,
+                     MarketDataGateway*          md,
+                     TradingGateway*             td,
+                     asio::any_io_executor       ex,
+                     Options                     options);
 
     ~GatewayIpcServer();
 
@@ -72,6 +85,10 @@ public:
 
     IpcSession& session() noexcept { return *session_; }
 
+    const std::string& stream_epoch() const noexcept { return stream_epoch_; }
+    uint64_t           md_next_seq() const noexcept { return md_stream_.next_seq(); }
+    uint64_t           td_next_seq() const noexcept { return td_stream_.next_seq(); }
+
 private:
     asio::awaitable<void> md_pump();
     asio::awaitable<void> td_pump();
@@ -85,11 +102,23 @@ private:
     asio::awaitable<void> handle_subscribe(const ReceivedFrame& frame);
     /// 处理一条 Command：驱动网关下单/撤单并回 CommandAck。
     asio::awaitable<void> handle_command(const ReceivedFrame& frame);
+    /// 处理一条 Resume：按 epoch/seq 决定 replay 或要求 resync/reconcile。
+    asio::awaitable<void> handle_resume(const ReceivedFrame& frame);
+
+    /// 给 md/td push 分配 seq、记录 replay buffer、发送。
+    asio::awaitable<void> send_md_push(MarketDataPushBody body);
+    asio::awaitable<void> send_td_push(TradePushBody body);
+    /// 发送交易全量快照（td stream 也占一个 seq）。
+    asio::awaitable<void> send_td_snapshot();
 
     std::unique_ptr<IpcSession> session_;
     MarketDataGateway*          md_;
     TradingGateway*             td_;
     asio::any_io_executor       ex_;
+
+    std::string    stream_epoch_;
+    OutboundStream md_stream_;
+    OutboundStream td_stream_;
 
     // 本连接累计订阅的合约与 K 线 (symbol,duration_ns)。close() 时一次性 release 给
     // 网关，使网关按引用计数释放（多 node 共享同一 md 网关时的正确退订语义）。

@@ -128,6 +128,12 @@ asio::awaitable<void> TqApi::td_loop() {
             merger_.apply(ev->payload);
             update_signal_.notify();
             break;
+        case TradeEvent::Kind::Snapshot:
+            // 对账快照：先清空交易实体，再按完整 diff 建库，避免旧订单残留。
+            data_.clear_trading();
+            merger_.apply(ev->payload);
+            update_signal_.notify();
+            break;
         case TradeEvent::Kind::Ack:
             // 命令级回执：阶段 2 不单独触发 wait_update，
             // 真正的状态推进由后续 Diff 驱动。

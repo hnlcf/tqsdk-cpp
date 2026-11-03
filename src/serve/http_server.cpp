@@ -17,10 +17,17 @@ using json = nlohmann::json;
 } // namespace
 
 HttpServer::HttpServer(TqApi* api, asio::any_io_executor ex, WsOptions ws_options)
+    : HttpServer(api, ex, std::move(ws_options), ex) {}
+
+HttpServer::HttpServer(TqApi*                api,
+                       asio::any_io_executor io_ex,
+                       WsOptions             ws_options,
+                       asio::any_io_executor data_ex)
     : api_(api),
-      ex_(std::move(ex)),
-      acceptor_(ex_),
-      ws_(std::make_shared<WebSocketHub>(api_, ex_, std::move(ws_options))) {
+      io_ex_(std::move(io_ex)),
+      data_ex_(data_ex ? std::move(data_ex) : io_ex_),
+      acceptor_(io_ex_),
+      ws_(std::make_shared<WebSocketHub>(api_, data_ex_, std::move(ws_options))) {
     setup_routes();
 }
 
@@ -115,7 +122,7 @@ void HttpServer::listen(const std::string& address, uint16_t port) {
     port_ = acceptor_.local_endpoint().port();
 
     co_spawn_logged(
-        ex_, [this]() -> asio::awaitable<void> { co_await accept_loop(); }, "Http.accept");
+        io_ex_, [this]() -> asio::awaitable<void> { co_await accept_loop(); }, "Http.accept");
     ws_->start();
     SPDLOG_INFO("[HttpServer] listening on {}:{} (ws: {})", address, port_, ws_->options().path);
 }
@@ -134,8 +141,10 @@ void HttpServer::stop() noexcept {
 
 asio::awaitable<void> HttpServer::accept_loop() {
     for (;;) {
+        // 每条连接一个独立 strand：同一连接的读写串行，连接之间可并行。
+        auto                      session_ex = asio::make_strand(io_ex_);
         boost::system::error_code ec;
-        tcp::socket               sock(co_await asio::this_coro::executor);
+        tcp::socket               sock(session_ex);
         co_await acceptor_.async_accept(sock, asio::redirect_error(asio::use_awaitable, ec));
         if (ec) {
             if (ec == asio::error::operation_aborted) {
@@ -149,7 +158,7 @@ asio::awaitable<void> HttpServer::accept_loop() {
         }
         // 每连接一个协程；不等待完成（并发服务）。
         co_spawn_logged(
-            ex_,
+            session_ex,
             [this, s = std::move(sock)]() mutable -> asio::awaitable<void> {
                 co_await session(std::move(s));
             },
@@ -177,6 +186,9 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
                 target = target.substr(0, qpos);
             }
 
+            // Hub 的 clients_/订阅表都在 data_ex_ 上；检查与接管都必须切过去。
+            co_await asio::dispatch(data_ex_, asio::use_awaitable);
+
             http::response<http::string_body> res;
             if (target != ws_->options().path) {
                 res = make_json_response(
@@ -191,12 +203,16 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
                 co_return;
             }
             res.keep_alive(false);
+            co_await asio::dispatch(sock.get_executor(), asio::use_awaitable);
             co_await http::async_write(sock, res, asio::redirect_error(asio::use_awaitable, ec));
             co_return;
         }
 
         // keep-alive 支持：根据请求决定是否关闭。
         const bool close_conn = req.need_eof();
+
+        // handler 读 DataManager / 调 TqApi，统一在 data_ex_ 上执行。
+        co_await asio::dispatch(data_ex_, asio::use_awaitable);
 
         http::response<http::string_body> res;
         try {
@@ -209,6 +225,8 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
         if (close_conn) {
             res.keep_alive(false);
         }
+        // 写回 socket 前切回连接自己的 executor/strand，避免不同连接互相串行。
+        co_await asio::dispatch(sock.get_executor(), asio::use_awaitable);
         co_await http::async_write(sock, res, asio::redirect_error(asio::use_awaitable, ec));
         if (ec || close_conn) {
             break;

@@ -13,16 +13,109 @@ GatewayIpcServer::GatewayIpcServer(std::unique_ptr<IpcSession> session,
                                    MarketDataGateway*          md,
                                    TradingGateway*             td,
                                    asio::any_io_executor       ex)
+    : GatewayIpcServer(std::move(session), md, td, std::move(ex), Options{}) {}
+
+GatewayIpcServer::GatewayIpcServer(std::unique_ptr<IpcSession> session,
+                                   MarketDataGateway*          md,
+                                   TradingGateway*             td,
+                                   asio::any_io_executor       ex,
+                                   Options                     options)
     : session_(std::move(session)),
       md_(md),
       td_(td),
       ex_(std::move(ex)),
+      stream_epoch_(make_stream_epoch("gw")),
+      md_stream_(StreamKind::Md, stream_epoch_, options.md_replay),
+      td_stream_(StreamKind::Td, stream_epoch_, options.td_replay),
       md_stop_timer_(ex_),
       td_stop_timer_(ex_) {}
 
 GatewayIpcServer::~GatewayIpcServer() {
     // 只关闭会话，不 join 后台协程（与 IpcSession 契约一致）。
     close();
+}
+
+asio::awaitable<void> GatewayIpcServer::send_md_push(MarketDataPushBody body) {
+    body.meta          = md_stream_.next_meta();
+    const auto enc     = session_->encoding();
+    auto       payload = encode_body(body, enc);
+    md_stream_.record(body.meta.seq, FrameType::MarketDataPush, enc, payload);
+    co_await session_->send(FrameType::MarketDataPush, ConstSlice{payload});
+}
+
+asio::awaitable<void> GatewayIpcServer::send_td_push(TradePushBody body) {
+    body.meta          = td_stream_.next_meta();
+    const auto enc     = session_->encoding();
+    auto       payload = encode_body(body, enc);
+    td_stream_.record(body.meta.seq, FrameType::TradePush, enc, payload);
+    co_await session_->send(FrameType::TradePush, ConstSlice{payload});
+}
+
+asio::awaitable<void> GatewayIpcServer::send_td_snapshot() {
+    if (td_ == nullptr) {
+        co_return;
+    }
+    TradeSnapshotBody body;
+    body.meta          = td_stream_.next_meta();
+    body.data          = td_->snapshot();
+    const auto enc     = session_->encoding();
+    auto       payload = encode_body(body, enc);
+    td_stream_.record(body.meta.seq, FrameType::TradeSnapshot, enc, payload);
+    co_await session_->send(FrameType::TradeSnapshot, ConstSlice{payload});
+}
+
+asio::awaitable<void> GatewayIpcServer::handle_resume(const ReceivedFrame& frame) {
+    ResumeBody  req;
+    bool        decode_ok = true;
+    std::string decode_error;
+    try {
+        req = decode_as<FrameType::Resume>(frame);
+    } catch (const std::exception& e) {
+        decode_ok    = false;
+        decode_error = e.what();
+    }
+
+    ResumeAckBody ack;
+    ack.epoch       = stream_epoch_;
+    ack.md_from_seq = req.md_next_seq;
+    ack.td_from_seq = req.td_next_seq;
+
+    std::vector<ReplayFrame> md_replay;
+    std::vector<ReplayFrame> td_replay;
+    if (!decode_ok) {
+        ack.error = std::string("bad Resume: ") + decode_error;
+    } else if (req.epoch != stream_epoch_) {
+        // epoch 变化说明 gw 重启过，旧 seq 基线全部失效：
+        // 不 replay，直接要求 node 重放订阅并接收完整 td 快照。
+        ack.error                = "epoch changed";
+        ack.md_from_seq          = 0;
+        ack.td_from_seq          = 1;
+        ack.td_snapshot_required = (td_ != nullptr);
+    } else {
+        if (req.md_next_seq != 0) {
+            ack.md_replay = md_stream_.replay_from(req.md_next_seq, md_replay);
+        }
+        if (req.td_next_seq != 0) {
+            ack.td_replay = td_stream_.replay_from(req.td_next_seq, td_replay);
+            if (!ack.td_replay) {
+                ack.td_snapshot_required = (td_ != nullptr);
+            }
+        }
+    }
+
+    co_await session_->send_body<FrameType::ResumeAck>(ack);
+
+    for (const auto& f : md_replay) {
+        co_await session_->send(f.type, ConstSlice{f.payload});
+    }
+    for (const auto& f : td_replay) {
+        co_await session_->send(f.type, ConstSlice{f.payload});
+    }
+
+    if (ack.td_snapshot_required) {
+        co_await send_td_snapshot();
+    }
+    co_return;
 }
 
 void GatewayIpcServer::start() {
@@ -127,7 +220,7 @@ asio::awaitable<void> GatewayIpcServer::md_pump() {
                 body.kind = (ev->kind == MarketDataEvent::Kind::Kline) ? MdPushKind::Kline
                                                                        : MdPushKind::Diff;
                 body.data = std::move(ev->payload);
-                co_await session_->send_body<FrameType::MarketDataPush>(body);
+                co_await send_md_push(std::move(body));
                 break;
             }
             case MarketDataEvent::Kind::Disconnected:
@@ -177,7 +270,17 @@ asio::awaitable<void> GatewayIpcServer::td_pump() {
                 TradePushBody body;
                 body.kind = TradePushKind::Diff;
                 body.data = std::move(ev->payload);
-                co_await session_->send_body<FrameType::TradePush>(body);
+                co_await send_td_push(std::move(body));
+                break;
+            }
+            case TradeEvent::Kind::Snapshot: {
+                TradeSnapshotBody body;
+                body.meta          = td_stream_.next_meta();
+                body.data          = std::move(ev->payload);
+                const auto enc     = session_->encoding();
+                auto       payload = encode_body(body, enc);
+                td_stream_.record(body.meta.seq, FrameType::TradeSnapshot, enc, payload);
+                co_await session_->send(FrameType::TradeSnapshot, ConstSlice{payload});
                 break;
             }
             case TradeEvent::Kind::Ack:
@@ -227,6 +330,9 @@ asio::awaitable<void> GatewayIpcServer::control_loop() {
             break;
         case FrameType::Command:
             co_await handle_command(*frame);
+            break;
+        case FrameType::Resume:
+            co_await handle_resume(*frame);
             break;
         default:
             SPDLOG_WARN("[Gw.control] unexpected frame type {}", static_cast<int>(frame->type));

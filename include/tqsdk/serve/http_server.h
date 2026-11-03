@@ -37,7 +37,9 @@ using tcp       = boost::asio::ip::tcp;
 ///   GET    /stream (WebSocket upgrade)    -> 实时 diff 推送（见 WebSocketHub）
 ///
 /// 关键约定与易忽视细节：
-///   - **单 io_context 线程**：处理协程与 TqApi 的 md_loop/td_loop 同线程。
+///   - **双 executor**：I/O（accept/socket）在 io_ex 上，可为每连接分配 strand；
+///     路由 handler 在 data_ex（node 中为 core strand）上执行。`session()` 在进入
+///     handler 前 dispatch 到 data_ex，写回前切回连接 executor。
 ///     处理函数在构造响应 JSON 时对 data() 做**同步**读取并立即拷贝成 JSON，
 ///     不在 co_await 之间持有 data() 内部引用（下单会 co_await，故读与写分离）。
 ///   - TqApi::insert_order 会 co_await 网关 ack；这期间 io_context 继续处理
@@ -50,7 +52,17 @@ class HttpServer {
 public:
     /// api 与 executor 均由调用方持有，生命周期需覆盖本对象。
     /// ws_options 控制同一端口上的 WebSocket `/stream` 升级路由。
+    /// 兼容构造：I/O 与数据处理使用同一 executor（单线程/测试）。
     HttpServer(TqApi* api, asio::any_io_executor ex, WsOptions ws_options = {});
+
+    /// 双 executor 构造：
+    ///   - io_ex      ：accept / socket 读写（可跨多线程、每连接一条 strand）
+    ///   - data_ex    ：路由 handler / DataManager 访问（node 中传 core strand）
+    /// 所有跨 executor 切换在 session() 内显式 dispatch，保证数据面串行。
+    HttpServer(TqApi*                api,
+               asio::any_io_executor io_ex,
+               WsOptions             ws_options,
+               asio::any_io_executor data_ex);
 
     /// 绑定并监听 addr:port；开始 accept 循环（后台协程）。失败抛 system_error。
     /// 需在 io_context.run() 之前调用。
@@ -77,7 +89,8 @@ private:
     void setup_routes();
 
     TqApi*                        api_;
-    asio::any_io_executor         ex_;
+    asio::any_io_executor         io_ex_;
+    asio::any_io_executor         data_ex_;
     tcp::acceptor                 acceptor_;
     uint16_t                      port_{0};
     bool                          stopped_{false};

@@ -78,12 +78,13 @@ struct CommandAck {
 struct TradeEvent {
     enum class Kind : uint8_t {
         Diff,         // payload 是与行情同构的 trade diff JSON (含 user.orders/trades/...)
+        Snapshot,     // payload 是完整 trade 截面；消费端先清空交易实体再应用
         Ack,          // payload 忽略，ack 字段有效（命令级别的即时回执）
         Error,        // error_msg 有效
         Disconnected, // 与柜台断开
     } kind;
 
-    nlohmann::json payload;   // Kind::Diff 时有效
+    nlohmann::json payload;   // Kind::Diff / Snapshot 时有效
     CommandAck     ack;       // Kind::Ack 时有效
     std::string    error_msg; // Kind::Error 时有效
 };
@@ -108,6 +109,10 @@ public:
                                                      const OrderId&        rid) = 0;
 
     virtual asio::awaitable<CommandAck> cancel_order(const CancelOrderReq& req) = 0;
+
+    /// 完整交易截面（trade diff 同构，含 orders/trades/positions/accounts）。
+    /// 用于断线重连对账；不支持快照的网关返回空 object，上层需报错或降级。
+    virtual nlohmann::json snapshot() const { return nlohmann::json::object(); }
 
     // 交易事件推送通道；TqApi 的后台 td_loop 从此消费。
     virtual Channel<TradeEvent>& event_output() = 0;

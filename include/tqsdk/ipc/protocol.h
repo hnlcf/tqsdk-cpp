@@ -142,6 +142,74 @@ inline void from_json(const json& j, SubscribeAckBody& m) {
 }
 
 // ---------------------------------------------------------------------------
+// 流序号 / 断线恢复
+// ---------------------------------------------------------------------------
+
+/// 业务流类别。md 可重建，td 必须对账/重放。
+enum class StreamKind : uint8_t {
+    Md = 0,
+    Td = 1,
+};
+DEFINE_ENUM_JSON_SERIALIZE(StreamKind)
+
+/// 每条业务流上的单调序号；epoch 标识 gw 侧流实例（重连/重启后变化）。
+struct StreamMeta {
+    std::string epoch;
+    uint64_t    seq = 0;
+};
+inline void to_json(json& j, const StreamMeta& m) {
+    j = json{{"epoch", m.epoch}, {"seq", m.seq}};
+}
+inline void from_json(const json& j, StreamMeta& m) {
+    m.epoch = j.value("epoch", std::string{});
+    m.seq   = j.value("seq", uint64_t{0});
+}
+
+/// node -> gateway：新连接上请求从指定 seq 继续。
+struct ResumeBody {
+    std::string epoch;           ///< node 上次看到的 epoch
+    uint64_t    md_next_seq = 0; ///< 期望的下一条 md seq；0 表示无历史
+    uint64_t    td_next_seq = 0; ///< 期望的下一条 td seq；0 表示无历史
+};
+inline void to_json(json& j, const ResumeBody& m) {
+    j = json{{"epoch", m.epoch}, {"md_next_seq", m.md_next_seq}, {"td_next_seq", m.td_next_seq}};
+}
+inline void from_json(const json& j, ResumeBody& m) {
+    m.epoch       = j.value("epoch", std::string{});
+    m.md_next_seq = j.value("md_next_seq", uint64_t{0});
+    m.td_next_seq = j.value("td_next_seq", uint64_t{0});
+}
+
+/// gateway -> node：每条流是否成功 replay；失败时消费端走 resync/reconcile。
+struct ResumeAckBody {
+    std::string epoch;
+    bool        md_replay            = false;
+    bool        td_replay            = false;
+    uint64_t    md_from_seq          = 0;
+    uint64_t    td_from_seq          = 0;
+    bool        td_snapshot_required = false;
+    std::string error;
+};
+inline void to_json(json& j, const ResumeAckBody& m) {
+    j = json{{"epoch", m.epoch},
+             {"md_replay", m.md_replay},
+             {"td_replay", m.td_replay},
+             {"md_from_seq", m.md_from_seq},
+             {"td_from_seq", m.td_from_seq},
+             {"td_snapshot_required", m.td_snapshot_required},
+             {"error", m.error}};
+}
+inline void from_json(const json& j, ResumeAckBody& m) {
+    m.epoch                = j.value("epoch", std::string{});
+    m.md_replay            = j.value("md_replay", false);
+    m.td_replay            = j.value("td_replay", false);
+    m.md_from_seq          = j.value("md_from_seq", uint64_t{0});
+    m.td_from_seq          = j.value("td_from_seq", uint64_t{0});
+    m.td_snapshot_required = j.value("td_snapshot_required", false);
+    m.error                = j.value("error", std::string{});
+}
+
+// ---------------------------------------------------------------------------
 // 行情 / 交易推送（payload 为内部 diff JSON，原样承载）
 // ---------------------------------------------------------------------------
 
@@ -154,18 +222,21 @@ enum class MdPushKind : uint8_t {
 DEFINE_ENUM_JSON_SERIALIZE(MdPushKind)
 
 struct MarketDataPushBody {
+    StreamMeta meta;                    ///< epoch + seq（0 表示旧对端未提供）
     MdPushKind kind = MdPushKind::Diff; ///< 事件类别（默认 Diff）
     json       data = json::object();   ///< 与天勤 rtn_data 同构的行情 diff
 };
 inline void to_json(json& j, const MarketDataPushBody& m) {
-    j = json{{"kind", m.kind}, {"data", m.data}};
+    j = json{{"meta", m.meta}, {"kind", m.kind}, {"data", m.data}};
 }
 inline void from_json(const json& j, MarketDataPushBody& m) {
     // 兼容旧帧：若没有 kind/data 包裹，则整体视作 data（旧格式为裸 diff）。
     if (j.is_object() && j.contains("kind") && j.contains("data")) {
+        m.meta = j.value("meta", StreamMeta{});
         m.kind = j.at("kind").get<MdPushKind>();
         m.data = j.at("data");
     } else {
+        m.meta = StreamMeta{};
         m.kind = MdPushKind::Diff;
         m.data = j;
     }
@@ -178,20 +249,37 @@ enum class TradePushKind : uint8_t {
 DEFINE_ENUM_JSON_SERIALIZE(TradePushKind)
 
 struct TradePushBody {
+    StreamMeta    meta; ///< epoch + seq
     TradePushKind kind = TradePushKind::Diff;
     json          data = json::object(); ///< 含 user.orders / user.trades / user.accounts 等
 };
 inline void to_json(json& j, const TradePushBody& m) {
-    j = json{{"kind", m.kind}, {"data", m.data}};
+    j = json{{"meta", m.meta}, {"kind", m.kind}, {"data", m.data}};
 }
 inline void from_json(const json& j, TradePushBody& m) {
     if (j.is_object() && j.contains("kind") && j.contains("data")) {
+        m.meta = j.value("meta", StreamMeta{});
         m.kind = j.at("kind").get<TradePushKind>();
         m.data = j.at("data");
     } else {
+        m.meta = StreamMeta{};
         m.kind = TradePushKind::Diff;
         m.data = j;
     }
+}
+
+/// gateway -> node：交易状态完整快照（对账失败/新连接时使用）。
+/// data 为完整 trade diff，可带 "reset": true 让消费端先清空本地交易实体。
+struct TradeSnapshotBody {
+    StreamMeta meta; ///< epoch + seq（快照本身也占一个 td seq）
+    json       data = json::object();
+};
+inline void to_json(json& j, const TradeSnapshotBody& m) {
+    j = json{{"meta", m.meta}, {"data", m.data}};
+}
+inline void from_json(const json& j, TradeSnapshotBody& m) {
+    m.meta = j.value("meta", StreamMeta{});
+    m.data = j.value("data", json::object());
 }
 
 // ---------------------------------------------------------------------------
@@ -352,6 +440,9 @@ using FrameBody = std::variant<HelloBody,
                                SubscribeAckBody,
                                MarketDataPushBody,
                                TradePushBody,
+                               TradeSnapshotBody,
+                               ResumeBody,
+                               ResumeAckBody,
                                CommandBody,
                                CommandAckBody,
                                GatewayEventBody,
@@ -384,6 +475,18 @@ struct BodyFor<FrameType::MarketDataPush> {
 template <>
 struct BodyFor<FrameType::TradePush> {
     using type = TradePushBody;
+};
+template <>
+struct BodyFor<FrameType::TradeSnapshot> {
+    using type = TradeSnapshotBody;
+};
+template <>
+struct BodyFor<FrameType::Resume> {
+    using type = ResumeBody;
+};
+template <>
+struct BodyFor<FrameType::ResumeAck> {
+    using type = ResumeAckBody;
 };
 template <>
 struct BodyFor<FrameType::Command> {
