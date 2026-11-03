@@ -67,3 +67,23 @@ Phase 2 待接入：期权链/T 型报价、下单/撤单、账户/持仓/委托
 ```bash
 ./build-ui/bin/tqsdk-ui --node-url http://127.0.0.1:18081
 ```
+
+## Tq + CTP 一键启动
+
+复制并填写 CTP 本地配置：
+
+```bash
+cp config/live.local.env.example config/live.local.env
+chmod 600 config/live.local.env
+$EDITOR config/live.local.env
+```
+
+然后：
+
+```bash
+./scripts/run_live.sh --build      # 构建并启动 gw/node/ui
+./scripts/run_live.sh --no-ui      # 只启动 gw/node
+```
+
+脚本生成 `run/live/gw.toml`、`run/live/node.toml`，日志在
+`run/live/logs/`。默认 Tq md + CTP td，退出时统一清理三个进程。

@@ -400,6 +400,19 @@ cmake --build --preset ui-dev --target tqsdk-ui
 ./build-ui/bin/tqsdk-ui
 ```
 
+Tq 行情 + CTP 交易的一键开发环境：
+
+```bash
+cp config/live.local.env.example config/live.local.env
+chmod 600 config/live.local.env
+$EDITOR config/live.local.env          # 填 CTP 账号
+./scripts/run_live.sh --build         # gw + node + UI，Ctrl-C 统一清理
+```
+
+脚本默认使用 `build-ui`，自动选择 Wayland；也可用 `--no-ui` 只启动
+gw/node，或设置 `QT_QPA_PLATFORM=xcb` 强制 XCB。详细配置见
+[`config/live.local.env.example`](./config/live.local.env.example)。
+
 UI 默认关闭，避免影响后端核心构建；设计与阶段路线见
 [`docs/UI_QT.md`](./UI_QT.md)，目录入口见 [`ui/README.md`](./ui/README.md)。
 

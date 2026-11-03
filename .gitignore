@@ -33,3 +33,7 @@ symbol.json
 kline_cache.sqlite3
 kline_cache.sqlite3-wal
 kline_cache.sqlite3-shm
+
+# 本机 Tq+CTP 启动配置和运行日志
+config/live.local.env
+run/
