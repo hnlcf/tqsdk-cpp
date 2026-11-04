@@ -3,6 +3,7 @@
 #include <QBrush>
 #include <QColor>
 #include <QFont>
+#include <QSet>
 #include <QString>
 
 #include <cmath>
@@ -54,8 +55,10 @@ void QuoteTableModel::applyQuotes(const QVector<Quote>& quotes) {
     if (quotes.isEmpty() || symbols_.isEmpty()) {
         return;
     }
+    QSet<int> changedRows;
     for (const auto& quote : quotes) {
-        if (!symbols_.contains(quote.instrumentId)) {
+        const int row = symbols_.indexOf(quote.instrumentId);
+        if (row < 0) {
             continue;
         }
         auto it = quotes_.find(quote.instrumentId);
@@ -64,8 +67,13 @@ void QuoteTableModel::applyQuotes(const QVector<Quote>& quotes) {
         } else {
             *it = mergeQuote(*it, quote);
         }
+        changedRows.insert(row);
     }
-    emit dataChanged(index(0, 0), index(symbols_.size() - 1, ColumnCount - 1));
+    // Do not force the whole watchlist to repaint when only a few symbols
+    // ticked; this was the main source of visual tearing under a quote burst.
+    for (const int row : changedRows) {
+        emit dataChanged(index(row, 0), index(row, ColumnCount - 1));
+    }
 }
 
 QString QuoteTableModel::symbolAt(int row) const {

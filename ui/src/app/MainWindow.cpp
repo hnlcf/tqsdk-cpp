@@ -313,12 +313,20 @@ void MainWindow::connectNode() {
                 QVector<Quote>    fallback;
                 const QStringList watchlist = symbolController_->watchlist();
                 for (const auto& instrument : instruments) {
-                    if (watchlist.contains(instrument.instrumentId) && instrument.lastPrice > 0.0) {
-                        Quote quote;
-                        quote.instrumentId = instrument.instrumentId;
-                        quote.lastPrice    = instrument.lastPrice;
-                        fallback.push_back(quote);
+                    if (!watchlist.contains(instrument.instrumentId) ||
+                        instrument.lastPrice <= 0.0) {
+                        continue;
                     }
+                    // Catalog last_price is a stale snapshot (often yesterday's
+                    // close). It must never overwrite a live quote already
+                    // delivered over WS/REST.
+                    if (marketStore_->quote(instrument.instrumentId) != nullptr) {
+                        continue;
+                    }
+                    Quote quote;
+                    quote.instrumentId = instrument.instrumentId;
+                    quote.lastPrice    = instrument.lastPrice;
+                    fallback.push_back(quote);
                 }
                 if (!fallback.isEmpty()) {
                     marketStore_->applyQuotes(fallback);

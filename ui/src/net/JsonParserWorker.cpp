@@ -10,6 +10,10 @@
 namespace tqsdk::ui {
 namespace {
 
+// UI 展示节流：网络侧可能一秒推多帧，模型/标签只需约 10Hz 刷新。
+// 合并窗口过长会显得延迟，过短会让自选/五档标签持续闪烁。
+constexpr int kMarketFlushMs = 100;
+
 std::optional<QJsonObject> parseObject(const QByteArray& payload, QString& error) {
     QJsonParseError parseError;
     const auto      document = QJsonDocument::fromJson(payload, &parseError);
@@ -215,7 +219,7 @@ void JsonParserWorker::enqueueMarketUpdate(const MarketUpdate& update) {
         connect(flushTimer_, &QTimer::timeout, this, &JsonParserWorker::flushMarketUpdate);
     }
     if (!flushTimer_->isActive()) {
-        flushTimer_->start(33);
+        flushTimer_->start(kMarketFlushMs);
     }
 }
 

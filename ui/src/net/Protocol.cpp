@@ -1,5 +1,6 @@
 #include "net/Protocol.h"
 
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -39,6 +40,21 @@ qint64 integerValue(const QJsonValue& value, qint64 fallback = 0) {
         return ok ? v : fallback;
     }
     return fallback;
+}
+
+qint64 quoteDatetimeValue(const QJsonValue& value) {
+    if (value.isString()) {
+        const QString text = value.toString();
+        QDateTime     datetime =
+            QDateTime::fromString(text.left(19), QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+        if (!datetime.isValid()) {
+            datetime = QDateTime::fromString(text, Qt::ISODateWithMs);
+        }
+        if (datetime.isValid()) {
+            return datetime.toMSecsSinceEpoch() * 1'000'000;
+        }
+    }
+    return integerValue(value);
 }
 
 QString stringValue(const QJsonValue& value) {
@@ -103,7 +119,7 @@ std::optional<Quote> parseQuote(const QJsonObject& object) {
     q.upperLimit      = numberValue(object.value("upper_limit"));
     q.lowerLimit      = numberValue(object.value("lower_limit"));
     q.volume          = integerValue(object.value("volume"));
-    q.datetime        = integerValue(object.value("datetime"));
+    q.datetime        = quoteDatetimeValue(object.value("datetime"));
     return q;
 }
 
@@ -117,7 +133,11 @@ Quote mergeQuote(const Quote& previous, const Quote& patch) {
             target = value;
         }
     };
-    mergeValue(merged.lastPrice, patch.lastPrice);
+    // Catalog fallbacks carry lastPrice but no timestamp. Once a live quote
+    // with a timestamp exists, never let such a fallback overwrite it.
+    if (patch.datetime != 0 || previous.datetime == 0) {
+        mergeValue(merged.lastPrice, patch.lastPrice);
+    }
     mergeValue(merged.bidPrice1, patch.bidPrice1);
     mergeValue(merged.askPrice1, patch.askPrice1);
     mergeValue(merged.bidPrice2, patch.bidPrice2);

@@ -19,6 +19,18 @@ QLabel* makeLabel(QWidget* parent, Qt::Alignment alignment = Qt::AlignRight | Qt
     return label;
 }
 
+void setTextIfChanged(QLabel* label, const QString& text) {
+    if (label != nullptr && label->text() != text) {
+        label->setText(text);
+    }
+}
+
+void setStyleIfChanged(QLabel* label, const QString& style) {
+    if (label != nullptr && label->styleSheet() != style) {
+        label->setStyleSheet(style);
+    }
+}
+
 } // namespace
 
 OrderBookPanel::OrderBookPanel(QWidget* parent)
@@ -83,7 +95,7 @@ OrderBookPanel::OrderBookPanel(QWidget* parent)
 }
 
 void OrderBookPanel::setSymbol(const QString& symbol) {
-    symbol_->setText(symbol.isEmpty() ? QStringLiteral("—") : symbol);
+    setTextIfChanged(symbol_, symbol.isEmpty() ? QStringLiteral("—") : symbol);
 }
 
 void OrderBookPanel::setQuote(const Quote* quote) {
@@ -108,15 +120,18 @@ void OrderBookPanel::setQuote(const Quote* quote) {
                                    quote->bidVolume5};
 
     for (int level = 0; level < 5; ++level) {
-        askPrice_[level]->setText(priceText(asks[level]));
-        askVolume_[level]->setText(askVolumes[level] > 0 ? QString::number(askVolumes[level])
-                                                         : QStringLiteral("—"));
-        bidPrice_[level]->setText(priceText(bids[level]));
-        bidVolume_[level]->setText(bidVolumes[level] > 0 ? QString::number(bidVolumes[level])
-                                                         : QStringLiteral("—"));
+        setTextIfChanged(askPrice_[level], priceText(asks[level]));
+        setTextIfChanged(askVolume_[level],
+                         askVolumes[level] > 0 ? QString::number(askVolumes[level])
+                                               : QStringLiteral("—"));
+        setTextIfChanged(bidPrice_[level], priceText(bids[level]));
+        setTextIfChanged(bidVolume_[level],
+                         bidVolumes[level] > 0 ? QString::number(bidVolumes[level])
+                                               : QStringLiteral("—"));
     }
-    last_->setText(priceText(quote->lastPrice));
-    last_->setStyleSheet(
+    setTextIfChanged(last_, priceText(quote->lastPrice));
+    setStyleIfChanged(
+        last_,
         QStringLiteral("font-size: 20px; font-weight: 700; color: %1;").arg(quoteColor(*quote)));
 }
 

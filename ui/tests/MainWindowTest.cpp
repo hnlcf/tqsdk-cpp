@@ -2,6 +2,7 @@
 #include "chart/KLineChartWidget.h"
 #include "net/NodeClient.h"
 
+#include <QLabel>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -16,7 +17,9 @@ public:
 
     void connectToNode(const QUrl&) override {}
     void disconnectFromNode() override {}
-    void setSubscription(const Subscription& subscription) override { subscription_ = subscription; }
+    void setSubscription(const Subscription& subscription) override {
+        subscription_ = subscription;
+    }
     void requestCatalog(const CatalogQuery&) override {}
     void requestQuotes(const QStringList&) override {}
     void requestOptionChain(const QString&) override {}
@@ -27,6 +30,9 @@ public:
     void requestTrades() override {}
     void placeOrder(const OrderRequest&) override {}
     void cancelOrder(const QString&) override {}
+
+    void publishQuotes(const QVector<Quote>& quotes) { emit quotesUpdated(quotes); }
+    void publishCatalog(const QVector<Instrument>& instruments) { emit catalogLoaded(instruments); }
 
 private:
     Subscription subscription_;
@@ -41,6 +47,7 @@ private slots:
     void initTestCase();
     void chartStateAndSelectionAreRestored();
     void closingWindowPersistsChartState();
+    void liveQuoteSurvivesCatalogFallback();
     void cleanup();
 
 private:
@@ -98,6 +105,40 @@ void MainWindowTest::closingWindowPersistsChartState() {
     QCOMPARE(settings.value(QStringLiteral("ui/chart/visibleCount")).toInt(), 66);
     QCOMPARE(settings.value(QStringLiteral("ui/chart/visibleStart")).toInt(), 12);
     QCOMPARE(settings.value(QStringLiteral("ui/chart/followLatest")).toBool(), false);
+}
+
+void MainWindowTest::liveQuoteSurvivesCatalogFallback() {
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("ui/watchlist"), QStringList{QStringLiteral("CZCE.SA701")});
+    settings.setValue(QStringLiteral("ui/chart/symbol"), QStringLiteral("CZCE.SA701"));
+    settings.sync();
+
+    FakeNodeClient client;
+    MainWindow     window(&client);
+    window.show();
+    QTest::qWait(30);
+
+    Quote live;
+    live.instrumentId = QStringLiteral("CZCE.SA701");
+    live.lastPrice    = 990.0;
+    live.bidPrice1    = 990.0;
+    live.askPrice1    = 991.0;
+    live.datetime     = 1'793'770'642'000'000'000LL;
+    client.publishQuotes({live});
+    QTest::qWait(30);
+
+    auto* last = window.findChild<QLabel*>(QStringLiteral("quoteLast"));
+    QVERIFY(last != nullptr);
+    QCOMPARE(last->text(), QStringLiteral("990.00"));
+
+    Instrument stale;
+    stale.instrumentId = QStringLiteral("CZCE.SA701");
+    stale.lastPrice    = 968.0;
+    client.publishCatalog({stale});
+    QTest::qWait(30);
+
+    QCOMPARE(last->text(), QStringLiteral("990.00"));
 }
 
 void MainWindowTest::cleanup() {

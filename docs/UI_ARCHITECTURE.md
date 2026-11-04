@@ -84,7 +84,7 @@ OptionChain
 Quote / Account / OrderAck
 ```
 
-市场更新在 worker 内按约 33ms 合并：
+市场更新在 worker 内按约 100ms 合并（约 10Hz；过长会延迟，过短会造成标签闪烁）：
 
 ```text
 WS messages ──► parse ──► pending MarketUpdate
@@ -93,7 +93,7 @@ WS messages ──► parse ──► pending MarketUpdate
                               ├─ KlineFrame 按 symbol/duration merge
                               └─ 交易快照追加
                               │
-                       33ms timer
+                       100ms timer
                               ▼
                   一次 queued signal 到 GUI
 ```
@@ -163,6 +163,9 @@ WS messages ──► parse ──► pending MarketUpdate
 `ui/src/model/MarketStore.h`
 
 - `quotes_`: symbol -> 合并后的 `Quote`；
+- 行情修正只更新变化行，不再对整张自选表发 `dataChanged`；
+- catalog 的 `last_price` 是旧快照（常为上一时段收盘），带 `datetime=0`；
+  一旦已有带时间戳的实盘 quote，fallback 不允许覆盖其 latest price；
 - `klines_`: symbol -> durationNs -> 最近 K 线；
 - `applyQuotes()` / `applyKline()`；
 - 只保存 UI 展示需要的数据，不是 node DataManager 的复制品。
@@ -313,7 +316,7 @@ node /stream text
   -> QWebSocket (GUI thread)
   -> JsonParserWorker::parseWsMessage
   -> parseMarketData on worker
-  -> 33ms merge queue
+  -> 100ms merge queue
   -> marketUpdateParsed (queued)
   -> MainWindow
        -> MarketStore

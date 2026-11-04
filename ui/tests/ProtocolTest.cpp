@@ -15,6 +15,7 @@ class ProtocolTest : public QObject {
 private slots:
     void parsesMarketData();
     void parsesCatalogAndHistory();
+    void staleCatalogFallbackDoesNotOverwriteLiveQuote();
     void parsesOptionChain();
     void buildsRequests();
     void rejectsMalformedNumbers();
@@ -31,7 +32,7 @@ QJsonObject objectFrom(const char* text) {
 void ProtocolTest::parsesMarketData() {
     const auto data = objectFrom(R"({
       "quotes": {
-        "SHFE.rb2701": {"last_price":"2991.5","pre_settlement":2980,"bid_price1":2991,"ask_price1":2992,"bid_price2":2990,"ask_price2":2993,"bid_volume1":10,"ask_volume1":20,"bid_volume2":30,"ask_volume2":40,
+        "SHFE.rb2701": {"datetime":"2026-11-04 13:40:22.000000","last_price":"2991.5","pre_settlement":2980,"bid_price1":2991,"ask_price1":2992,"bid_price2":2990,"ask_price2":2993,"bid_volume1":10,"ask_volume1":20,"bid_volume2":30,"ask_volume2":40,
                          "volume":702802,"open_interest":1878506,"pre_open_interest":1878000,
                          "highest":2999,"lowest":2970,"upper_limit":3100,"lower_limit":2900}
       },
@@ -59,6 +60,7 @@ void ProtocolTest::parsesMarketData() {
     const auto update = parseMarketData(data);
     QVERIFY(update.quotes.size() == 1);
     QVERIFY(qFuzzyCompare(update.quotes[0].lastPrice, 2991.5));
+    QVERIFY(update.quotes[0].datetime > 0);
     QVERIFY(qFuzzyCompare(update.quotes[0].preSettlement, 2980.0));
     QVERIFY(qFuzzyCompare(update.quotes[0].preOpenInterest, 1'878'000.0));
     QVERIFY(qFuzzyCompare(update.quotes[0].high, 2999.0));
@@ -127,6 +129,27 @@ void ProtocolTest::parsesOptionChain() {
     QCOMPARE(chain->calls.front().instrumentId, QString("SHFE.rb2701C3000"));
     QCOMPARE(chain->puts.size(), 1);
     QVERIFY(qFuzzyCompare(chain->puts.front().strikePrice, 3000.0));
+}
+
+void ProtocolTest::staleCatalogFallbackDoesNotOverwriteLiveQuote() {
+    Quote live;
+    live.instrumentId = "CZCE.SA701";
+    live.lastPrice    = 989.0;
+    live.datetime     = 1'793'770'642'000'000'000LL;
+
+    Quote fallback;
+    fallback.instrumentId = "CZCE.SA701";
+    fallback.lastPrice    = 968.0;
+    fallback.datetime     = 0;
+
+    const Quote merged = mergeQuote(live, fallback);
+    QCOMPARE(merged.lastPrice, 989.0);
+
+    Quote newer;
+    newer.instrumentId = "CZCE.SA701";
+    newer.lastPrice    = 990.0;
+    newer.datetime     = 1'793'770'643'000'000'000LL;
+    QCOMPARE(mergeQuote(merged, newer).lastPrice, 990.0);
 }
 
 void ProtocolTest::buildsRequests() {
