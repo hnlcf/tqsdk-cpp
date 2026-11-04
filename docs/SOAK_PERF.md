@@ -218,10 +218,10 @@ P4 通信/quote 元数据改动后的 20s Release 验证：
 在 P4 通信/quote/WS 改动完成并 275/275 测试通过后，启动最终长稳：
 
 ```text
-started_at: 2026-11-04 23:48:48
-csv:        artifacts/soak_24h_20261104_234848.csv
-log:        artifacts/soak_24h_20261104_234848.log
-pid:        879703
+started_at: 2026-11-04 23:49:28
+csv:        artifacts/soak_24h_20261104_234928.csv
+log:        artifacts/soak_24h_20261104_234928.log
+pid:        881836
 ```
 
 配置：8 HTTP load 线程、每 1s 报单/撤单、每 10min 重启 gw。24h 结束后

@@ -358,6 +358,7 @@ class Soak:
 
     def metrics_loop(self) -> None:
         start = time.monotonic()
+        next_progress = 60.0
         while not self.stop.wait(1.0):
             now = time.monotonic() - start
             with self.proc_lock:
@@ -383,12 +384,47 @@ class Soak:
                     self.stats.reconnects,
                 )
             )
+            if now >= next_progress:
+                next_progress += 60.0
+                print(
+                    json.dumps(
+                        {
+                            "elapsed_s": round(now, 1),
+                            "node_rss_kb": node_m[0],
+                            "node_fds": node_m[1],
+                            "gw_rss_kb": gw_m[0],
+                            "http_ok": self.stats.http_ok,
+                            "http_err": self.stats.http_err,
+                            "order_ok": self.stats.order_ok,
+                            "order_err": self.stats.order_err,
+                            "ws_messages": self.stats.ws_messages,
+                            "ws_err": self.stats.ws_err,
+                            "reconnects": self.stats.reconnects,
+                        }
+                    ),
+                    flush=True,
+                )
             if not node_alive:
                 self.stats.fatal = "node process exited"
                 self.stop.set()
                 return
 
     def run(self) -> int:
+        print(
+            json.dumps(
+                {
+                    "starting": True,
+                    "duration_s": self.args.duration,
+                    "reconnect_interval_s": self.args.reconnect_interval,
+                    "load_threads": self.args.load_threads,
+                    "order_interval_s": self.args.order_interval,
+                    "gw": self.args.gw_bin,
+                    "node": self.args.node_bin,
+                    "out": self.args.out,
+                }
+            ),
+            flush=True,
+        )
         self.start_gw()
         self.start_node()
         time.sleep(0.5)
