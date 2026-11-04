@@ -52,6 +52,7 @@ private:
                                     Qt::DockWidgetArea area,
                                     const QString&     objectName);
     void              resetWorkspace();
+    void              restoreWorkspace();
     void              saveWorkspace();
     void              scheduleWorkspaceSave();
     void              closeEvent(QCloseEvent* event) override;

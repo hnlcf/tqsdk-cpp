@@ -5,10 +5,30 @@
 #include <QHeaderView>
 #include <QMenu>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QTableView>
 #include <QVBoxLayout>
+#include <QVariantList>
+
+#include <algorithm>
 
 namespace tqsdk::ui {
+namespace {
+
+QString orderKey(const QString& key) {
+    return QStringLiteral("ui/columns/%1/order").arg(key);
+}
+QString widthKey(const QString& key, int column) {
+    return QStringLiteral("ui/columns/%1/width/%2").arg(key).arg(column);
+}
+QString hiddenKey(const QString& key, int column) {
+    return QStringLiteral("ui/columns/%1/hidden/%2").arg(key).arg(column);
+}
+QString legacyHiddenKey(const QString& key, int column) {
+    return QStringLiteral("ui/columns/%1/%2").arg(key).arg(column);
+}
+
+} // namespace
 
 TablePanel::TablePanel(QAbstractItemModel* model, QWidget* parent)
     : QWidget(parent) {
@@ -23,25 +43,27 @@ TablePanel::TablePanel(QAbstractItemModel* model, QWidget* parent)
     view_->verticalHeader()->setVisible(false);
     view_->verticalHeader()->setDefaultSectionSize(24);
     view_->setWordWrap(false);
-    view_->horizontalHeader()->setStretchLastSection(true);
+    view_->horizontalHeader()->setSectionsMovable(true);
+    view_->horizontalHeader()->setSectionsClickable(true);
+    view_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    view_->horizontalHeader()->setStretchLastSection(false);
     view_->setAlternatingRowColors(true);
     layout->addWidget(view_);
+}
+
+TablePanel::~TablePanel() {
+    saveColumnState();
 }
 
 void TablePanel::installColumnMenu(const QString& settingsKey) {
     if (view_ == nullptr || view_->model() == nullptr || view_->horizontalHeader() == nullptr) {
         return;
     }
+    settingsKey_ = settingsKey;
+    restoreColumnState();
+
     auto* header = view_->horizontalHeader();
     header->setContextMenuPolicy(Qt::CustomContextMenu);
-
-    QSettings settings;
-    for (int i = 0; i < view_->model()->columnCount(); ++i) {
-        const QString key = QStringLiteral("ui/columns/%1/%2").arg(settingsKey).arg(i);
-        if (settings.contains(key)) {
-            view_->setColumnHidden(i, !settings.value(key, true).toBool());
-        }
-    }
 
     connect(header,
             &QWidget::customContextMenuRequested,
@@ -59,19 +81,87 @@ void TablePanel::installColumnMenu(const QString& settingsKey) {
                         action, &QAction::toggled, view, [view, i, settingsKey](bool checked) {
                             view->setColumnHidden(i, !checked);
                             QSettings s;
-                            s.setValue(QStringLiteral("ui/columns/%1/%2").arg(settingsKey).arg(i),
-                                       checked);
+                            s.setValue(hiddenKey(settingsKey, i), checked);
                         });
                 }
                 if (menu.exec(view->horizontalHeader()->viewport()->mapToGlobal(pos)) == reset) {
                     QSettings s;
                     for (int i = 0; i < view->model()->columnCount(); ++i) {
                         view->setColumnHidden(i, false);
-                        s.setValue(QStringLiteral("ui/columns/%1/%2").arg(settingsKey).arg(i),
-                                   true);
+                        s.setValue(hiddenKey(settingsKey, i), true);
                     }
                 }
             });
+
+    connect(header, &QHeaderView::sectionMoved, this, [this](int, int, int) { saveColumnState(); });
+    connect(
+        header, &QHeaderView::sectionResized, this, [this](int, int, int) { saveColumnState(); });
+}
+
+void TablePanel::restoreColumnState() {
+    if (view_ == nullptr || view_->model() == nullptr || settingsKey_.isEmpty()) {
+        return;
+    }
+    auto*     header = view_->horizontalHeader();
+    QSettings settings;
+    const int count = view_->model()->columnCount();
+    if (count <= 0) {
+        return;
+    }
+
+    restoring_ = true;
+    const QSignalBlocker blocker(header);
+
+    const QVariantList storedOrder = settings.value(orderKey(settingsKey_)).toList();
+    if (storedOrder.size() == count) {
+        for (int visual = 0; visual < count; ++visual) {
+            const int logical = storedOrder.at(visual).toInt();
+            if (logical < 0 || logical >= count) {
+                continue;
+            }
+            const int currentVisual = header->visualIndex(logical);
+            if (currentVisual >= 0 && currentVisual != visual) {
+                header->moveSection(currentVisual, visual);
+            }
+        }
+    }
+
+    for (int column = 0; column < count; ++column) {
+        const QVariant width = settings.value(widthKey(settingsKey_, column));
+        if (width.isValid()) {
+            header->resizeSection(column, std::max(20, width.toInt()));
+        }
+        const QString hidden = hiddenKey(settingsKey_, column);
+        const QString legacy = legacyHiddenKey(settingsKey_, column);
+        if (settings.contains(hidden)) {
+            view_->setColumnHidden(column, !settings.value(hidden, true).toBool());
+        } else if (settings.contains(legacy)) {
+            view_->setColumnHidden(column, !settings.value(legacy, true).toBool());
+        }
+    }
+
+    restoring_ = false;
+}
+
+void TablePanel::saveColumnState() {
+    if (view_ == nullptr || view_->model() == nullptr || settingsKey_.isEmpty() || restoring_) {
+        return;
+    }
+    auto*     header = view_->horizontalHeader();
+    QSettings settings;
+    const int count = view_->model()->columnCount();
+
+    QVariantList order;
+    order.reserve(count);
+    for (int visual = 0; visual < count; ++visual) {
+        order.push_back(header->logicalIndex(visual));
+    }
+    settings.setValue(orderKey(settingsKey_), order);
+
+    for (int column = 0; column < count; ++column) {
+        settings.setValue(widthKey(settingsKey_, column), header->sectionSize(column));
+        settings.setValue(hiddenKey(settingsKey_, column), !view_->isColumnHidden(column));
+    }
 }
 
 } // namespace tqsdk::ui

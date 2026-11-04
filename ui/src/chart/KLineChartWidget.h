@@ -18,6 +18,8 @@ namespace tqsdk::ui {
 ///
 /// 支持滚轮缩放、按住左键左右拖动；头部显示最新价/涨跌/涨跌幅。
 class KLineChartWidget : public QWidget {
+    Q_OBJECT
+
 public:
     explicit KLineChartWidget(QWidget* parent = nullptr);
 
@@ -26,7 +28,15 @@ public:
     void setTitle(const QString& symbol, const QString& interval = QStringLiteral("1d"));
     void setTheme(bool dark);
 
+    int  visibleCount() const { return visibleCount_; }
+    int  visibleStartIndex() const { return visibleStart_; }
+    bool followLatest() const { return followLatest_; }
+    void setViewport(int visibleCount, int visibleStart, bool followLatest);
+
     QSize sizeHint() const override;
+
+signals:
+    void viewportChanged();
 
 protected:
     void paintEvent(QPaintEvent* event) override;

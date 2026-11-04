@@ -5,6 +5,7 @@
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QFont>
+#include <QSettings>
 #include <QStyleFactory>
 #include <QUrl>
 
@@ -36,7 +37,12 @@ int main(int argc, char** argv) {
 
     tqsdk::ui::HttpWsNodeClient nodeClient;
     tqsdk::ui::MainWindow       window(&nodeClient);
-    window.showMaximized();
+    QSettings                   settings;
+    if (settings.contains(QStringLiteral("ui/windowGeometry"))) {
+        window.show();
+    } else {
+        window.showMaximized();
+    }
     nodeClient.connectToNode(QUrl(parser.value(nodeUrlOption)));
     return app.exec();
 }

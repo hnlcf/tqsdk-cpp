@@ -164,6 +164,20 @@ MainWindow::MainWindow(NodeClient* nodeClient, QWidget* parent)
         if (!saved.isEmpty()) {
             watchlist_ = saved;
         }
+        selectedSymbol_ =
+            settings.value(QStringLiteral("ui/chart/symbol"), watchlist_.value(0, selectedSymbol_))
+                .toString();
+        selectedInterval_ =
+            settings.value(QStringLiteral("ui/chart/interval"), selectedInterval_).toString();
+        selectedDurationNs_ =
+            settings.value(QStringLiteral("ui/chart/durationNs"), selectedDurationNs_).toLongLong();
+        if (selectedSymbol_.isEmpty()) {
+            selectedSymbol_ = watchlist_.value(0, QStringLiteral("SHFE.rb2701"));
+        }
+        if (selectedDurationNs_ <= 0) {
+            selectedDurationNs_ = 86'400'000'000'000LL;
+            selectedInterval_   = QStringLiteral("1d");
+        }
     }
 
     marketStore_    = new MarketStore(this);
@@ -185,8 +199,9 @@ MainWindow::MainWindow(NodeClient* nodeClient, QWidget* parent)
     applyTheme();
     connectNode();
 
-    if (watchModel_->rowCount() > 0) {
-        watchTable_->selectRow(0);
+    const int selectedRow = watchlist_.indexOf(selectedSymbol_);
+    if (selectedRow >= 0) {
+        watchTable_->selectRow(selectedRow);
     }
     selectSymbol(selectedSymbol_);
 }
@@ -195,6 +210,8 @@ void MainWindow::buildUi() {
     buildToolbar();
     buildWorkspace();
     buildBottomDock();
+    buildViewMenu();
+    restoreWorkspace();
     statusBar()->showMessage(tr("Qt UI Phase 2 · 等待 node"));
 }
 
@@ -296,6 +313,7 @@ QDockWidget* MainWindow::addModuleDock(const QString&     title,
     dock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable |
                       QDockWidget::DockWidgetFloatable);
     dock->setWidget(content);
+    dock->installEventFilter(this);
     addDockWidget(area, dock);
     return dock;
 }
@@ -358,16 +376,45 @@ void MainWindow::resetWorkspace() {
         chartDialog_->close();
     }
     setCentralWidget(chartHost_);
-    resizeDocks({watchDock_}, {800}, Qt::Horizontal);
-    resizeDocks({quoteDock_}, {330}, Qt::Horizontal);
-    resizeDocks({tapeDock_}, {220}, Qt::Vertical);
-    resizeDocks({tradingDock_, orderDock_}, {1000, 340}, Qt::Horizontal);
+    resizeDocks({watchDock_}, {360}, Qt::Horizontal);
+    resizeDocks({quoteDock_}, {300}, Qt::Horizontal);
+    resizeDocks({tapeDock_}, {200}, Qt::Vertical);
+    resizeDocks({tradingDock_, orderDock_}, {1000, 300}, Qt::Horizontal);
+}
+
+void MainWindow::restoreWorkspace() {
+    QSettings        settings;
+    bool             restored = false;
+    const QByteArray state    = settings.value(QStringLiteral("ui/workspaceState")).toByteArray();
+    if (!state.isEmpty()) {
+        restored = restoreState(state);
+    }
+    const QByteArray geometry = settings.value(QStringLiteral("ui/windowGeometry")).toByteArray();
+    if (!geometry.isEmpty()) {
+        restoreGeometry(geometry);
+    }
+    if (!restored) {
+        QTimer::singleShot(0, this, [this] {
+            resizeDocks({watchDock_}, {360}, Qt::Horizontal);
+            resizeDocks({quoteDock_}, {300}, Qt::Horizontal);
+            resizeDocks({tapeDock_}, {200}, Qt::Vertical);
+            resizeDocks({tradingDock_, orderDock_}, {1000, 300}, Qt::Horizontal);
+        });
+    }
 }
 
 void MainWindow::saveWorkspace() {
     QSettings settings;
     settings.setValue(QStringLiteral("ui/workspaceState"), saveState());
     settings.setValue(QStringLiteral("ui/windowGeometry"), saveGeometry());
+    settings.setValue(QStringLiteral("ui/chart/symbol"), selectedSymbol_);
+    settings.setValue(QStringLiteral("ui/chart/interval"), selectedInterval_);
+    settings.setValue(QStringLiteral("ui/chart/durationNs"), selectedDurationNs_);
+    if (chart_ != nullptr) {
+        settings.setValue(QStringLiteral("ui/chart/visibleCount"), chart_->visibleCount());
+        settings.setValue(QStringLiteral("ui/chart/visibleStart"), chart_->visibleStartIndex());
+        settings.setValue(QStringLiteral("ui/chart/followLatest"), chart_->followLatest());
+    }
 }
 
 void MainWindow::scheduleWorkspaceSave() {
@@ -378,6 +425,9 @@ void MainWindow::scheduleWorkspaceSave() {
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     if (watched == this && (event->type() == QEvent::Resize || event->type() == QEvent::Move)) {
+        scheduleWorkspaceSave();
+    }
+    if (qobject_cast<QDockWidget*>(watched) != nullptr && event->type() == QEvent::Resize) {
         scheduleWorkspaceSave();
     }
     if (tapeTable_ != nullptr && watched == tapeTable_->viewport() &&
@@ -428,15 +478,19 @@ void MainWindow::buildWorkspace() {
     chartLayout->setContentsMargins(0, 0, 0, 0);
     chart_ = new KLineChartWidget(chartHost_);
     chart_->setTitle(selectedSymbol_, selectedInterval_);
+    {
+        QSettings settings;
+        chart_->setViewport(settings.value(QStringLiteral("ui/chart/visibleCount"), 120).toInt(),
+                            settings.value(QStringLiteral("ui/chart/visibleStart"), 0).toInt(),
+                            settings.value(QStringLiteral("ui/chart/followLatest"), true).toBool());
+    }
+    connect(chart_, &KLineChartWidget::viewportChanged, this, [this] { scheduleWorkspaceSave(); });
     chartLayout->addWidget(chart_);
     setCentralWidget(chartHost_);
 
     auto* watchPanel = new TablePanel(watchModel_, this);
     watchPanel->installColumnMenu(QStringLiteral("watchlist"));
     watchTable_ = watchPanel->view();
-    watchTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    watchTable_->horizontalHeader()->setStretchLastSection(false);
-    watchTable_->setMinimumWidth(620);
     connect(watchTable_->selectionModel(),
             &QItemSelectionModel::currentRowChanged,
             this,
@@ -451,8 +505,6 @@ void MainWindow::buildWorkspace() {
             });
     watchDock_ = addModuleDock(
         tr("自选列表"), watchPanel, Qt::LeftDockWidgetArea, QStringLiteral("watchlistDock"));
-    watchDock_->setMinimumWidth(400);
-    QTimer::singleShot(0, this, [this] { resizeDocks({watchDock_}, {500}, Qt::Horizontal); });
 
     auto* futuresPanel = new TablePanel(futuresProxy_, this);
     futuresPanel->installColumnMenu(QStringLiteral("futures"));
@@ -531,7 +583,6 @@ void MainWindow::buildWorkspace() {
     quoteForm->addRow(tr("高/低"), highLowLabel_);
     quoteDock_ = addModuleDock(
         tr("行情快照"), quoteContainer, Qt::RightDockWidgetArea, QStringLiteral("quoteDock"));
-    quoteDock_->setMinimumWidth(260);
 
     auto* tapePanel = new TablePanel(tapeModel_, this);
     tapePanel->installColumnMenu(QStringLiteral("tape"));
@@ -539,7 +590,6 @@ void MainWindow::buildWorkspace() {
     tapeDock_  = addModuleDock(
         tr("分笔成交"), tapePanel, Qt::RightDockWidgetArea, QStringLiteral("tapeDock"));
     splitDockWidget(quoteDock_, tapeDock_, Qt::Vertical);
-    tapeDock_->setMinimumHeight(120);
 }
 
 void MainWindow::buildOrderPanel(QWidget* parent) {
@@ -693,14 +743,12 @@ void MainWindow::buildBottomDock() {
 
     tradingDock_ = addModuleDock(
         tr("持仓 / 委托 / 成交"), tabs, Qt::BottomDockWidgetArea, QStringLiteral("tradingDock"));
-    tradingDock_->setMinimumHeight(220);
 
     auto* orderBox = new QWidget(this);
     buildOrderPanel(orderBox);
     orderDock_ = addModuleDock(
         tr("三键下单"), orderBox, Qt::BottomDockWidgetArea, QStringLiteral("orderDock"));
     splitDockWidget(tradingDock_, orderDock_, Qt::Horizontal);
-    orderDock_->setMinimumWidth(300);
 
     const auto refreshCachedQuotes = [this] {
         if (latestQuotes_.isEmpty()) {
@@ -1076,6 +1124,7 @@ void MainWindow::selectSymbol(const QString& symbol) {
     chart_->setTitle(symbol, selectedInterval_);
     chart_->setBars(marketStore_->bars(symbol, selectedDurationNs_));
     updateQuotePanel();
+    scheduleWorkspaceSave();
 
     if (nodeClient_ == nullptr) {
         return;
@@ -1142,6 +1191,7 @@ void MainWindow::setInterval(qint64 durationNs, const QString& label) {
         }
     }
     updateQuotePanel();
+    scheduleWorkspaceSave();
 }
 
 void MainWindow::updateQuotePanel() {

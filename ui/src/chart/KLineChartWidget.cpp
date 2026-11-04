@@ -51,10 +51,21 @@ KLineChartWidget::KLineChartWidget(QWidget* parent)
 void KLineChartWidget::setBars(const QVector<KlineBar>& bars) {
     const int oldSize = bars_.size();
     bars_             = bars;
-    if (oldSize == 0 || followLatest_) {
+    if (oldSize == 0) {
+        if (followLatest_) {
+            visibleStart_ = std::max(0, static_cast<int>(bars_.size()) - visibleBarCount());
+        }
+    } else if (followLatest_) {
         visibleStart_ = std::max(0, static_cast<int>(bars_.size()) - visibleBarCount());
-        followLatest_ = true;
     }
+    clampView();
+    update();
+}
+
+void KLineChartWidget::setViewport(int visibleCount, int visibleStart, bool followLatest) {
+    visibleCount_ = std::clamp(visibleCount, 1, 2000);
+    visibleStart_ = std::max(0, visibleStart);
+    followLatest_ = followLatest;
     clampView();
     update();
 }
@@ -103,8 +114,8 @@ int KLineChartWidget::firstVisibleBar() const {
 
 void KLineChartWidget::clampView() {
     if (bars_.isEmpty()) {
-        visibleStart_ = 0;
-        followLatest_ = true;
+        visibleCount_ = std::clamp(visibleCount_, 1, 2000);
+        visibleStart_ = std::max(0, visibleStart_);
         return;
     }
     visibleCount_   = std::clamp(visibleCount_, 1, 2000);
@@ -357,6 +368,7 @@ void KLineChartWidget::mouseMoveEvent(QMouseEvent* event) {
         clampView();
         followLatest_ = false;
         update();
+        emit viewportChanged();
         event->accept();
         return;
     }
@@ -383,6 +395,7 @@ void KLineChartWidget::mouseReleaseEvent(QMouseEvent* event) {
         dragging_ = false;
         clampView();
         setCursor(Qt::OpenHandCursor);
+        emit viewportChanged();
         event->accept();
         return;
     }
@@ -414,6 +427,7 @@ void KLineChartWidget::wheelEvent(QWheelEvent* event) {
     followLatest_       = false;
     clampView();
     update();
+    emit viewportChanged();
     event->accept();
 }
 
