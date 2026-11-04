@@ -1,37 +1,50 @@
 #pragma once
 
-#include <QString>
+#include <QColor>
+#include <QPalette>
 
 namespace tqsdk::ui {
 
-inline QString themeStyle(bool dark) {
-    const QString bg       = dark ? "#0d1117" : "#f5f7fb";
-    const QString panel    = dark ? "#111821" : "#ffffff";
-    const QString text     = dark ? "#d9e2ec" : "#202a36";
-    const QString muted    = dark ? "#8b93a3" : "#657080";
-    const QString line     = dark ? "#263140" : "#dce3ec";
-    const QString selected = dark ? "#1c2a3a" : "#e6f0ff";
-    const QString accent   = dark ? "#2f81f7" : "#0b66c3";
-    return QStringLiteral(
-               "QMainWindow, QWidget { background: %1; color: %3; }"
-               "QToolBar { background: %2; border: none; spacing: 4px; }"
-               "QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { background: %2; "
-               "border: 1px solid %4; border-radius: 4px; padding: 5px 8px; color: %3; }"
-               "QPushButton { background: transparent; border: 1px solid transparent; "
-               "border-radius: 4px; padding: 5px 8px; color: %5; }"
-               "QPushButton:hover { background: %6; color: %3; }"
-               "QPushButton:disabled { color: %4; }"
-               "QTableView { background: %2; alternate-background-color: %7; "
-               "border: 1px solid %4; gridline-color: %4; selection-background-color: %6; "
-               "selection-color: %3; }"
-               "QHeaderView::section { background: %2; color: %5; border: none; "
-               "border-bottom: 1px solid %4; padding: 6px; }"
-               "QTabWidget::pane { border: 1px solid %4; }"
-               "QTabBar::tab { padding: 7px 14px; color: %5; }"
-               "QTabBar::tab:selected { color: %3; border-bottom: 2px solid %8; }"
-               "QDockWidget::title { background: %2; padding: 6px; }"
-               "QStatusBar { color: %5; }")
-        .arg(bg, panel, text, line, muted, selected, bg, accent);
+/// 全局主题使用 QPalette 而不是 qApp->setStyleSheet()。
+///
+/// A non-empty application stylesheet installs QStyleSheetStyle for *every*
+/// widget; in perf profiles its renderRule()/QHash path was a major steady
+/// state cost even when the rule did not match. QPalette gives us the same
+/// dark/light base colors while leaving high-frequency widgets on Fusion's
+/// fast C++ path.
+inline QPalette applicationPalette(bool dark) {
+    const QColor background = dark ? QColor("#0d1117") : QColor("#f5f7fb");
+    const QColor panel      = dark ? QColor("#111821") : QColor("#ffffff");
+    const QColor text       = dark ? QColor("#d9e2ec") : QColor("#202a36");
+    const QColor muted      = dark ? QColor("#8b93a3") : QColor("#657080");
+    const QColor line       = dark ? QColor("#263140") : QColor("#dce3ec");
+    const QColor selected   = dark ? QColor("#1c2a3a") : QColor("#e6f0ff");
+    const QColor accent     = dark ? QColor("#2f81f7") : QColor("#0b66c3");
+
+    QPalette palette;
+    palette.setColor(QPalette::Window, background);
+    palette.setColor(QPalette::WindowText, text);
+    palette.setColor(QPalette::Base, panel);
+    palette.setColor(QPalette::AlternateBase, background);
+    palette.setColor(QPalette::Text, text);
+    palette.setColor(QPalette::Button, panel);
+    palette.setColor(QPalette::ButtonText, text);
+    palette.setColor(QPalette::BrightText, QColor("#ffffff"));
+    palette.setColor(QPalette::Highlight, selected);
+    palette.setColor(QPalette::HighlightedText, text);
+    palette.setColor(QPalette::ToolTipBase, panel);
+    palette.setColor(QPalette::ToolTipText, text);
+    palette.setColor(QPalette::PlaceholderText, muted);
+    palette.setColor(QPalette::Link, accent);
+    palette.setColor(QPalette::Light, line);
+    palette.setColor(QPalette::Midlight, line);
+    palette.setColor(QPalette::Mid, line);
+    palette.setColor(QPalette::Dark, background);
+    palette.setColor(QPalette::Shadow, QColor("#000000"));
+    palette.setColor(QPalette::Disabled, QPalette::WindowText, muted);
+    palette.setColor(QPalette::Disabled, QPalette::Text, muted);
+    palette.setColor(QPalette::Disabled, QPalette::ButtonText, muted);
+    return palette;
 }
 
 } // namespace tqsdk::ui

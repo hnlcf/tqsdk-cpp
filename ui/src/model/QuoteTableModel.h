@@ -3,6 +3,7 @@
 #include "net/Protocol.h"
 
 #include <QAbstractTableModel>
+#include <QFont>
 #include <QHash>
 #include <QStringList>
 
@@ -48,6 +49,7 @@ public:
 private:
     QStringList           symbols_;
     QHash<QString, Quote> quotes_;
+    QFont                 boldFont_;
 };
 
 } // namespace tqsdk::ui

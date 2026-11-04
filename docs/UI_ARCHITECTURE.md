@@ -263,6 +263,19 @@ WS messages ──► parse ──► pending MarketUpdate
 - K 线/网格/成交量缓存为 QPixmap，鼠标移动只重绘十字光标和头部，不重画 K 线；
 - 十字光标以 16ms 单次定时器合并鼠标移动事件。
 
+### 5.3.1 主题与绘制性能
+
+全局 `qApp->setStyleSheet()` 会让所有 widget 安装 QStyleSheetStyle；perf 压测中
+`QStyleSheetStyle::renderRule` 及其 QRenderRule 哈希在 steady state 占明显比例。
+当前主题改为 `QPalette`（Fusion），只对行情快照/订单簿等少数局部 widget 使用
+targeted stylesheet。压测对比：
+
+- 全局 QSS：约 4.28B core cycles / 1112ms task-clock；
+- QPalette：约 3.26B core cycles / 966ms task-clock；
+
+约减少 24% cycles、13% task-clock。表格字体也改为模型内缓存，避免每个
+`data(FontRole)` 构造 QFont。
+
 ### 5.4 QuoteSnapshotPanel / OrderBookPanel / TradeTapePanel
 
 - `QuoteSnapshotPanel`：行情字段展示和红绿格式化，不持有 node/model；

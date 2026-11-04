@@ -4,6 +4,7 @@
 
 #include <QAbstractTableModel>
 #include <QDateTime>
+#include <QFont>
 #include <QHash>
 #include <QVector>
 
@@ -70,6 +71,7 @@ public:
 private:
     QVector<Order>      orders_;
     QHash<QString, int> indexById_;
+    QFont               boldFont_;
     void                rebuildIndex();
 };
 

@@ -2,6 +2,7 @@
 
 #include "net/Protocol.h"
 
+#include <QFont>
 #include <QPixmap>
 #include <QPoint>
 #include <QRectF>
@@ -85,6 +86,8 @@ private:
     QPoint            crosshair_        = QPoint(-1, -1);
     QPoint            pendingCrosshair_ = QPoint(-1, -1);
     QTimer*           crosshairTimer_   = nullptr;
+    QFont             titleFont_;
+    QFont             valueFont_;
     QPixmap           chartCache_;
     bool              cacheDirty_ = true;
 

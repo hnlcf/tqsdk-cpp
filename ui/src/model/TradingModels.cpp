@@ -171,7 +171,9 @@ QVariant PositionTableModel::headerData(int section, Qt::Orientation orientation
 }
 
 OrderTableModel::OrderTableModel(QObject* parent)
-    : QAbstractTableModel(parent) {}
+    : QAbstractTableModel(parent) {
+    boldFont_.setBold(true);
+}
 
 int OrderTableModel::rowCount(const QModelIndex& parent) const {
     return parent.isValid() ? 0 : orders_.size();
@@ -229,9 +231,7 @@ QVariant OrderTableModel::data(const QModelIndex& index, int role) const {
         return alignment(index.column());
     }
     if (role == Qt::FontRole && index.column() == OrderId) {
-        QFont font;
-        font.setBold(true);
-        return font;
+        return boldFont_;
     }
     if (role == Qt::ForegroundRole && index.column() == Status) {
         const auto& order = orders_.at(index.row());

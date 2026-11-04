@@ -3,6 +3,7 @@
 #include "net/Protocol.h"
 
 #include <QAbstractTableModel>
+#include <QFont>
 #include <QHash>
 #include <QSet>
 #include <QTimer>
@@ -65,6 +66,7 @@ private:
     int                   pendingOffset_ = 0;
     int                   chunkSize_     = 256;
     QTimer*               loadTimer_     = nullptr;
+    QFont                 boldFont_;
 };
 
 } // namespace tqsdk::ui

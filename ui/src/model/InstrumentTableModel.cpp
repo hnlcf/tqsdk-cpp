@@ -11,7 +11,9 @@
 namespace tqsdk::ui {
 
 InstrumentTableModel::InstrumentTableModel(QObject* parent)
-    : QAbstractTableModel(parent) {}
+    : QAbstractTableModel(parent) {
+    boldFont_.setBold(true);
+}
 
 int InstrumentTableModel::rowCount(const QModelIndex& parent) const {
     return parent.isValid() ? 0 : instruments_.size();
@@ -141,9 +143,7 @@ QVariant InstrumentTableModel::data(const QModelIndex& index, int role) const {
     const auto& instrument = instruments_.at(index.row());
 
     if (role == Qt::FontRole && index.column() == Symbol) {
-        QFont font;
-        font.setBold(true);
-        return font;
+        return boldFont_;
     }
     if (role == Qt::TextAlignmentRole) {
         return index.column() >= LastPrice ? QVariant(Qt::AlignRight | Qt::AlignVCenter)

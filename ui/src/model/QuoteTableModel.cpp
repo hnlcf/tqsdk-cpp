@@ -32,7 +32,9 @@ double changePercent(const Quote& quote) {
 } // namespace
 
 QuoteTableModel::QuoteTableModel(QObject* parent)
-    : QAbstractTableModel(parent) {}
+    : QAbstractTableModel(parent) {
+    boldFont_.setBold(true);
+}
 
 int QuoteTableModel::rowCount(const QModelIndex& parent) const {
     return parent.isValid() ? 0 : symbols_.size();
@@ -114,9 +116,7 @@ QVariant QuoteTableModel::data(const QModelIndex& index, int role) const {
     }
 
     if (role == Qt::FontRole && index.column() == Symbol) {
-        QFont font;
-        font.setBold(true);
-        return font;
+        return boldFont_;
     }
 
     if (role != Qt::DisplayRole) {

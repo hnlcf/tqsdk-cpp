@@ -44,6 +44,12 @@ KLineChartWidget::KLineChartWidget(QWidget* parent)
     : QWidget(parent) {
     setMinimumSize(420, 280);
     setMouseTracking(true);
+    titleFont_ = font();
+    titleFont_.setPointSizeF(titleFont_.pointSizeF() + 2.0);
+    titleFont_.setBold(true);
+    valueFont_ = font();
+    valueFont_.setPointSizeF(valueFont_.pointSizeF() + 7.0);
+    valueFont_.setBold(true);
     crosshairTimer_ = new QTimer(this);
     crosshairTimer_->setSingleShot(true);
     crosshairTimer_->setInterval(16);
@@ -267,10 +273,7 @@ void KLineChartWidget::paintEvent(QPaintEvent* event) {
 }
 
 void KLineChartWidget::drawHeader(QPainter& painter) {
-    QFont titleFont = font();
-    titleFont.setPointSizeF(titleFont.pointSizeF() + 2.0);
-    titleFont.setBold(true);
-    painter.setFont(titleFont);
+    painter.setFont(titleFont_);
     painter.setPen(dark_ ? QColor("#e6edf3") : QColor("#202a36"));
     painter.drawText(QRect(14, 7, width() - 320, 28), Qt::AlignLeft | Qt::AlignVCenter, symbol_);
 
@@ -295,10 +298,7 @@ void KLineChartWidget::drawHeader(QPainter& painter) {
     const QColor valueColor = !finite(change) ? (dark_ ? QColor("#8b93a3") : QColor("#657080"))
                                               : (change >= 0.0 ? upColor(dark_) : downColor(dark_));
 
-    QFont valueFont = font();
-    valueFont.setPointSizeF(valueFont.pointSizeF() + 7.0);
-    valueFont.setBold(true);
-    painter.setFont(valueFont);
+    painter.setFont(valueFont_);
     painter.setPen(valueColor);
     painter.drawText(
         QRect(width() - 300, 3, 286, 34), Qt::AlignRight | Qt::AlignVCenter, priceText(last));

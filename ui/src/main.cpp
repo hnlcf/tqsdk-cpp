@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
     parser.process(app);
 
     // Fusion keeps the layout consistent across Linux/Windows/macOS; the
-    // product theme is applied later via qss/palette.
+    // product theme is applied later via QPalette.
     QApplication::setStyle(QStyleFactory::create("Fusion"));
 
     QFont font = app.font();

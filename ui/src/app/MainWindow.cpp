@@ -541,7 +541,8 @@ void MainWindow::updatePositionDetail() {
 void MainWindow::applyTheme() {
     workspace_->chart()->setTheme(dark_);
     marketToolBar_->setThemeLabel(dark_);
-    qApp->setStyleSheet(themeStyle(dark_));
+    qApp->setStyleSheet(QString{});
+    qApp->setPalette(applicationPalette(dark_));
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
