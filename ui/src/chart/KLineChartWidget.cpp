@@ -285,12 +285,16 @@ void KLineChartWidget::drawCandles(QPainter&     painter,
         const double yClose = yFor(bar.close);
         const QColor color  = bar.close >= bar.open ? upColor(dark_) : downColor(dark_);
 
-        painter.setPen(QPen(color, 1.0));
-        painter.drawLine(QPointF(x, yFor(bar.high)), QPointF(x, yFor(bar.low)));
-
         const double top    = std::min(yOpen, yClose);
         const double bottom = std::max(yOpen, yClose);
         const QRectF body(x - bodyWidth / 2.0, top, bodyWidth, std::max(1.0, bottom - top));
+
+        // Draw the wick above and below the body separately. A single
+        // high->low line would run through the hollow interior.
+        painter.setPen(QPen(color, 1.0));
+        painter.drawLine(QPointF(x, yFor(bar.high)), QPointF(x, top));
+        painter.drawLine(QPointF(x, bottom), QPointF(x, yFor(bar.low)));
+
         if (bar.close >= bar.open) {
             // A-share/futures convention: rising candles are hollow red.
             painter.setBrush(Qt::NoBrush);
@@ -331,8 +335,17 @@ void KLineChartWidget::drawVolume(QPainter&     painter,
         const double h =
             plot.height() * static_cast<double>(bar.volume) / static_cast<double>(maxVolume);
         const double x = plot.left() + step * (i + 0.5);
-        painter.fillRect(QRectF(x - barWidth / 2.0, plot.bottom() - h, barWidth, std::max(1.0, h)),
-                         bar.close >= bar.open ? upColor(dark_) : downColor(dark_));
+        const QRectF volume(x - barWidth / 2.0, plot.bottom() - h, barWidth, std::max(1.0, h));
+        if (bar.close >= bar.open) {
+            // Match the hollow rising candle: outline-only red volume bar.
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(upColor(dark_), 1.0));
+            painter.drawRect(volume);
+        } else {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(downColor(dark_));
+            painter.drawRect(volume);
+        }
     }
 }
 
