@@ -100,19 +100,19 @@ QVariant QuoteTableModel::data(const QModelIndex& index, int role) const {
     if (role == Qt::ForegroundRole && (index.column() == ChangePercent ||
                                        index.column() == Change || index.column() == OiChange)) {
         if (!quote) {
-            return QBrush(QColor("#8b93a3"));
+            return QBrush(QColor("#8f8f8f"));
         }
         if (index.column() == OiChange) {
             if (!valid(quote->openInterest) || !valid(quote->preOpenInterest)) {
-                return QBrush(QColor("#8b93a3"));
+                return QBrush(QColor("#8f8f8f"));
             }
-            return QBrush(quote->openInterest >= quote->preOpenInterest ? QColor("#e43c4a")
-                                                                        : QColor("#2fbf71"));
+            return QBrush(quote->openInterest >= quote->preOpenInterest ? QColor("#e04a4a")
+                                                                        : QColor("#23b39a"));
         }
         if (!valid(changePercent(*quote))) {
-            return QBrush(QColor("#8b93a3"));
+            return QBrush(QColor("#8f8f8f"));
         }
-        return QBrush(changePercent(*quote) >= 0.0 ? QColor("#e43c4a") : QColor("#2fbf71"));
+        return QBrush(changePercent(*quote) >= 0.0 ? QColor("#e04a4a") : QColor("#23b39a"));
     }
 
     if (role == Qt::FontRole && index.column() == Symbol) {

@@ -193,7 +193,8 @@ WS messages ──► parse ──► pending MarketUpdate
 
 `ui/src/model/TradingModels.{h,cpp}`：
 
-- `PositionTableModel`：持仓；
+- `PositionTableModel`：持仓；新增持仓行必须走 `beginInsertRows/endInsertRows`，
+  否则 QTableView 的 rowCount 不会增长（CTP 持仓曾因此不可见）；
 - `OrderTableModel`：委托，按 order id 索引；
 - `TradeTableModel`：成交；
 - `TradeTapeModel`：分笔成交，最新在上、有界队列、时间/价格/手数/方向。
@@ -290,7 +291,7 @@ targeted stylesheet。压测对比：
 
 交易区域拆成独立组件：
 
-- `PositionsPanel`：持仓表；
+- `PositionsPanel`：持仓表；自选表行高 30px，应用字体 11pt；
 - `OrdersPanel`：委托表 + 撤单按钮 + 选中委托信号；
 - `TradesPanel`：成交表；
 - `AccountPanel`：权益/可用/保证金/风险度；

@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
     QApplication::setStyle(QStyleFactory::create("Fusion"));
 
     QFont font = app.font();
-    font.setPointSizeF(10.0);
+    font.setPointSizeF(11.0);
     app.setFont(font);
 
     tqsdk::ui::HttpWsNodeClient nodeClient;

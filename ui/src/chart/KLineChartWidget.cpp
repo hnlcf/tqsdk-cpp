@@ -19,11 +19,11 @@ bool finite(double value) {
 }
 
 QColor upColor(bool dark) {
-    return dark ? QColor("#e43c4a") : QColor("#c62828");
+    return dark ? QColor("#e04a4a") : QColor("#c94b4b");
 }
 
 QColor downColor(bool dark) {
-    return dark ? QColor("#2fbf71") : QColor("#1b8f5a");
+    return dark ? QColor("#23b39a") : QColor("#249c86");
 }
 
 QString priceText(double value) {
@@ -221,7 +221,7 @@ void KLineChartWidget::renderCache() {
         chartCache_ = QPixmap(pixelSize);
         chartCache_.setDevicePixelRatio(dpr);
     }
-    chartCache_.fill(dark_ ? QColor("#0d1117") : QColor("#f7f9fc"));
+    chartCache_.fill(dark_ ? QColor("#050505") : QColor("#f3f0eb"));
 
     QPainter painter(&chartCache_);
     painter.setRenderHint(QPainter::Antialiasing, true);
@@ -274,11 +274,11 @@ void KLineChartWidget::paintEvent(QPaintEvent* event) {
 
 void KLineChartWidget::drawHeader(QPainter& painter) {
     painter.setFont(titleFont_);
-    painter.setPen(dark_ ? QColor("#e6edf3") : QColor("#202a36"));
+    painter.setPen(dark_ ? QColor("#f0f0f0") : QColor("#2a2a2a"));
     painter.drawText(QRect(14, 7, width() - 320, 28), Qt::AlignLeft | Qt::AlignVCenter, symbol_);
 
     painter.setFont(font());
-    painter.setPen(dark_ ? QColor("#8b93a3") : QColor("#657080"));
+    painter.setPen(dark_ ? QColor("#8f8f8f") : QColor("#6f675f"));
     painter.drawText(QRect(14, 31, 150, 20), Qt::AlignLeft | Qt::AlignVCenter, interval_);
 
     double last = quote_.lastPrice;
@@ -295,7 +295,7 @@ void KLineChartWidget::drawHeader(QPainter& painter) {
     const double percent    = finite(change) && reference != 0.0
                                   ? change / reference * 100.0
                                   : std::numeric_limits<double>::quiet_NaN();
-    const QColor valueColor = !finite(change) ? (dark_ ? QColor("#8b93a3") : QColor("#657080"))
+    const QColor valueColor = !finite(change) ? (dark_ ? QColor("#8f8f8f") : QColor("#6f675f"))
                                               : (change >= 0.0 ? upColor(dark_) : downColor(dark_));
 
     painter.setFont(valueFont_);
@@ -314,7 +314,7 @@ void KLineChartWidget::drawHeader(QPainter& painter) {
 }
 
 void KLineChartWidget::drawEmpty(QPainter& painter) {
-    painter.setPen(dark_ ? QColor("#66717f") : QColor("#8b93a3"));
+    painter.setPen(dark_ ? QColor("#66717f") : QColor("#8f8f8f"));
     painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("等待 K 线数据"));
 }
 
@@ -322,8 +322,8 @@ void KLineChartWidget::drawGrid(QPainter&     painter,
                                 const QRectF& plot,
                                 double        minPrice,
                                 double        maxPrice) const {
-    const QColor grid = dark_ ? QColor("#202a36") : QColor("#dde3eb");
-    const QColor text = dark_ ? QColor("#7f8b99") : QColor("#6b7584");
+    const QColor grid = dark_ ? QColor("#2a2a2a") : QColor("#ded7cc");
+    const QColor text = dark_ ? QColor("#9a9a9a") : QColor("#6f675f");
     painter.setPen(QPen(grid, 1.0));
     for (int i = 0; i <= 4; ++i) {
         const double y = plot.top() + plot.height() * i / 4.0;
@@ -358,7 +358,7 @@ void KLineChartWidget::drawCandles(QPainter&     painter,
     auto yFor = [&](double price) {
         return plot.bottom() - (price - minPrice) / range * plot.height();
     };
-    const QColor text = dark_ ? QColor("#7f8b99") : QColor("#6b7584");
+    const QColor text = dark_ ? QColor("#9a9a9a") : QColor("#6f675f");
 
     for (int i = 0; i < count; ++i) {
         const auto& bar = bars_.at(first + i);
@@ -441,7 +441,7 @@ void KLineChartWidget::drawCrosshair(QPainter&     painter,
     if (!plot.contains(crosshair_)) {
         return;
     }
-    const QColor line = dark_ ? QColor("#596574") : QColor("#9aa4b2");
+    const QColor line = dark_ ? QColor("#6a6a6a") : QColor("#8a8176");
     painter.setPen(QPen(line, 1.0, Qt::DashLine));
     painter.drawLine(QPointF(crosshair_.x(), plot.top()), QPointF(crosshair_.x(), plot.bottom()));
     painter.drawLine(QPointF(plot.left(), crosshair_.y()), QPointF(plot.right(), crosshair_.y()));
@@ -449,10 +449,10 @@ void KLineChartWidget::drawCrosshair(QPainter&     painter,
     const double ratio = (plot.bottom() - crosshair_.y()) / plot.height();
     const double value = minPrice + ratio * (maxPrice - minPrice);
     painter.setPen(Qt::NoPen);
-    painter.setBrush(dark_ ? QColor("#263344") : QColor("#ffffff"));
+    painter.setBrush(dark_ ? QColor("#2a2a2a") : QColor("#ffffff"));
     const QRectF label(plot.right() + 4, crosshair_.y() - 9, 72, 18);
     painter.drawRect(label);
-    painter.setPen(dark_ ? QColor("#e6edf3") : QColor("#202a36"));
+    painter.setPen(dark_ ? QColor("#f0f0f0") : QColor("#2a2a2a"));
     painter.drawText(label, Qt::AlignCenter, priceText(value));
 
     const int first = firstVisibleBar();
@@ -464,8 +464,8 @@ void KLineChartWidget::drawCrosshair(QPainter&     painter,
         if (index >= 0 && index < bars_.size()) {
             const QString when = timeText(bars_.at(index).datetime);
             const QRectF  timeLabel(crosshair_.x() - 58.0, height() - 22.0, 116.0, 18.0);
-            painter.fillRect(timeLabel, dark_ ? QColor("#263344") : QColor("#ffffff"));
-            painter.setPen(dark_ ? QColor("#e6edf3") : QColor("#202a36"));
+            painter.fillRect(timeLabel, dark_ ? QColor("#2a2a2a") : QColor("#ffffff"));
+            painter.setPen(dark_ ? QColor("#f0f0f0") : QColor("#2a2a2a"));
             painter.drawText(timeLabel, Qt::AlignCenter, when);
         }
     }

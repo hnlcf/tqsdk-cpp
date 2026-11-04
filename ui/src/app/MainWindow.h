@@ -87,7 +87,7 @@ private:
     qint64            pendingChartDuration_ = 0;
     int               lastNodeState_        = -1;
 
-    bool dark_ = false;
+    bool dark_ = true;
 };
 
 } // namespace tqsdk::ui

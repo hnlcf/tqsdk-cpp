@@ -55,6 +55,12 @@ TablePanel::~TablePanel() {
     saveColumnState();
 }
 
+void TablePanel::setRowHeight(int height) {
+    if (view_ != nullptr && view_->verticalHeader() != nullptr && height > 0) {
+        view_->verticalHeader()->setDefaultSectionSize(height);
+    }
+}
+
 void TablePanel::installColumnMenu(const QString& settingsKey) {
     if (view_ == nullptr || view_->model() == nullptr || view_->horizontalHeader() == nullptr) {
         return;

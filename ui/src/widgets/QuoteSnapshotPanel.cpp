@@ -25,7 +25,7 @@ void setStyleIfChanged(QLabel* label, const QString& style) {
 
 void setMuted(QLabel* label, const QString& text) {
     setTextIfChanged(label, text);
-    setStyleIfChanged(label, QStringLiteral("color: #8b93a3;"));
+    setStyleIfChanged(label, QStringLiteral("color: #8f8f8f;"));
 }
 
 } // namespace
@@ -130,7 +130,7 @@ void QuoteSnapshotPanel::setQuote(const Quote* quote, const QString& instrumentN
             QStringLiteral("%1%2").arg(oiChange >= 0.0 ? "+" : "").arg(oiChange, 0, 'f', 0));
         setStyleIfChanged(oiChange_,
                           QStringLiteral("font-weight: 600; color: %1;")
-                              .arg(oiChange >= 0.0 ? "#e43c4a" : "#2fbf71"));
+                              .arg(oiChange >= 0.0 ? "#e04a4a" : "#23b39a"));
     } else {
         setMuted(oiChange_, QStringLiteral("—"));
     }

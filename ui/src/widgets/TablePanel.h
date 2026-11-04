@@ -26,6 +26,7 @@ public:
     ~TablePanel() override;
 
     QTableView* view() const { return view_; }
+    void        setRowHeight(int height);
 
     /// 右键表头显示/隐藏列，并以 settingsKey 持久化列显示、宽度和顺序。
     void installColumnMenu(const QString& settingsKey);

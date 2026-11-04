@@ -9,9 +9,9 @@
 namespace tqsdk::ui {
 namespace {
 
-constexpr const char* kAskColor = "#e43c4a";
-constexpr const char* kBidColor = "#2fbf71";
-constexpr const char* kMuted    = "#8b93a3";
+constexpr const char* kAskColor = "#e04a4a";
+constexpr const char* kBidColor = "#23b39a";
+constexpr const char* kMuted    = "#8f8f8f";
 
 QLabel* makeLabel(QWidget* parent, Qt::Alignment alignment = Qt::AlignRight | Qt::AlignVCenter) {
     auto* label = new QLabel(QStringLiteral("—"), parent);

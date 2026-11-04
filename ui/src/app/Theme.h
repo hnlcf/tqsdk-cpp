@@ -10,29 +10,30 @@ namespace tqsdk::ui {
 /// A non-empty application stylesheet installs QStyleSheetStyle for *every*
 /// widget; in perf profiles its renderRule()/QHash path was a major steady
 /// state cost even when the rule did not match. QPalette gives us the same
-/// dark/light base colors while leaving high-frequency widgets on Fusion's
-/// fast C++ path.
+/// Wenhua-like dark/light base colors while leaving high-frequency widgets on
+/// Fusion's fast C++ path.
 inline QPalette applicationPalette(bool dark) {
-    const QColor background = dark ? QColor("#0d1117") : QColor("#f5f7fb");
-    const QColor panel      = dark ? QColor("#111821") : QColor("#ffffff");
-    const QColor text       = dark ? QColor("#d9e2ec") : QColor("#202a36");
-    const QColor muted      = dark ? QColor("#8b93a3") : QColor("#657080");
-    const QColor line       = dark ? QColor("#263140") : QColor("#dce3ec");
-    const QColor selected   = dark ? QColor("#1c2a3a") : QColor("#e6f0ff");
-    const QColor accent     = dark ? QColor("#2f81f7") : QColor("#0b66c3");
+    const QColor background = dark ? QColor("#050505") : QColor("#f3f0eb");
+    const QColor panel      = dark ? QColor("#0b0b0b") : QColor("#ffffff");
+    const QColor elevated   = dark ? QColor("#141414") : QColor("#faf8f4");
+    const QColor text        = dark ? QColor("#e6e6e6") : QColor("#242424");
+    const QColor muted       = dark ? QColor("#8f8f8f") : QColor("#6f675f");
+    const QColor line        = dark ? QColor("#2b2b2b") : QColor("#ded7cc");
+    const QColor selected    = dark ? QColor("#3b2020") : QColor("#f3dede");
+    const QColor accent      = dark ? QColor("#d94a4a") : QColor("#b43a3a");
 
     QPalette palette;
     palette.setColor(QPalette::Window, background);
     palette.setColor(QPalette::WindowText, text);
     palette.setColor(QPalette::Base, panel);
-    palette.setColor(QPalette::AlternateBase, background);
+    palette.setColor(QPalette::AlternateBase, elevated);
     palette.setColor(QPalette::Text, text);
     palette.setColor(QPalette::Button, panel);
     palette.setColor(QPalette::ButtonText, text);
     palette.setColor(QPalette::BrightText, QColor("#ffffff"));
     palette.setColor(QPalette::Highlight, selected);
     palette.setColor(QPalette::HighlightedText, text);
-    palette.setColor(QPalette::ToolTipBase, panel);
+    palette.setColor(QPalette::ToolTipBase, elevated);
     palette.setColor(QPalette::ToolTipText, text);
     palette.setColor(QPalette::PlaceholderText, muted);
     palette.setColor(QPalette::Link, accent);

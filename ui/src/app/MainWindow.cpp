@@ -23,6 +23,7 @@
 #include <QDockWidget>
 #include <QMenu>
 #include <QMenuBar>
+#include <QSettings>
 #include <QSortFilterProxyModel>
 #include <QStatusBar>
 #include <QTableView>
@@ -36,6 +37,7 @@ MainWindow::MainWindow(NodeClient* nodeClient, QWidget* parent)
     setWindowTitle(tr("TQSDK Terminal (Qt)"));
     resize(1480, 940);
     setDockNestingEnabled(true);
+    dark_ = QSettings().value(QStringLiteral("ui/theme/dark"), true).toBool();
 
     marketStore_    = new MarketStore(this);
     watchModel_     = new QuoteTableModel(this);
@@ -543,6 +545,7 @@ void MainWindow::applyTheme() {
     marketToolBar_->setThemeLabel(dark_);
     qApp->setStyleSheet(QString{});
     qApp->setPalette(applicationPalette(dark_));
+    QSettings().setValue(QStringLiteral("ui/theme/dark"), dark_);
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {

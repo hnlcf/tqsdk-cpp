@@ -95,6 +95,7 @@ void WorkspaceLayout::build() {
     watchPanel->installColumnMenu(QStringLiteral("watchlist"));
     watchTable_ = watchPanel->view();
     watchTable_->setObjectName(QStringLiteral("watchTable"));
+    watchPanel->setRowHeight(30);
     connect(watchTable_->selectionModel(),
             &QItemSelectionModel::currentRowChanged,
             this,

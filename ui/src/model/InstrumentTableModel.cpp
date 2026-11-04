@@ -154,10 +154,10 @@ QVariant InstrumentTableModel::data(const QModelIndex& index, int role) const {
         const auto quote = quotes_.constFind(instrument.instrumentId);
         if (quote == quotes_.constEnd() || !std::isfinite(quote->lastPrice) ||
             !std::isfinite(quote->preSettlement) || quote->preSettlement == 0.0) {
-            return QColor("#8b93a3");
+            return QColor("#8f8f8f");
         }
         const double pct = (quote->lastPrice - quote->preSettlement) / quote->preSettlement * 100.0;
-        return pct >= 0.0 ? QColor("#e43c4a") : QColor("#2fbf71");
+        return pct >= 0.0 ? QColor("#e04a4a") : QColor("#23b39a");
     }
     if (role != Qt::DisplayRole) {
         return {};

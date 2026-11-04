@@ -31,9 +31,9 @@ inline double changePercent(const Quote& quote) {
 
 inline QString quoteColor(const Quote& quote) {
     const double change = changePercent(quote);
-    return !std::isfinite(change) ? QStringLiteral("#8b93a3")
-                                  : (change >= 0.0 ? QStringLiteral("#e43c4a")
-                                                   : QStringLiteral("#2fbf71"));
+    return !std::isfinite(change)
+               ? QStringLiteral("#8f8f8f")
+               : (change >= 0.0 ? QStringLiteral("#e04a4a") : QStringLiteral("#23b39a"));
 }
 
 } // namespace tqsdk::ui

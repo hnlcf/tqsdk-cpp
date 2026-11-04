@@ -106,18 +106,30 @@ void PositionTableModel::setPositions(const QVector<Position>& positions) {
 }
 
 void PositionTableModel::applyPositions(const QVector<Position>& positions) {
+    QSet<int> updatedRows;
     for (const auto& incoming : positions) {
-        auto it = std::find_if(positions_.begin(), positions_.end(), [&](const Position& p) {
-            return p.instrumentId == incoming.instrumentId;
-        });
-        if (it == positions_.end()) {
+        int existing = -1;
+        for (int row = 0; row < positions_.size(); ++row) {
+            if (positions_.at(row).instrumentId == incoming.instrumentId) {
+                existing = row;
+                break;
+            }
+        }
+        if (existing < 0) {
+            // Qt views only learn about a new row through beginInsertRows().
+            // Pushing into the vector and emitting dataChanged() leaves the
+            // view's rowCount at zero, which is why CTP positions were invisible.
+            const int row = positions_.size();
+            beginInsertRows({}, row, row);
             positions_.push_back(incoming);
+            endInsertRows();
         } else {
-            *it = incoming;
+            positions_[existing] = incoming;
+            updatedRows.insert(existing);
         }
     }
-    if (!positions_.isEmpty()) {
-        emit dataChanged(index(0, 0), index(positions_.size() - 1, ColumnCount - 1));
+    for (const int row : updatedRows) {
+        emit dataChanged(index(row, 0), index(row, ColumnCount - 1));
     }
 }
 
@@ -131,9 +143,9 @@ QVariant PositionTableModel::data(const QModelIndex& index, int role) const {
     if (role == Qt::ForegroundRole && index.column() == FloatProfit) {
         const auto& position = positions_.at(index.row());
         if (!std::isfinite(position.floatProfit)) {
-            return QColor("#8b93a3");
+            return QColor("#8f8f8f");
         }
-        return position.floatProfit >= 0.0 ? QColor("#e43c4a") : QColor("#2fbf71");
+        return position.floatProfit >= 0.0 ? QColor("#e04a4a") : QColor("#23b39a");
     }
     if (role == Qt::DisplayRole) {
         return displayText(index.column(), positions_.at(index.row()));
@@ -235,7 +247,7 @@ QVariant OrderTableModel::data(const QModelIndex& index, int role) const {
     }
     if (role == Qt::ForegroundRole && index.column() == Status) {
         const auto& order = orders_.at(index.row());
-        return order.isDead ? QColor("#8b93a3") : QColor("#43d17c");
+        return order.isDead ? QColor("#8f8f8f") : QColor("#43d17c");
     }
     if (role == Qt::DisplayRole) {
         return displayText(index.column(), orders_.at(index.row()));
@@ -350,7 +362,7 @@ QVariant TradeTapeModel::data(const QModelIndex& index, int role) const {
                                       : QVariant(Qt::AlignRight | Qt::AlignVCenter);
     }
     if (role == Qt::ForegroundRole && (index.column() == Price || index.column() == Direction)) {
-        return tick.buy ? QColor("#e43c4a") : QColor("#2fbf71");
+        return tick.buy ? QColor("#e04a4a") : QColor("#23b39a");
     }
     if (role != Qt::DisplayRole) {
         return {};

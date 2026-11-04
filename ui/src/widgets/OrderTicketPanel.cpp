@@ -63,9 +63,39 @@ OrderTicketPanel::OrderTicketPanel(QWidget* parent)
     buyButton_->setEnabled(false);
     sellButton_->setEnabled(false);
     closeButton_->setEnabled(false);
-    buyButton_->setStyleSheet("background:#c62828;color:white;font-weight:600;padding:9px;");
-    sellButton_->setStyleSheet("background:#1b8f5a;color:white;font-weight:600;padding:9px;");
-    closeButton_->setStyleSheet("background:#9a6b00;color:white;font-weight:600;padding:9px;");
+    const auto styleActionButton = [](QPushButton*   button,
+                                      const QString& base,
+                                      const QString& hover,
+                                      const QString& pressed,
+                                      const QString& border,
+                                      const QString& disabled) {
+        button->setStyleSheet(
+            QStringLiteral("QPushButton { background:%1; color:#ffffff; font-weight:600; "
+                           "padding:9px 14px; border:1px solid %4; border-radius:3px; }"
+                           "QPushButton:hover { background:%2; }"
+                           "QPushButton:pressed { background:%3; }"
+                           "QPushButton:disabled { background:%5; color:#8f8f8f; "
+                           "border-color:#3a3a3a; }")
+                .arg(base, hover, pressed, border, disabled));
+    };
+    styleActionButton(buyButton_,
+                      QStringLiteral("#c94b4b"),
+                      QStringLiteral("#d85b5b"),
+                      QStringLiteral("#a83b3b"),
+                      QStringLiteral("#e06a6a"),
+                      QStringLiteral("#3a2424"));
+    styleActionButton(sellButton_,
+                      QStringLiteral("#249c86"),
+                      QStringLiteral("#2bb39b"),
+                      QStringLiteral("#187b6b"),
+                      QStringLiteral("#36c4aa"),
+                      QStringLiteral("#1d3431"));
+    styleActionButton(closeButton_,
+                      QStringLiteral("#a8792f"),
+                      QStringLiteral("#bd8a38"),
+                      QStringLiteral("#865d20"),
+                      QStringLiteral("#d09a48"),
+                      QStringLiteral("#352c1d"));
     buttonLayout->addWidget(buyButton_, 1);
     buttonLayout->addWidget(sellButton_, 1);
     buttonLayout->addWidget(closeButton_, 1);
@@ -73,7 +103,7 @@ OrderTicketPanel::OrderTicketPanel(QWidget* parent)
     status_ = new QLabel(tr("未连接交易账户"), this);
     status_->setObjectName(QStringLiteral("orderStatus"));
     status_->setWordWrap(true);
-    status_->setStyleSheet("color: #8b93a3;");
+    status_->setStyleSheet("color: #8f8f8f;");
 
     form->addRow(tr("合约"), symbolEdit_);
     form->addRow(tr("价格"), priceBox_);
@@ -108,8 +138,8 @@ void OrderTicketPanel::setCloseEnabled(bool enabled) {
 
 void OrderTicketPanel::setStatus(const QString& text, bool error) {
     status_->setText(text);
-    status_->setStyleSheet(error ? QStringLiteral("color: #e43c4a;")
-                                 : QStringLiteral("color: #8b93a3;"));
+    status_->setStyleSheet(error ? QStringLiteral("color: #e04a4a;")
+                                 : QStringLiteral("color: #8f8f8f;"));
 }
 
 void OrderTicketPanel::setPriceIfEmpty(double price) {

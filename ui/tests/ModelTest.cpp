@@ -92,8 +92,10 @@ void ModelTest::tradingModelsMerge() {
     position.openPriceLong = 3000.0;
     position.lastPrice     = 3010.0;
     position.floatProfit   = 200.0;
+    QSignalSpy inserted(&positions, &QAbstractItemModel::rowsInserted);
     positions.applyPositions({position});
     QCOMPARE(positions.rowCount(), 1);
+    QCOMPARE(inserted.count(), 1);
     QCOMPARE(positions.data(positions.index(0, PositionTableModel::Symbol)).toString(),
              QString("SHFE.rb2701"));
     position.floatProfit = 210.0;
