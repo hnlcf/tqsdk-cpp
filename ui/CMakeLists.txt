@@ -15,6 +15,8 @@ set(TQSDK_UI_SOURCES
     src/main.cpp
     src/app/MainWindow.cpp
     src/app/MainWindow.h
+    src/app/TradingController.cpp
+    src/app/TradingController.h
     src/net/NodeClient.cpp
     src/net/NodeClient.h
     src/net/Protocol.cpp
@@ -40,6 +42,8 @@ set(TQSDK_UI_SOURCES
     src/widgets/QuoteSnapshotPanel.h
     src/widgets/OrderTicketPanel.cpp
     src/widgets/OrderTicketPanel.h
+    src/widgets/MarketToolBar.cpp
+    src/widgets/MarketToolBar.h
     src/widgets/TradeTapePanel.cpp
     src/widgets/TradeTapePanel.h
     src/widgets/OrderBookPanel.cpp
@@ -178,6 +182,8 @@ if(TQSDK_BUILD_UI_TESTS)
         tests/MainWindowTest.cpp
         src/app/MainWindow.cpp
         src/app/MainWindow.h
+        src/app/TradingController.cpp
+        src/app/TradingController.h
         src/chart/KLineChartWidget.cpp
         src/chart/KLineChartWidget.h
         src/model/MarketStore.cpp
@@ -195,6 +201,8 @@ if(TQSDK_BUILD_UI_TESTS)
         src/net/Protocol.h
         src/widgets/TablePanel.cpp
         src/widgets/TablePanel.h
+        src/widgets/MarketToolBar.cpp
+        src/widgets/MarketToolBar.h
         src/widgets/QuoteSnapshotPanel.cpp
         src/widgets/QuoteSnapshotPanel.h
         src/widgets/OrderTicketPanel.cpp
@@ -229,6 +237,8 @@ if(TQSDK_BUILD_UI_TESTS)
         src/widgets/TradingPanels.h
         src/widgets/OrderBookPanel.cpp
         src/widgets/OrderBookPanel.h
+        src/widgets/MarketToolBar.cpp
+        src/widgets/MarketToolBar.h
         src/widgets/TradeTapePanel.cpp
         src/widgets/TradeTapePanel.h
         src/widgets/TablePanel.cpp

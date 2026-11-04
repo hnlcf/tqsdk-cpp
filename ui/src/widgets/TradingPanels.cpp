@@ -110,45 +110,55 @@ void AccountPanel::setAccount(const Account& account) {
                        : QStringLiteral("—"));
 }
 
-OrderDetailPanel::OrderDetailPanel(QWidget* parent)
+PositionDetailPanel::PositionDetailPanel(QWidget* parent)
     : QWidget(parent) {
     auto* form = new QFormLayout(this);
     form->setContentsMargins(12, 12, 12, 12);
-    orderId_ = new QLabel(QStringLiteral("—"), this);
-    orderId_->setObjectName(QStringLiteral("orderDetailId"));
-    symbol_ = new QLabel(QStringLiteral("—"), this);
-    side_   = new QLabel(QStringLiteral("—"), this);
-    price_  = new QLabel(QStringLiteral("—"), this);
-    volume_ = new QLabel(QStringLiteral("—"), this);
-    status_ = new QLabel(QStringLiteral("—"), this);
-    form->addRow(tr("委托号"), orderId_);
+    symbol_      = new QLabel(QStringLiteral("—"), this);
+    longVolume_  = new QLabel(QStringLiteral("—"), this);
+    shortVolume_ = new QLabel(QStringLiteral("—"), this);
+    openLong_    = new QLabel(QStringLiteral("—"), this);
+    openShort_   = new QLabel(QStringLiteral("—"), this);
+    last_        = new QLabel(QStringLiteral("—"), this);
+    floatProfit_ = new QLabel(QStringLiteral("—"), this);
+    margin_      = new QLabel(QStringLiteral("—"), this);
+    symbol_->setObjectName(QStringLiteral("positionDetailSymbol"));
     form->addRow(tr("合约"), symbol_);
-    form->addRow(tr("方向/开平"), side_);
-    form->addRow(tr("价格"), price_);
-    form->addRow(tr("数量"), volume_);
-    form->addRow(tr("状态"), status_);
+    form->addRow(tr("多头/空头"), new QLabel(QStringLiteral("持仓"), this));
+    form->addRow(tr("多"), longVolume_);
+    form->addRow(tr("空"), shortVolume_);
+    form->addRow(tr("开多价"), openLong_);
+    form->addRow(tr("开空价"), openShort_);
+    form->addRow(tr("最新价"), last_);
+    form->addRow(tr("浮动盈亏"), floatProfit_);
+    form->addRow(tr("保证金"), margin_);
 }
 
-void OrderDetailPanel::setOrder(const Order* order) {
-    if (order == nullptr) {
+void PositionDetailPanel::setPosition(const Position* position) {
+    if (position == nullptr) {
         clear();
         return;
     }
-    orderId_->setText(order->orderId.isEmpty() ? QStringLiteral("—") : order->orderId);
-    symbol_->setText(order->instrumentId.isEmpty() ? QStringLiteral("—") : order->instrumentId);
-    side_->setText(QStringLiteral("%1 / %2").arg(order->direction, order->offset));
-    price_->setText(priceText(order->limitPrice));
-    volume_->setText(QStringLiteral("%1 / %2").arg(order->volumeLeft).arg(order->volumeOrigin));
-    status_->setText(order->status);
+    symbol_->setText(position->instrumentId.isEmpty() ? QStringLiteral("—")
+                                                      : position->instrumentId);
+    longVolume_->setText(QString::number(position->volumeLong));
+    shortVolume_->setText(QString::number(position->volumeShort));
+    openLong_->setText(priceText(position->openPriceLong));
+    openShort_->setText(priceText(position->openPriceShort));
+    last_->setText(priceText(position->lastPrice));
+    floatProfit_->setText(priceText(position->floatProfit));
+    margin_->setText(priceText(position->margin));
 }
 
-void OrderDetailPanel::clear() {
-    orderId_->setText(QStringLiteral("—"));
+void PositionDetailPanel::clear() {
     symbol_->setText(QStringLiteral("—"));
-    side_->setText(QStringLiteral("—"));
-    price_->setText(QStringLiteral("—"));
-    volume_->setText(QStringLiteral("—"));
-    status_->setText(QStringLiteral("—"));
+    longVolume_->setText(QStringLiteral("—"));
+    shortVolume_->setText(QStringLiteral("—"));
+    openLong_->setText(QStringLiteral("—"));
+    openShort_->setText(QStringLiteral("—"));
+    last_->setText(QStringLiteral("—"));
+    floatProfit_->setText(QStringLiteral("—"));
+    margin_->setText(QStringLiteral("—"));
 }
 
 } // namespace tqsdk::ui

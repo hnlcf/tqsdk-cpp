@@ -111,12 +111,7 @@ HttpWsNodeClient::HttpWsNodeClient(QObject* parent)
         scheduleReconnect();
     });
     connect(&socket_, &QWebSocket::textMessageReceived, this, [this](const QString& text) {
-        if (parser_ == nullptr) {
-            return;
-        }
-        const QByteArray payload = text.toUtf8();
-        QMetaObject::invokeMethod(
-            parser_, "parseWsMessage", Qt::QueuedConnection, Q_ARG(QByteArray, payload));
+        enqueueWsPayload(text.toUtf8());
     });
     connect(&socket_, &QWebSocket::errorOccurred, this, [this](QAbstractSocket::SocketError) {
         emit errorOccurred(QStringLiteral("WebSocket: %1").arg(socket_.errorString()));
@@ -153,6 +148,8 @@ void HttpWsNodeClient::connectToNode(const QUrl& nodeUrl) {
 
     nodeUrl_          = nodeUrl;
     manualDisconnect_ = false;
+    wsInputQueue_.clear();
+    wsInFlight_       = false;
     reconnectDelayMs_ = 1000;
     reconnectTimer_.stop();
     if (socket_.state() != QAbstractSocket::UnconnectedState) {
@@ -164,6 +161,8 @@ void HttpWsNodeClient::connectToNode(const QUrl& nodeUrl) {
 void HttpWsNodeClient::disconnectFromNode() {
     manualDisconnect_ = true;
     reconnectTimer_.stop();
+    wsInputQueue_.clear();
+    wsInFlight_ = false;
     socket_.close();
     setState(State::Disconnected, QStringLiteral("手动断开"));
 }
@@ -202,6 +201,34 @@ void HttpWsNodeClient::sendSubscribe() {
     }
     const QJsonDocument document(makeSubscribe(subscription_));
     socket_.sendTextMessage(QString::fromUtf8(document.toJson(QJsonDocument::Compact)));
+}
+
+void HttpWsNodeClient::enqueueWsPayload(const QByteArray& payload) {
+    if (parser_ == nullptr) {
+        return;
+    }
+    // 有界原始报文队列：worker 处理完一条才投递下一条，防止网络洪峰把
+    // worker 的 Qt 事件队列无限撑大；极端情况下丢弃最旧报文。
+    constexpr int kMaxQueuedWsPayloads = 8192;
+    if (wsInputQueue_.size() >= kMaxQueuedWsPayloads) {
+        wsInputQueue_.dequeue();
+        ++wsDropped_;
+    }
+    wsInputQueue_.enqueue(payload);
+    dispatchNextWsPayload();
+}
+
+void HttpWsNodeClient::dispatchNextWsPayload() {
+    if (parser_ == nullptr || wsInFlight_ || wsInputQueue_.isEmpty()) {
+        return;
+    }
+    const QByteArray payload = wsInputQueue_.dequeue();
+    wsInFlight_              = true;
+    const bool scheduled     = QMetaObject::invokeMethod(
+        parser_, "parseWsMessage", Qt::QueuedConnection, Q_ARG(QByteArray, payload));
+    if (!scheduled) {
+        wsInFlight_ = false;
+    }
 }
 
 void HttpWsNodeClient::emitMarketUpdate(const MarketUpdate& update) {

@@ -1,4 +1,5 @@
 #include "model/TradingModels.h"
+#include "widgets/MarketToolBar.h"
 #include "widgets/OrderBookPanel.h"
 #include "widgets/OrderTicketPanel.h"
 #include "widgets/QuoteSnapshotPanel.h"
@@ -9,6 +10,7 @@
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QTableView>
+#include <QLineEdit>
 #include <QtTest>
 
 using namespace tqsdk::ui;
@@ -21,9 +23,10 @@ private slots:
     void orderTicketEmitsActions();
     void accountPanelShowsAccount();
     void orderBookShowsFiveLevels();
-    void orderDetailShowsSelectedOrder();
+    void positionDetailShowsSelectedPosition();
     void tradingPanelsRemainIndependent();
     void tradeTapePanelOwnsBoundedView();
+    void marketToolBarEmitsSearchText();
 };
 
 void WidgetsTest::quotePanelFormatsAndClears() {
@@ -126,20 +129,20 @@ void WidgetsTest::orderBookShowsFiveLevels() {
              QStringLiteral("3000.00"));
 }
 
-void WidgetsTest::orderDetailShowsSelectedOrder() {
-    OrderDetailPanel panel;
-    Order            order;
-    order.orderId      = QStringLiteral("42");
-    order.instrumentId = QStringLiteral("SHFE.rb2701");
-    order.direction    = QStringLiteral("BUY");
-    order.offset       = QStringLiteral("OPEN");
-    order.limitPrice   = 3000.0;
-    order.volumeOrigin = 2;
-    order.volumeLeft   = 1;
-    order.status       = QStringLiteral("ALIVE");
-    panel.setOrder(&order);
-    QCOMPARE(panel.findChild<QLabel*>(QStringLiteral("orderDetailId"))->text(),
-             QStringLiteral("42"));
+void WidgetsTest::positionDetailShowsSelectedPosition() {
+    PositionDetailPanel panel;
+    Position            position;
+    position.instrumentId   = QStringLiteral("SHFE.rb2701");
+    position.volumeLong     = 2;
+    position.volumeShort    = 1;
+    position.openPriceLong  = 3000.0;
+    position.openPriceShort = 3010.0;
+    position.lastPrice      = 3005.0;
+    position.floatProfit    = 100.0;
+    position.margin         = 6000.0;
+    panel.setPosition(&position);
+    QCOMPARE(panel.findChild<QLabel*>(QStringLiteral("positionDetailSymbol"))->text(),
+             QStringLiteral("SHFE.rb2701"));
     panel.clear();
 }
 
@@ -178,6 +181,17 @@ void WidgetsTest::tradeTapePanelOwnsBoundedView() {
     QVERIFY(panel.view() != nullptr);
     QCOMPARE(panel.view()->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOff);
     QCOMPARE(panel.view()->selectionMode(), QAbstractItemView::NoSelection);
+}
+
+void WidgetsTest::marketToolBarEmitsSearchText() {
+    MarketToolBar toolbar;
+    QSignalSpy    search(&toolbar, &MarketToolBar::searchTextChanged);
+    auto*         edit = toolbar.findChild<QLineEdit*>(QStringLiteral("marketSearch"));
+    QVERIFY(edit != nullptr);
+    edit->setText(QStringLiteral("rb"));
+    QCOMPARE(search.count(), 1);
+    QCOMPARE(search.first().first().toString(), QStringLiteral("rb"));
+    toolbar.setCompletions({QStringLiteral("SHFE.rb2701  螺纹钢2701")});
 }
 
 QTEST_MAIN(WidgetsTest)

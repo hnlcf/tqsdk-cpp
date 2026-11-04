@@ -44,8 +44,8 @@ signals:
     void selectionChanged(const QString& orderId);
 
 private:
-    OrderTableModel* model_ = nullptr;
-    QTableView*      view_  = nullptr;
+    OrderTableModel* model_  = nullptr;
+    QTableView*      view_   = nullptr;
     QPushButton*     cancel_ = nullptr;
 };
 
@@ -76,22 +76,24 @@ private:
     QLabel* risk_      = nullptr;
 };
 
-/// 选中委托/成交的明细字段面板。
-class OrderDetailPanel final : public QWidget {
+/// 选中持仓的明细字段面板。
+class PositionDetailPanel final : public QWidget {
     Q_OBJECT
 
 public:
-    explicit OrderDetailPanel(QWidget* parent = nullptr);
-    void setOrder(const Order* order);
+    explicit PositionDetailPanel(QWidget* parent = nullptr);
+    void setPosition(const Position* position);
     void clear();
 
 private:
-    QLabel* orderId_ = nullptr;
-    QLabel* symbol_  = nullptr;
-    QLabel* side_    = nullptr;
-    QLabel* price_   = nullptr;
-    QLabel* volume_  = nullptr;
-    QLabel* status_  = nullptr;
+    QLabel* symbol_      = nullptr;
+    QLabel* longVolume_  = nullptr;
+    QLabel* shortVolume_ = nullptr;
+    QLabel* openLong_    = nullptr;
+    QLabel* openShort_   = nullptr;
+    QLabel* last_        = nullptr;
+    QLabel* floatProfit_ = nullptr;
+    QLabel* margin_      = nullptr;
 };
 
 } // namespace tqsdk::ui

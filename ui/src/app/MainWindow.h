@@ -6,15 +6,11 @@
 #include <QMainWindow>
 #include <QStringList>
 
-class QCompleter;
 class QCloseEvent;
 class QDockWidget;
 class QDialog;
 class QLabel;
-class QLineEdit;
-class QPushButton;
 class QSortFilterProxyModel;
-class QStringListModel;
 class QTableView;
 class QTimer;
 
@@ -23,7 +19,7 @@ namespace tqsdk::ui {
 class AccountPanel;
 class InstrumentTableModel;
 class OrderBookPanel;
-class OrderDetailPanel;
+class PositionDetailPanel;
 class OrderTicketPanel;
 class OrdersPanel;
 class PositionsPanel;
@@ -32,12 +28,14 @@ class TradeTapePanel;
 class TradesPanel;
 class KLineChartWidget;
 class MarketStore;
+class MarketToolBar;
 class NodeClient;
 class OrderTableModel;
 class PositionTableModel;
 class QuoteTableModel;
 class TradeTableModel;
 class TradeTapeModel;
+class TradingController;
 
 /// 主窗口是 UI 工作区的编排器，而不是数据源。
 ///
@@ -86,9 +84,7 @@ private:
     void              updateQuotePanel();
     void              updateAccountPanel(const Account& account);
     void              updateOrderControls();
-    void              updateOrderDetail();
-    void              submitOrder(Direction direction, Offset offset);
-    void              cancelSelectedOrder();
+    void              updatePositionDetail();
     const Instrument* findInstrument(const QString& symbol) const;
     void              requestOptionChain();
     void              applyTheme();
@@ -110,25 +106,22 @@ private:
     QDialog*               chartDialog_        = nullptr;
     QTimer*                workspaceSaveTimer_ = nullptr;
     QHash<QString, Quote>  latestQuotes_;
+    TradingController*     tradingController_ = nullptr;
 
-    QTableView*         watchTable_        = nullptr;
-    QTableView*         futuresTable_      = nullptr;
-    QTableView*         callsTable_        = nullptr;
-    QTableView*         putsTable_         = nullptr;
-    QLineEdit*          search_            = nullptr;
-    QCompleter*         searchCompleter_   = nullptr;
-    QStringListModel*   searchCompletions_ = nullptr;
-    QPushButton*        addSymbolButton_   = nullptr;
-    QPushButton*        componentsButton_  = nullptr;
-    QuoteSnapshotPanel* quotePanel_        = nullptr;
-    OrderBookPanel*     orderBookPanel_    = nullptr;
-    TradeTapePanel*     tradeTapePanel_    = nullptr;
-    OrderTicketPanel*   orderTicket_       = nullptr;
-    PositionsPanel*     positionsPanel_    = nullptr;
-    OrdersPanel*        ordersPanel_       = nullptr;
-    TradesPanel*        tradesPanel_       = nullptr;
-    AccountPanel*       accountPanel_      = nullptr;
-    OrderDetailPanel*   orderDetailPanel_  = nullptr;
+    QTableView*          watchTable_          = nullptr;
+    QTableView*          futuresTable_        = nullptr;
+    QTableView*          callsTable_          = nullptr;
+    QTableView*          putsTable_           = nullptr;
+    MarketToolBar*       marketToolBar_       = nullptr;
+    QuoteSnapshotPanel*  quotePanel_          = nullptr;
+    OrderBookPanel*      orderBookPanel_      = nullptr;
+    TradeTapePanel*      tradeTapePanel_      = nullptr;
+    OrderTicketPanel*    orderTicket_         = nullptr;
+    PositionsPanel*      positionsPanel_      = nullptr;
+    OrdersPanel*         ordersPanel_         = nullptr;
+    TradesPanel*         tradesPanel_         = nullptr;
+    AccountPanel*        accountPanel_        = nullptr;
+    PositionDetailPanel* positionDetailPanel_ = nullptr;
 
     QDockWidget* watchDock_     = nullptr;
     QDockWidget* quoteDock_     = nullptr;
@@ -143,17 +136,13 @@ private:
     QDockWidget* futuresDock_   = nullptr;
     QDockWidget* optionsDock_   = nullptr;
 
-    QLabel*      connectionLabel_ = nullptr;
-    QLabel*      futuresStatus_   = nullptr;
-    QPushButton* themeButton_     = nullptr;
+    QLabel* futuresStatus_ = nullptr;
 
     QStringList watchlist_;
     QString     selectedSymbol_     = QStringLiteral("SHFE.rb2701");
     qint64      selectedDurationNs_ = 86'400'000'000'000LL;
     QString     selectedInterval_   = QStringLiteral("1d");
     bool        dark_               = false;
-    bool        nodeReady_          = false;
-    bool        accountLoaded_      = false;
 };
 
 } // namespace tqsdk::ui

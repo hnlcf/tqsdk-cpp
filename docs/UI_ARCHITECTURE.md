@@ -256,12 +256,19 @@ WS messages ──► parse ──► pending MarketUpdate
 - `OrdersPanel`：委托表 + 撤单按钮 + 选中委托信号；
 - `TradesPanel`：成交表；
 - `AccountPanel`：权益/可用/保证金/风险度；
-- `OrderDetailPanel`：选中委托的明细字段。
+- `PositionDetailPanel`：选中持仓的明细字段（当前“明细”即持仓明细）。
 
 这些组件默认以 tabify 的独立 QDockWidget 显示在底部；三键下单是另一个独立
 dock，位于交易表格 dock 组右侧。MainWindow 只连接它们与模型/NodeClient。
 
-### 5.5 TablePanel
+### 5.5 MarketToolBar / TradingController
+
+- `MarketToolBar`：搜索/补全、加入自选、组件菜单、周期、连接状态和主题；
+- `TradingController`：下单校验、OrderRequest 构造、平仓方向、撤单和交易按钮状态。
+
+`MainWindow` 现在只负责创建 dock、注入依赖、连接这些 controller 和做最终布局协调。
+
+### 5.6 TablePanel
 
 `ui/src/widgets/TablePanel.{h,cpp}`：
 
@@ -377,7 +384,7 @@ tqsdk-ui-parser-tests    worker parse, burst coalescing
 tqsdk-ui-chart-tests     chart viewport, drag, wheel, paint smoke test
 tqsdk-ui-table-tests     TablePanel column order/width/hidden persistence
 tqsdk-ui-window-tests    MainWindow chart/selection integration + QSettings restore
-tqsdk-ui-panel-tests     Quote/orderbook/trading panels formatting and actions
+tqsdk-ui-panel-tests     Quote/orderbook/tape/trading panels and toolbar formatting/actions
 ```
 
 运行：
@@ -388,7 +395,8 @@ ctest --test-dir build-ui --output-on-failure
 ```
 
 GUI 组件测试使用 offscreen platform；MainWindow 集成测试使用 FakeNodeClient，
-验证恢复图表合约/周期/视口和关闭时写回 QSettings：
+验证恢复图表合约/周期/视口和关闭时写回 QSettings。P2 还增加了 2000 条行情
+突发合帧测试和 1000 条合约增量加载测试。
 
 ```text
 QT_QPA_PLATFORM=offscreen

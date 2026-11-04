@@ -38,17 +38,17 @@ private slots:
         QSignalSpy       updates(&worker, &JsonParserWorker::marketUpdateParsed);
         worker.parseWsMessage(QByteArray(
             R"json({"type":"snapshot","data":{"quotes":{"SHFE.rb2701":{"last_price":3000.0,"pre_settlement":2980.0,"volume":100}},"klines":{}}})json"));
-        for (int i = 0; i < 200; ++i) {
+        for (int i = 0; i < 2000; ++i) {
             const QByteArray payload = QByteArray("{\"type\":\"diff\",\"data\":{\"quotes\":{\"SHFE."
                                                   "rb2701\":{\"last_price\":3001.0,\"volume\":") +
                                        QByteArray::number(101 + i) + QByteArray("}}}}");
             worker.parseWsMessage(payload);
         }
-        QTRY_VERIFY_WITH_TIMEOUT(updates.count() <= 5, 250);
-        QTRY_VERIFY_WITH_TIMEOUT(updates.count() >= 1, 250);
+        QTRY_VERIFY_WITH_TIMEOUT(updates.count() <= 50, 500);
+        QTRY_VERIFY_WITH_TIMEOUT(updates.count() >= 1, 500);
         const auto update = qvariant_cast<MarketUpdate>(updates.last().first());
         QCOMPARE(update.quotes.size(), 1);
-        QCOMPARE(update.quotes.first().volume, qint64(300));
+        QCOMPARE(update.quotes.first().volume, qint64(2100));
     }
 
     void catalogPayloadIsParsedOffModelThread() {

@@ -3,6 +3,7 @@
 #include "net/NodeClient.h"
 
 #include <QNetworkAccessManager>
+#include <QQueue>
 #include <QThread>
 #include <QTimer>
 #include <QUrl>
@@ -53,6 +54,8 @@ private:
     void scheduleReconnect();
     void sendSubscribe();
     void emitMarketUpdate(const MarketUpdate& update);
+    void enqueueWsPayload(const QByteArray& payload);
+    void dispatchNextWsPayload();
 
     QUrl apiUrl(const QString& path) const;
     QUrl streamUrl() const;
@@ -67,6 +70,9 @@ private:
     QNetworkAccessManager network_;
     QThread               parserThread_;
     JsonParserWorker*     parser_ = nullptr;
+    QQueue<QByteArray>    wsInputQueue_;
+    bool                  wsInFlight_ = false;
+    quint64               wsDropped_  = 0;
     QWebSocket            socket_;
     QTimer                reconnectTimer_;
     QUrl                  nodeUrl_;

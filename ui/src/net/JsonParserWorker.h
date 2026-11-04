@@ -36,6 +36,8 @@ public slots:
 signals:
     void wsSubscribed();
     void wsSnapshot();
+    /// 当前 parseWsMessage 已处理完（用于 NodeClient 的有界 WS 输入队列）。
+    void wsMessageFinished();
     void wsError(const QString& error);
     void marketUpdateParsed(const tqsdk::ui::MarketUpdate& update);
     void catalogParsed(const QVector<tqsdk::ui::Instrument>& instruments);

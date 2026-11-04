@@ -1,5 +1,7 @@
 #include "app/MainWindow.h"
 
+#include "app/TradingController.h"
+
 #include "chart/KLineChartWidget.h"
 #include "model/Formatting.h"
 #include "model/InstrumentTableModel.h"
@@ -7,6 +9,7 @@
 #include "model/QuoteTableModel.h"
 #include "model/TradingModels.h"
 #include "net/NodeClient.h"
+#include "widgets/MarketToolBar.h"
 #include "widgets/OrderBookPanel.h"
 #include "widgets/OrderTicketPanel.h"
 #include "widgets/QuoteSnapshotPanel.h"
@@ -51,7 +54,7 @@ namespace {
 
 // 工作区布局版本：dock 组件集合变化时 bump，避免旧 saveState() 把新 dock
 // 恢复到不合理的拆分位置。表格列/图表状态有独立 key，不受此版本影响。
-constexpr int kWorkspaceVersion = 3;
+constexpr int kWorkspaceVersion = 4;
 
 QString themeStyle(bool dark) {
     const QString bg       = dark ? "#0d1117" : "#f5f7fb";
@@ -180,6 +183,10 @@ MainWindow::MainWindow(NodeClient* nodeClient, QWidget* parent)
     futuresProxy_->setSourceModel(futuresModel_);
     futuresProxy_->setFilterCaseSensitivity(Qt::CaseInsensitive);
     futuresProxy_->setFilterKeyColumn(-1);
+    connect(futuresModel_, &InstrumentTableModel::instrumentsLoaded, this, [this] {
+        updateSearchCompletions(marketToolBar_ != nullptr ? marketToolBar_->searchText()
+                                                          : QString{});
+    });
     watchModel_->setSymbols(watchlist_);
 
     buildUi();
@@ -205,93 +212,27 @@ void MainWindow::buildUi() {
 }
 
 void MainWindow::buildToolbar() {
-    auto* toolbar = addToolBar(tr("主工具栏"));
-    toolbar->setObjectName(QStringLiteral("mainToolBar"));
-    toolbar->setMovable(false);
-    toolbar->setIconSize(QSize(18, 18));
+    marketToolBar_ = new MarketToolBar(this);
+    addToolBar(marketToolBar_);
 
-    auto* brand = new QLabel(tr("TQSDK"), toolbar);
-    brand->setStyleSheet("font-size: 15px; font-weight: 700; padding: 0 10px;");
-    toolbar->addWidget(brand);
-
-    search_ = new QLineEdit(toolbar);
-    search_->setPlaceholderText(tr("搜索合约代码 / 名称，回车加入自选"));
-    search_->setMinimumWidth(280);
-    search_->setClearButtonEnabled(true);
-    searchCompletions_ = new QStringListModel(this);
-    searchCompleter_   = new QCompleter(searchCompletions_, this);
-    searchCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
-    searchCompleter_->setFilterMode(Qt::MatchContains);
-    searchCompleter_->setCompletionMode(QCompleter::PopupCompletion);
-    searchCompleter_->setMaxVisibleItems(16);
-    search_->setCompleter(searchCompleter_);
-    connect(search_, &QLineEdit::textChanged, this, [this](const QString& text) {
+    connect(marketToolBar_, &MarketToolBar::searchTextChanged, this, [this](const QString& text) {
         futuresProxy_->setFilterFixedString(text);
         updateSearchCompletions(text);
     });
-    connect(
-        search_, &QLineEdit::returnPressed, this, [this] { addSymbolFromInput(search_->text()); });
-    connect(searchCompleter_,
-            QOverload<const QString&>::of(&QCompleter::activated),
-            this,
-            [this](const QString& text) { addSymbolFromInput(text); });
-    toolbar->addWidget(search_);
-
-    addSymbolButton_ = new QPushButton(tr("加入自选"), toolbar);
-    addSymbolButton_->setObjectName("addSymbolButton");
-    connect(addSymbolButton_, &QPushButton::clicked, this, [this] {
-        addSymbolFromInput(search_->text());
+    connect(marketToolBar_, &MarketToolBar::symbolSubmitted, this, [this](const QString& input) {
+        addSymbolFromInput(input);
     });
-    toolbar->addWidget(addSymbolButton_);
-
-    componentsButton_ = new QPushButton(tr("组件"), toolbar);
-    componentsButton_->setObjectName("componentsButton");
-    toolbar->addWidget(componentsButton_);
-
-    toolbar->addSeparator();
-    auto* interval = new QLabel(tr("周期"), toolbar);
-    interval->setStyleSheet("padding: 0 6px;");
-    toolbar->addWidget(interval);
-
-    const std::pair<qint64, const char*> intervals[] = {
-        {60'000'000'000LL, "1m"},
-        {300'000'000'000LL, "5m"},
-        {900'000'000'000LL, "15m"},
-        {1'800'000'000'000LL, "30m"},
-        {3'600'000'000'000LL, "1h"},
-        {7'200'000'000'000LL, "2h"},
-        {14'400'000'000'000LL, "4h"},
-        {86'400'000'000'000LL, "1d"},
-        {259'200'000'000'000LL, "3d"},
-        {604'800'000'000'000LL, "1w"},
-    };
-    for (const auto& [duration, label] : intervals) {
-        auto* button = new QPushButton(QString::fromLatin1(label), toolbar);
-        button->setFlat(true);
-        button->setToolTip(tr("切换 K 线周期"));
-        connect(
-            button,
-            &QPushButton::clicked,
+    connect(marketToolBar_, &MarketToolBar::addRequested, this, [this](const QString& input) {
+        addSymbolFromInput(input);
+    });
+    connect(marketToolBar_,
+            &MarketToolBar::intervalRequested,
             this,
-            [this, duration, text = QString::fromLatin1(label)] { setInterval(duration, text); });
-        toolbar->addWidget(button);
-    }
-
-    auto* spacer = new QWidget(toolbar);
-    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    toolbar->addWidget(spacer);
-
-    connectionLabel_ = new QLabel(tr("● 未连接"), toolbar);
-    connectionLabel_->setStyleSheet("color: #e7b35a; padding: 0 10px;");
-    toolbar->addWidget(connectionLabel_);
-
-    themeButton_ = new QPushButton(tr("浅色"), toolbar);
-    themeButton_->setFlat(true);
-    connect(themeButton_, &QPushButton::clicked, this, [this] {
+            [this](qint64 duration, const QString& label) { setInterval(duration, label); });
+    connect(marketToolBar_, &MarketToolBar::themeToggleRequested, this, [this] {
         dark_ = !dark_;
         applyTheme();
     });
-    toolbar->addWidget(themeButton_);
 }
 
 QDockWidget* MainWindow::addModuleDock(const QString&     title,
@@ -335,7 +276,9 @@ void MainWindow::buildViewMenu() {
     connect(chartPopout, &QAction::triggered, this, [this] { toggleChartPopout(); });
     QAction* reset = viewMenu->addAction(tr("恢复默认布局"));
     connect(reset, &QAction::triggered, this, [this] { resetWorkspace(); });
-    componentsButton_->setMenu(viewMenu);
+    if (marketToolBar_ != nullptr) {
+        marketToolBar_->setComponentsMenu(viewMenu);
+    }
     for (QDockWidget* dock : {watchDock_,
                               futuresDock_,
                               quoteDock_,
@@ -590,11 +533,11 @@ void MainWindow::buildWorkspace() {
 }
 
 void MainWindow::buildBottomDock() {
-    positionsPanel_   = new PositionsPanel(positionsModel_, this);
-    ordersPanel_      = new OrdersPanel(ordersModel_, this);
-    tradesPanel_      = new TradesPanel(tradesModel_, this);
-    accountPanel_     = new AccountPanel(this);
-    orderDetailPanel_ = new OrderDetailPanel(this);
+    positionsPanel_      = new PositionsPanel(positionsModel_, this);
+    ordersPanel_         = new OrdersPanel(ordersModel_, this);
+    tradesPanel_         = new TradesPanel(tradesModel_, this);
+    accountPanel_        = new AccountPanel(this);
+    positionDetailPanel_ = new PositionDetailPanel(this);
 
     // 持仓/委托/成交/账户/明细：先建主区域，再 tabify，保持一个紧凑的
     // 交易表格 dock 组。三键下单单独 split 到右侧，作为独立下单面板。
@@ -612,29 +555,23 @@ void MainWindow::buildBottomDock() {
         addSymbolToWatchlist(symbol);
         orderTicket_->setSymbol(selectedSymbol_);
     });
+    tradingController_ = new TradingController(
+        nodeClient_, orderTicket_, positionsModel_, ordersModel_, ordersPanel_, this);
+    connect(tradingController_, &TradingController::refreshRequested, this, [this] {
+        if (nodeClient_ != nullptr) {
+            nodeClient_->requestOrders();
+            nodeClient_->requestPositions();
+            nodeClient_->requestAccountSnapshot();
+        }
+    });
     connect(orderTicket_, &OrderTicketPanel::buyOpenRequested, this, [this] {
-        submitOrder(Direction::Buy, Offset::Open);
+        tradingController_->submit(Direction::Buy, Offset::Open);
     });
     connect(orderTicket_, &OrderTicketPanel::sellOpenRequested, this, [this] {
-        submitOrder(Direction::Sell, Offset::Open);
+        tradingController_->submit(Direction::Sell, Offset::Open);
     });
     connect(orderTicket_, &OrderTicketPanel::closeRequested, this, [this] {
-        qint64 longVolume  = 0;
-        qint64 shortVolume = 0;
-        for (const auto& position : positionsModel_->positions()) {
-            if (position.instrumentId != selectedSymbol_) {
-                continue;
-            }
-            longVolume += position.volumeLong;
-            shortVolume += position.volumeShort;
-        }
-        if (longVolume > 0) {
-            submitOrder(Direction::Sell, Offset::Close);
-        } else if (shortVolume > 0) {
-            submitOrder(Direction::Buy, Offset::Close);
-        } else {
-            orderTicket_->setStatus(tr("当前合约无持仓"), true);
-        }
+        tradingController_->closePosition();
     });
 
     orderDock_ = addModuleDock(
@@ -647,8 +584,10 @@ void MainWindow::buildBottomDock() {
         tr("成交"), tradesPanel_, Qt::BottomDockWidgetArea, QStringLiteral("tradesDock"));
     accountDock_ = addModuleDock(
         tr("账户"), accountPanel_, Qt::BottomDockWidgetArea, QStringLiteral("accountDock"));
-    detailDock_ = addModuleDock(
-        tr("明细"), orderDetailPanel_, Qt::BottomDockWidgetArea, QStringLiteral("detailDock"));
+    detailDock_ = addModuleDock(tr("持仓明细"),
+                                positionDetailPanel_,
+                                Qt::BottomDockWidgetArea,
+                                QStringLiteral("detailDock"));
     tabifyDockWidget(positionsDock_, ordersDock_);
     tabifyDockWidget(ordersDock_, tradesDock_);
     tabifyDockWidget(tradesDock_, accountDock_);
@@ -660,12 +599,18 @@ void MainWindow::buildBottomDock() {
             if (!symbol.isEmpty() && symbol != selectedSymbol_) {
                 selectSymbol(symbol);
             }
+            updatePositionDetail();
         });
+    connect(positionsPanel_->view()->selectionModel(),
+            &QItemSelectionModel::currentRowChanged,
+            this,
+            [this](const QModelIndex&) { updatePositionDetail(); });
     connect(ordersPanel_, &OrdersPanel::selectionChanged, this, [this](const QString&) {
         updateOrderControls();
-        updateOrderDetail();
     });
-    connect(ordersPanel_, &OrdersPanel::cancelRequested, this, [this] { cancelSelectedOrder(); });
+    connect(ordersPanel_, &OrdersPanel::cancelRequested, this, [this] {
+        tradingController_->cancelSelectedOrder();
+    });
 
     const auto refreshCachedQuotes = [this] {
         if (latestQuotes_.isEmpty()) {
@@ -725,14 +670,14 @@ void MainWindow::connectNode() {
                     color = "#e7b35a";
                     break;
                 }
-                nodeReady_ = state == NodeClient::State::Ready;
+                if (tradingController_ != nullptr) {
+                    tradingController_->setNodeReady(state == NodeClient::State::Ready);
+                }
                 if (!message.isEmpty()) {
                     statusBar()->showMessage(message);
                 }
-                if (connectionLabel_ != nullptr) {
-                    connectionLabel_->setText(text);
-                    connectionLabel_->setStyleSheet(
-                        QStringLiteral("color: %1; padding: 0 10px;").arg(color));
+                if (marketToolBar_ != nullptr) {
+                    marketToolBar_->setConnectionState(text, color);
                 }
                 if (state == NodeClient::State::Connected || state == NodeClient::State::Ready) {
                     CatalogQuery query;
@@ -812,7 +757,7 @@ void MainWindow::connectNode() {
             &NodeClient::catalogLoaded,
             this,
             [this](const QVector<Instrument>& instruments) {
-                futuresModel_->setInstruments(instruments);
+                futuresModel_->setInstrumentsIncremental(instruments);
                 if (orderTicket_ != nullptr) {
                     QStringList suggestions;
                     suggestions.reserve(instruments.size());
@@ -843,13 +788,14 @@ void MainWindow::connectNode() {
                     watchModel_->applyQuotes(fallback);
                     updateQuotePanel();
                 }
-                updateSearchCompletions(search_ != nullptr ? search_->text() : QString{});
+                updateSearchCompletions(marketToolBar_ != nullptr ? marketToolBar_->searchText()
+                                                                  : QString{});
                 statusBar()->showMessage(tr("合约目录 %1 条").arg(instruments.size()), 5000);
             });
 
     connect(nodeClient_, &NodeClient::optionChainLoaded, this, [this](const OptionChain& chain) {
-        callsModel_->setInstruments(chain.calls);
-        putsModel_->setInstruments(chain.puts);
+        callsModel_->setInstrumentsIncremental(chain.calls);
+        putsModel_->setInstrumentsIncremental(chain.puts);
         statusBar()->showMessage(tr("期权链 %1: CALL %2 / PUT %3")
                                      .arg(chain.underlying)
                                      .arg(chain.calls.size())
@@ -866,26 +812,18 @@ void MainWindow::connectNode() {
             [this](const QVector<Position>& positions) {
                 positionsModel_->applyPositions(positions);
                 updateOrderControls();
+                updatePositionDetail();
             });
     connect(nodeClient_, &NodeClient::ordersUpdated, this, [this](const QVector<Order>& orders) {
         ordersModel_->applyOrders(orders);
         updateOrderControls();
-        updateOrderDetail();
     });
     connect(nodeClient_, &NodeClient::tradesUpdated, this, [this](const QVector<Trade>& trades) {
         tradesModel_->applyTrades(trades);
     });
     connect(nodeClient_, &NodeClient::orderAckReceived, this, [this](const OrderAck& ack) {
-        if (orderTicket_ != nullptr) {
-            orderTicket_->setStatus(ack.success ? tr("命令已接受: %1").arg(ack.orderId)
-                                                : tr("下单失败: %1").arg(ack.error),
-                                    !ack.success);
-        }
-        updateOrderControls();
-        if (nodeClient_ != nullptr) {
-            nodeClient_->requestOrders();
-            nodeClient_->requestPositions();
-            nodeClient_->requestAccountSnapshot();
+        if (tradingController_ != nullptr) {
+            tradingController_->handleOrderAck(ack);
         }
     });
 }
@@ -975,19 +913,19 @@ void MainWindow::addSymbolFromInput(const QString& input) {
         return;
     }
     addSymbolToWatchlist(symbol);
-    if (search_ != nullptr) {
-        search_->clear();
+    if (marketToolBar_ != nullptr) {
+        marketToolBar_->clearSearch();
     }
     statusBar()->showMessage(tr("已加入自选: %1").arg(symbol), 3000);
 }
 
 void MainWindow::updateSearchCompletions(const QString& input) {
-    if (searchCompletions_ == nullptr || futuresModel_ == nullptr) {
+    if (marketToolBar_ == nullptr || futuresModel_ == nullptr) {
         return;
     }
     const QString query = input.trimmed();
     if (query.isEmpty()) {
-        searchCompletions_->setStringList({});
+        marketToolBar_->setCompletions({});
         return;
     }
 
@@ -1012,11 +950,7 @@ void MainWindow::updateSearchCompletions(const QString& input) {
     for (int i = 0; i < candidates.size() && i < 20; ++i) {
         suggestions.push_back(candidates.at(i).text);
     }
-    searchCompletions_->setStringList(suggestions);
-    if (searchCompleter_ != nullptr && !suggestions.isEmpty()) {
-        searchCompleter_->setCompletionPrefix(query);
-        searchCompleter_->complete();
-    }
+    marketToolBar_->setCompletions(suggestions);
 }
 
 void MainWindow::selectSymbol(const QString& symbol) {
@@ -1045,6 +979,9 @@ void MainWindow::selectSymbol(const QString& symbol) {
 
     if (quotePanel_ != nullptr) {
         quotePanel_->setSymbol(symbol);
+    }
+    if (tradingController_ != nullptr) {
+        tradingController_->setSelectedSymbol(symbol);
     }
     if (orderBookPanel_ != nullptr) {
         orderBookPanel_->setSymbol(symbol);
@@ -1146,93 +1083,30 @@ void MainWindow::updateQuotePanel() {
 }
 
 void MainWindow::updateAccountPanel(const Account& account) {
-    accountLoaded_ = true;
     if (accountPanel_ != nullptr) {
         accountPanel_->setAccount(account);
     }
-    updateOrderControls();
+    if (tradingController_ != nullptr) {
+        tradingController_->setAccountLoaded(true);
+    }
 }
 
 void MainWindow::updateOrderControls() {
-    if (orderTicket_ == nullptr) {
-        return;
-    }
-    const bool canSubmit = nodeReady_ && accountLoaded_;
-    orderTicket_->setTradingEnabled(canSubmit);
-
-    qint64 longVolume  = 0;
-    qint64 shortVolume = 0;
-    for (const auto& position : positionsModel_->positions()) {
-        if (position.instrumentId == selectedSymbol_) {
-            longVolume += position.volumeLong;
-            shortVolume += position.volumeShort;
-        }
-    }
-    orderTicket_->setCloseEnabled(canSubmit && (longVolume > 0 || shortVolume > 0));
-
-    if (ordersPanel_ != nullptr) {
-        const auto current = ordersPanel_->view()->currentIndex();
-        ordersPanel_->setCancelEnabled(current.isValid() &&
-                                       ordersModel_->isOrderAlive(current.row()));
+    if (tradingController_ != nullptr) {
+        tradingController_->updateControls();
     }
 }
 
-void MainWindow::updateOrderDetail() {
-    if (orderDetailPanel_ == nullptr || ordersPanel_ == nullptr) {
+void MainWindow::updatePositionDetail() {
+    if (positionDetailPanel_ == nullptr || positionsPanel_ == nullptr) {
         return;
     }
-    const auto current = ordersPanel_->view()->currentIndex();
-    if (!current.isValid() || current.row() >= ordersModel_->orders().size()) {
-        orderDetailPanel_->clear();
+    const auto current = positionsPanel_->view()->currentIndex();
+    if (!current.isValid() || current.row() >= positionsModel_->positions().size()) {
+        positionDetailPanel_->clear();
         return;
     }
-    orderDetailPanel_->setOrder(&ordersModel_->orders().at(current.row()));
-}
-
-void MainWindow::submitOrder(Direction direction, Offset offset) {
-    if (orderTicket_ == nullptr) {
-        return;
-    }
-    if (nodeClient_ == nullptr || !nodeReady_ || !accountLoaded_) {
-        orderTicket_->setStatus(tr("交易未就绪"), true);
-        return;
-    }
-    if (orderTicket_->price() <= 0.0 || orderTicket_->volume() <= 0) {
-        orderTicket_->setStatus(tr("价格/数量无效"), true);
-        return;
-    }
-
-    OrderRequest request;
-    request.instrumentId = selectedSymbol_;
-    request.direction    = direction;
-    request.offset       = offset;
-    request.priceType    = PriceType::Limit;
-    request.limitPrice   = orderTicket_->price();
-    request.volume       = orderTicket_->volume();
-    nodeClient_->placeOrder(request);
-    orderTicket_->setStatus(tr("已提交 %1 %2 手 @ %3")
-                                .arg(selectedSymbol_)
-                                .arg(request.volume)
-                                .arg(priceText(request.limitPrice)));
-    updateOrderControls();
-}
-
-void MainWindow::cancelSelectedOrder() {
-    if (nodeClient_ == nullptr || ordersPanel_ == nullptr) {
-        return;
-    }
-    const auto current = ordersPanel_->view()->currentIndex();
-    if (!current.isValid() || !ordersModel_->isOrderAlive(current.row())) {
-        return;
-    }
-    const QString orderId = ordersModel_->orderIdAt(current.row());
-    if (orderId.isEmpty()) {
-        return;
-    }
-    nodeClient_->cancelOrder(orderId);
-    if (orderTicket_ != nullptr) {
-        orderTicket_->setStatus(tr("撤单请求: %1").arg(orderId));
-    }
+    positionDetailPanel_->setPosition(&positionsModel_->positions().at(current.row()));
 }
 
 const Instrument* MainWindow::findInstrument(const QString& symbol) const {
@@ -1266,7 +1140,9 @@ void MainWindow::requestOptionChain() {
 
 void MainWindow::applyTheme() {
     chart_->setTheme(dark_);
-    themeButton_->setText(dark_ ? tr("浅色") : tr("深色"));
+    if (marketToolBar_ != nullptr) {
+        marketToolBar_->setThemeLabel(dark_);
+    }
     qApp->setStyleSheet(themeStyle(dark_));
 }
 

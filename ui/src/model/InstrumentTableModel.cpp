@@ -5,6 +5,7 @@
 #include <QHash>
 #include <QString>
 
+#include <algorithm>
 #include <cmath>
 
 namespace tqsdk::ui {
@@ -21,6 +22,12 @@ int InstrumentTableModel::columnCount(const QModelIndex& parent) const {
 }
 
 void InstrumentTableModel::setInstruments(const QVector<Instrument>& instruments) {
+    if (loadTimer_ != nullptr) {
+        loadTimer_->stop();
+    }
+    pendingInstruments_.clear();
+    pendingOffset_ = 0;
+
     beginResetModel();
     instruments_ = instruments;
     rowBySymbol_.clear();
@@ -29,6 +36,62 @@ void InstrumentTableModel::setInstruments(const QVector<Instrument>& instruments
         rowBySymbol_.insert(instruments_.at(row).instrumentId, row);
     }
     endResetModel();
+    emit instrumentsLoaded();
+}
+
+void InstrumentTableModel::setInstrumentsIncremental(const QVector<Instrument>& instruments,
+                                                     int                        chunkSize) {
+    if (loadTimer_ != nullptr) {
+        loadTimer_->stop();
+    }
+    chunkSize_ = std::max(1, chunkSize);
+    beginResetModel();
+    instruments_.clear();
+    rowBySymbol_.clear();
+    pendingInstruments_ = instruments;
+    pendingOffset_      = 0;
+    endResetModel();
+
+    if (pendingInstruments_.isEmpty()) {
+        emit instrumentsLoaded();
+        return;
+    }
+    if (loadTimer_ == nullptr) {
+        loadTimer_ = new QTimer(this);
+        loadTimer_->setSingleShot(true);
+        connect(
+            loadTimer_, &QTimer::timeout, this, &InstrumentTableModel::appendNextInstrumentChunk);
+    }
+    loadTimer_->start(0);
+}
+
+void InstrumentTableModel::appendNextInstrumentChunk() {
+    if (pendingOffset_ >= pendingInstruments_.size()) {
+        pendingInstruments_.clear();
+        pendingOffset_ = 0;
+        emit instrumentsLoaded();
+        return;
+    }
+
+    const int first = instruments_.size();
+    const int last =
+        std::min(static_cast<int>(pendingInstruments_.size()), pendingOffset_ + chunkSize_);
+    beginInsertRows({}, first, first + (last - pendingOffset_) - 1);
+    for (int i = pendingOffset_; i < last; ++i) {
+        const auto& instrument = pendingInstruments_.at(i);
+        rowBySymbol_.insert(instrument.instrumentId, instruments_.size());
+        instruments_.push_back(instrument);
+    }
+    endInsertRows();
+    pendingOffset_ = last;
+
+    if (pendingOffset_ < pendingInstruments_.size()) {
+        loadTimer_->start(0);
+    } else {
+        pendingInstruments_.clear();
+        pendingOffset_ = 0;
+        emit instrumentsLoaded();
+    }
 }
 
 void InstrumentTableModel::applyQuotes(const QVector<Quote>& quotes) {

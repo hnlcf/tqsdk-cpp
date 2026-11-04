@@ -5,6 +5,7 @@
 #include <QAbstractTableModel>
 #include <QHash>
 #include <QSet>
+#include <QTimer>
 #include <QVector>
 
 namespace tqsdk::ui {
@@ -44,15 +45,25 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
 
-    void                       setInstruments(const QVector<Instrument>& instruments);
-    void                       applyQuotes(const QVector<Quote>& quotes);
-    QString                    symbolAt(int row) const;
+    void setInstruments(const QVector<Instrument>& instruments);
+    /// 按 chunk 分批插入大目录/期权链，避免一次 reset+全量填充占满 GUI 线程。
+    void    setInstrumentsIncremental(const QVector<Instrument>& instruments, int chunkSize = 256);
+    void    applyQuotes(const QVector<Quote>& quotes);
+    QString symbolAt(int row) const;
     const QVector<Instrument>& instruments() const { return instruments_; }
 
+signals:
+    void instrumentsLoaded();
+
 private:
+    void                  appendNextInstrumentChunk();
     QVector<Instrument>   instruments_;
     QHash<QString, Quote> quotes_;
     QHash<QString, int>   rowBySymbol_;
+    QVector<Instrument>   pendingInstruments_;
+    int                   pendingOffset_ = 0;
+    int                   chunkSize_     = 256;
+    QTimer*               loadTimer_     = nullptr;
 };
 
 } // namespace tqsdk::ui
