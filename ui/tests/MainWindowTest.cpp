@@ -5,8 +5,11 @@
 #include "model/QuoteTableModel.h"
 #include "net/NodeClient.h"
 
+#include <QAction>
 #include <QElapsedTimer>
 #include <QLabel>
+#include <QMenu>
+#include <QMenuBar>
 #include <QSettings>
 #include <QTableView>
 #include <QTemporaryDir>
@@ -67,6 +70,7 @@ private slots:
     void watchlistCanRemoveAndReorder();
     void perSymbolChartStateIsRestored();
     void indicatorsRenderThroughSidecar();
+    void indicatorMenuIsNotDuplicatedOnRefresh();
     void cleanup();
 
 private:
@@ -391,6 +395,54 @@ void MainWindowTest::indicatorsRenderThroughSidecar() {
     QTRY_COMPARE_WITH_TIMEOUT(chart->indicatorCount(), 2, 5000);
     QTRY_COMPARE_WITH_TIMEOUT(chart->barCount(), 40, 3000);
     QVERIFY(!chart->grab().isNull());
+    settings.clear();
+}
+
+void MainWindowTest::indicatorMenuIsNotDuplicatedOnRefresh() {
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("ui/watchlist"), QStringList{QStringLiteral("SHFE.rb2701")});
+    settings.setValue(QStringLiteral("ui/chart/symbol"), QStringLiteral("SHFE.rb2701"));
+    settings.sync();
+
+    FakeNodeClient client;
+    MainWindow     window(&client);
+    window.show();
+    QTest::qWait(500);
+
+    const auto indicatorMenu = [&window]() -> QMenu* {
+        for (QAction* action : window.menuBar()->actions()) {
+            if (action->text() == QStringLiteral("指标")) {
+                return action->menu();
+            }
+        }
+        return nullptr;
+    };
+    auto countIndicatorMenus = [&window] {
+        int count = 0;
+        for (QAction* action : window.menuBar()->actions()) {
+            if (action->text() == QStringLiteral("指标")) {
+                ++count;
+            }
+        }
+        return count;
+    };
+
+    QCOMPARE(countIndicatorMenus(), 1);
+    QMenu* menu = indicatorMenu();
+    QVERIFY(menu != nullptr);
+    QAction* refresh = nullptr;
+    for (QAction* action : menu->actions()) {
+        if (action->text() == QStringLiteral("刷新指标列表")) {
+            refresh = action;
+            break;
+        }
+    }
+    QVERIFY(refresh != nullptr);
+    refresh->trigger();
+    QTest::qWait(500);
+    QCOMPARE(countIndicatorMenus(), 1);
+    QVERIFY(indicatorMenu() != nullptr);
     settings.clear();
 }
 

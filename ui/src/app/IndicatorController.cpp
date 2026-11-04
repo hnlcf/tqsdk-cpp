@@ -66,7 +66,12 @@ void IndicatorController::rebuildMenu() {
     if (menuBar_ == nullptr) {
         return;
     }
-    auto*       indicatorMenu = menuBar_->addMenu(tr("指标"));
+    if (indicatorMenu_ == nullptr) {
+        indicatorMenu_ = menuBar_->addMenu(tr("指标"));
+    } else {
+        indicatorMenu_->clear();
+    }
+    auto*       indicatorMenu = indicatorMenu_;
     QSettings   settings;
     QStringList enabled = settings.value(QStringLiteral("ui/indicators/enabled")).toStringList();
 

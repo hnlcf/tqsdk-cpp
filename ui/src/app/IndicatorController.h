@@ -33,11 +33,12 @@ private:
     void rebuildMenu();
     void saveEnabled();
 
-    KLineChartWidget* chart_     = nullptr;
-    QMenuBar*         menuBar_   = nullptr;
-    QStatusBar*       statusBar_ = nullptr;
-    Toast*            toast_     = nullptr;
-    IndicatorManager* manager_   = nullptr;
+    KLineChartWidget* chart_         = nullptr;
+    QMenuBar*         menuBar_       = nullptr;
+    QStatusBar*       statusBar_     = nullptr;
+    Toast*            toast_         = nullptr;
+    QMenu*            indicatorMenu_ = nullptr;
+    IndicatorManager* manager_       = nullptr;
 };
 
 } // namespace tqsdk::ui
