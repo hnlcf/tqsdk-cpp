@@ -212,3 +212,17 @@ P4 通信/quote 元数据改动后的 20s Release 验证：
 24h soak 已由 `scripts/soak_two_process.py --duration 86400` 启动，产物位于
 `artifacts/soak_24h_*.csv/json`；完成后按本节验收标准归档。Windows CTP 验证
 按计划推迟到后续阶段。
+
+### 2026-11-04 最终 24h soak（进行中）
+
+在 P4 通信/quote/WS 改动完成并 275/275 测试通过后，启动最终长稳：
+
+```text
+started_at: 2026-11-04 23:47:54
+csv:        artifacts/soak_24h_20261104_234754.csv
+log:        artifacts/soak_24h_20261104_234754.log
+pid:        876813
+```
+
+配置：8 HTTP load 线程、每 1s 报单/撤单、每 10min 重启 gw。24h 结束后
+按上面的验收标准检查 fatal、RSS/FD/线程趋势和重连计数。
