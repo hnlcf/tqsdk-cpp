@@ -61,7 +61,7 @@ private:
     bool              dark_      = true;
     QPoint            crosshair_ = QPoint(-1, -1);
 
-    int  visibleCount_ = 200;
+    int  visibleCount_ = 120;
     int  visibleStart_ = 0;
     bool followLatest_ = true;
     bool dragging_     = false;

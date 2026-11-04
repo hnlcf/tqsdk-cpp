@@ -58,7 +58,12 @@ void QuoteTableModel::applyQuotes(const QVector<Quote>& quotes) {
         if (!symbols_.contains(quote.instrumentId)) {
             continue;
         }
-        quotes_[quote.instrumentId] = quote;
+        auto it = quotes_.find(quote.instrumentId);
+        if (it == quotes_.end()) {
+            quotes_.insert(quote.instrumentId, quote);
+        } else {
+            *it = mergeQuote(*it, quote);
+        }
     }
     emit dataChanged(index(0, 0), index(symbols_.size() - 1, ColumnCount - 1));
 }

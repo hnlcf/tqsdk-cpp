@@ -8,6 +8,7 @@
 #include "net/NodeClient.h"
 #include "widgets/TablePanel.h"
 
+#include <QAbstractItemView>
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
@@ -15,8 +16,10 @@
 #include <QDialog>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
+#include <QEvent>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QLabel>
 #include <QLineEdit>
@@ -132,6 +135,12 @@ MainWindow::MainWindow(NodeClient* nodeClient, QWidget* parent)
     setWindowTitle(tr("TQSDK Terminal (Qt)"));
     resize(1480, 940);
     setDockNestingEnabled(true);
+
+    workspaceSaveTimer_ = new QTimer(this);
+    installEventFilter(this);
+    workspaceSaveTimer_->setSingleShot(true);
+    workspaceSaveTimer_->setInterval(250);
+    connect(workspaceSaveTimer_, &QTimer::timeout, this, [this] { saveWorkspace(); });
 
     watchlist_ = {QStringLiteral("DCE.i2701"),
                   QStringLiteral("DCE.jm2701"),
@@ -314,6 +323,20 @@ void MainWindow::buildViewMenu() {
     QAction* reset = viewMenu->addAction(tr("恢复默认布局"));
     connect(reset, &QAction::triggered, this, [this] { resetWorkspace(); });
     componentsButton_->setMenu(viewMenu);
+    for (QDockWidget* dock : {watchDock_,
+                              futuresDock_,
+                              quoteDock_,
+                              tapeDock_,
+                              optionsDock_,
+                              tradingDock_,
+                              orderDock_}) {
+        if (dock == nullptr) {
+            continue;
+        }
+        connect(dock, &QDockWidget::dockLocationChanged, this, [this] { scheduleWorkspaceSave(); });
+        connect(dock, &QDockWidget::topLevelChanged, this, [this] { scheduleWorkspaceSave(); });
+        connect(dock, &QDockWidget::visibilityChanged, this, [this] { scheduleWorkspaceSave(); });
+    }
 }
 
 void MainWindow::resetWorkspace() {
@@ -335,7 +358,7 @@ void MainWindow::resetWorkspace() {
         chartDialog_->close();
     }
     setCentralWidget(chartHost_);
-    resizeDocks({watchDock_}, {500}, Qt::Horizontal);
+    resizeDocks({watchDock_}, {800}, Qt::Horizontal);
     resizeDocks({quoteDock_}, {330}, Qt::Horizontal);
     resizeDocks({tapeDock_}, {220}, Qt::Vertical);
     resizeDocks({tradingDock_, orderDock_}, {1000, 340}, Qt::Horizontal);
@@ -344,6 +367,25 @@ void MainWindow::resetWorkspace() {
 void MainWindow::saveWorkspace() {
     QSettings settings;
     settings.setValue(QStringLiteral("ui/workspaceState"), saveState());
+    settings.setValue(QStringLiteral("ui/windowGeometry"), saveGeometry());
+}
+
+void MainWindow::scheduleWorkspaceSave() {
+    if (workspaceSaveTimer_ != nullptr) {
+        workspaceSaveTimer_->start();
+    }
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == this && (event->type() == QEvent::Resize || event->type() == QEvent::Move)) {
+        scheduleWorkspaceSave();
+    }
+    if (tapeTable_ != nullptr && watched == tapeTable_->viewport() &&
+        event->type() == QEvent::Resize && tapeModel_ != nullptr) {
+        const int rowHeight = std::max(1, tapeTable_->verticalHeader()->defaultSectionSize());
+        tapeModel_->setMaxRows(std::max(1, tapeTable_->viewport()->height() / rowHeight - 1));
+    }
+    return QMainWindow::eventFilter(watched, event);
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
@@ -392,8 +434,9 @@ void MainWindow::buildWorkspace() {
     auto* watchPanel = new TablePanel(watchModel_, this);
     watchPanel->installColumnMenu(QStringLiteral("watchlist"));
     watchTable_ = watchPanel->view();
-    watchTable_->setColumnWidth(QuoteTableModel::Symbol, 118);
-    watchTable_->setMinimumWidth(300);
+    watchTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    watchTable_->horizontalHeader()->setStretchLastSection(false);
+    watchTable_->setMinimumWidth(620);
     connect(watchTable_->selectionModel(),
             &QItemSelectionModel::currentRowChanged,
             this,

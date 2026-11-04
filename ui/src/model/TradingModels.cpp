@@ -289,6 +289,19 @@ void TradeTapeModel::clear() {
     endResetModel();
 }
 
+void TradeTapeModel::setMaxRows(int rows) {
+    const int newMax = std::max(1, rows);
+    if (newMax == maxRows_) {
+        return;
+    }
+    maxRows_ = newMax;
+    if (ticks_.size() > maxRows_) {
+        beginRemoveRows({}, maxRows_, ticks_.size() - 1);
+        ticks_.resize(maxRows_);
+        endRemoveRows();
+    }
+}
+
 void TradeTapeModel::applyQuote(const Quote& quote) {
     if (quote.instrumentId.isEmpty()) {
         return;
@@ -309,21 +322,21 @@ void TradeTapeModel::applyQuote(const Quote& quote) {
     }
 
     TickTrade tick;
-    tick.datetime = quote.datetime;
-    tick.price    = quote.lastPrice;
-    tick.volume   = delta;
-    tick.buy = previousPrice != lastPrice_.constEnd() && std::isfinite(previousPrice.value()) &&
-               quote.lastPrice >= previousPrice.value();
+    tick.datetime =
+        quote.datetime > 0 ? quote.datetime : QDateTime::currentMSecsSinceEpoch() * 1'000'000LL;
+    tick.price  = quote.lastPrice;
+    tick.volume = delta;
+    tick.buy    = previousPrice != lastPrice_.constEnd() && std::isfinite(previousPrice.value()) &&
+                  quote.lastPrice >= previousPrice.value();
     lastPrice_[quote.instrumentId] = quote.lastPrice;
 
     if (ticks_.size() >= maxRows_) {
-        beginRemoveRows({}, 0, 0);
-        ticks_.removeFirst();
+        beginRemoveRows({}, ticks_.size() - 1, ticks_.size() - 1);
+        ticks_.removeLast();
         endRemoveRows();
     }
-    const int row = ticks_.size();
-    beginInsertRows({}, row, row);
-    ticks_.push_back(tick);
+    beginInsertRows({}, 0, 0);
+    ticks_.prepend(tick);
     endInsertRows();
 }
 

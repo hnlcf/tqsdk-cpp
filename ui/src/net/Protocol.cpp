@@ -89,6 +89,37 @@ std::optional<Quote> parseQuote(const QJsonObject& object) {
     return q;
 }
 
+Quote mergeQuote(const Quote& previous, const Quote& patch) {
+    Quote merged = previous;
+    if (!patch.instrumentId.isEmpty()) {
+        merged.instrumentId = patch.instrumentId;
+    }
+    const auto mergeValue = [](double& target, double value) {
+        if (std::isfinite(value)) {
+            target = value;
+        }
+    };
+    mergeValue(merged.lastPrice, patch.lastPrice);
+    mergeValue(merged.bidPrice1, patch.bidPrice1);
+    mergeValue(merged.askPrice1, patch.askPrice1);
+    mergeValue(merged.preSettlement, patch.preSettlement);
+    mergeValue(merged.preOpenInterest, patch.preOpenInterest);
+    mergeValue(merged.openInterest, patch.openInterest);
+    mergeValue(merged.preClose, patch.preClose);
+    mergeValue(merged.open, patch.open);
+    mergeValue(merged.high, patch.high);
+    mergeValue(merged.low, patch.low);
+    mergeValue(merged.upperLimit, patch.upperLimit);
+    mergeValue(merged.lowerLimit, patch.lowerLimit);
+    if (patch.volume > 0) {
+        merged.volume = patch.volume;
+    }
+    if (patch.datetime > 0) {
+        merged.datetime = patch.datetime;
+    }
+    return merged;
+}
+
 std::optional<KlineBar> parseKlineBar(const QJsonObject& object) {
     if (object.isEmpty()) {
         return std::nullopt;

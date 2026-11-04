@@ -40,3 +40,6 @@ run/
 
 # 设计参考截图（本机）
 ui-expected.png
+
+# UI 检查截图
+actual-ui-*.png

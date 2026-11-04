@@ -18,6 +18,7 @@ class QSpinBox;
 class QStringListModel;
 class QTabWidget;
 class QTableView;
+class QTimer;
 
 namespace tqsdk::ui {
 
@@ -51,7 +52,9 @@ private:
                                     const QString&     objectName);
     void              resetWorkspace();
     void              saveWorkspace();
+    void              scheduleWorkspaceSave();
     void              closeEvent(QCloseEvent* event) override;
+    bool              eventFilter(QObject* watched, QEvent* event) override;
     void              toggleChartPopout();
     void              connectNode();
     void              selectSymbol(const QString& symbol);
@@ -70,20 +73,21 @@ private:
     void              requestOptionChain();
     void              applyTheme();
 
-    NodeClient*            nodeClient_     = nullptr;
-    MarketStore*           marketStore_    = nullptr;
-    QuoteTableModel*       watchModel_     = nullptr;
-    InstrumentTableModel*  futuresModel_   = nullptr;
-    QSortFilterProxyModel* futuresProxy_   = nullptr;
-    InstrumentTableModel*  callsModel_     = nullptr;
-    InstrumentTableModel*  putsModel_      = nullptr;
-    PositionTableModel*    positionsModel_ = nullptr;
-    OrderTableModel*       ordersModel_    = nullptr;
-    TradeTableModel*       tradesModel_    = nullptr;
-    TradeTapeModel*        tapeModel_      = nullptr;
-    KLineChartWidget*      chart_          = nullptr;
-    QWidget*               chartHost_      = nullptr;
-    QDialog*               chartDialog_    = nullptr;
+    NodeClient*            nodeClient_         = nullptr;
+    MarketStore*           marketStore_        = nullptr;
+    QuoteTableModel*       watchModel_         = nullptr;
+    InstrumentTableModel*  futuresModel_       = nullptr;
+    QSortFilterProxyModel* futuresProxy_       = nullptr;
+    InstrumentTableModel*  callsModel_         = nullptr;
+    InstrumentTableModel*  putsModel_          = nullptr;
+    PositionTableModel*    positionsModel_     = nullptr;
+    OrderTableModel*       ordersModel_        = nullptr;
+    TradeTableModel*       tradesModel_        = nullptr;
+    TradeTapeModel*        tapeModel_          = nullptr;
+    KLineChartWidget*      chart_              = nullptr;
+    QWidget*               chartHost_          = nullptr;
+    QDialog*               chartDialog_        = nullptr;
+    QTimer*                workspaceSaveTimer_ = nullptr;
 
     QTableView*       watchTable_        = nullptr;
     QTableView*       futuresTable_      = nullptr;

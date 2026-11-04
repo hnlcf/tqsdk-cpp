@@ -29,7 +29,12 @@ void InstrumentTableModel::setInstruments(const QVector<Instrument>& instruments
 void InstrumentTableModel::applyQuotes(const QVector<Quote>& quotes) {
     for (const auto& quote : quotes) {
         if (!quote.instrumentId.isEmpty()) {
-            quotes_[quote.instrumentId] = quote;
+            auto it = quotes_.find(quote.instrumentId);
+            if (it == quotes_.end()) {
+                quotes_.insert(quote.instrumentId, quote);
+            } else {
+                *it = mergeQuote(*it, quote);
+            }
         }
     }
     bool changed = false;
@@ -68,7 +73,8 @@ QVariant InstrumentTableModel::data(const QModelIndex& index, int role) const {
         return index.column() >= LastPrice ? QVariant(Qt::AlignRight | Qt::AlignVCenter)
                                            : QVariant(Qt::AlignLeft | Qt::AlignVCenter);
     }
-    if (role == Qt::ForegroundRole && index.column() == ChangePercent) {
+    if (role == Qt::ForegroundRole &&
+        (index.column() == LastPrice || index.column() == ChangePercent)) {
         const auto quote = quotes_.constFind(instrument.instrumentId);
         if (quote == quotes_.constEnd() || !std::isfinite(quote->lastPrice) ||
             !std::isfinite(quote->preSettlement) || quote->preSettlement == 0.0) {

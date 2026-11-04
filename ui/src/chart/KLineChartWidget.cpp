@@ -330,6 +330,21 @@ void KLineChartWidget::drawCrosshair(QPainter&     painter,
     painter.drawRect(label);
     painter.setPen(dark_ ? QColor("#e6edf3") : QColor("#202a36"));
     painter.drawText(label, Qt::AlignCenter, priceText(value));
+
+    const int first = firstVisibleBar();
+    const int count = visibleBarCount();
+    if (count > 0) {
+        const double step  = plot.width() / count;
+        int          index = first + static_cast<int>((crosshair_.x() - plot.left()) / step);
+        index              = std::clamp(index, first, first + count - 1);
+        if (index >= 0 && index < bars_.size()) {
+            const QString when = timeText(bars_.at(index).datetime);
+            const QRectF  timeLabel(crosshair_.x() - 58.0, height() - 22.0, 116.0, 18.0);
+            painter.fillRect(timeLabel, dark_ ? QColor("#263344") : QColor("#ffffff"));
+            painter.setPen(dark_ ? QColor("#e6edf3") : QColor("#202a36"));
+            painter.drawText(timeLabel, Qt::AlignCenter, when);
+        }
+    }
 }
 
 void KLineChartWidget::mouseMoveEvent(QMouseEvent* event) {

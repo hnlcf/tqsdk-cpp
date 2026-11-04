@@ -25,8 +25,14 @@ void MarketStore::applyQuotes(const QVector<Quote>& quotes) {
         return;
     }
     for (const auto& quote : quotes) {
-        if (!quote.instrumentId.isEmpty()) {
-            quotes_[quote.instrumentId] = quote;
+        if (quote.instrumentId.isEmpty()) {
+            continue;
+        }
+        auto it = quotes_.find(quote.instrumentId);
+        if (it == quotes_.end()) {
+            quotes_.insert(quote.instrumentId, quote);
+        } else {
+            *it = mergeQuote(*it, quote);
         }
     }
     emit quotesChanged();

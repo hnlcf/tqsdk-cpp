@@ -186,6 +186,7 @@ struct CatalogQuery {
 // ---------------------------------------------------------------------------
 
 std::optional<Quote>      parseQuote(const QJsonObject& object);
+Quote                     mergeQuote(const Quote& previous, const Quote& patch);
 std::optional<KlineBar>   parseKlineBar(const QJsonObject& object);
 std::optional<KlineFrame> parseKlineFrame(const QJsonValue& value);
 std::optional<Instrument> parseInstrument(const QJsonObject& object);

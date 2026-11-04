@@ -16,6 +16,7 @@ private slots:
     void instrumentModelFormatsRows();
     void tradingModelsMerge();
     void tradeTapeFromQuoteDeltas();
+    void quoteMergeRetainsSnapshotFields();
 };
 
 void ModelTest::marketStoreQuotesAndKlines() {
@@ -154,10 +155,37 @@ void ModelTest::tradeTapeFromQuoteDeltas() {
     quote.volume    = 109;
     tape.applyQuote(quote);
     QCOMPARE(tape.rowCount(), 2);
-    QCOMPARE(tape.data(tape.index(1, TradeTapeModel::Direction)).toString(), QString("卖"));
+    QCOMPARE(tape.data(tape.index(0, TradeTapeModel::Direction)).toString(), QString("卖"));
 
     tape.clear();
     QCOMPARE(tape.rowCount(), 0);
+}
+
+void ModelTest::quoteMergeRetainsSnapshotFields() {
+    MarketStore store;
+    Quote       full;
+    full.instrumentId    = "SHFE.rb2701";
+    full.lastPrice       = 3000.0;
+    full.preSettlement   = 2980.0;
+    full.volume          = 100;
+    full.openInterest    = 200;
+    full.preOpenInterest = 190;
+    full.upperLimit      = 3150.0;
+    store.applyQuotes({full});
+
+    Quote patch;
+    patch.instrumentId = "SHFE.rb2701";
+    patch.lastPrice    = 3010.0;
+    patch.volume       = 101;
+    store.applyQuotes({patch});
+
+    const Quote* merged = store.quote("SHFE.rb2701");
+    QVERIFY(merged != nullptr);
+    QVERIFY(qFuzzyCompare(merged->lastPrice, 3010.0));
+    QVERIFY(qFuzzyCompare(merged->preSettlement, 2980.0));
+    QCOMPARE(merged->volume, qint64(101));
+    QVERIFY(qFuzzyCompare(merged->openInterest, 200.0));
+    QVERIFY(qFuzzyCompare(merged->upperLimit, 3150.0));
 }
 
 void ModelTest::instrumentModelFormatsRows() {

@@ -97,6 +97,7 @@ public:
     QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
 
     void clear();
+    void setMaxRows(int rows);
     void applyQuote(const Quote& quote);
 
 private:
