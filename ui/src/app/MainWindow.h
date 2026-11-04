@@ -11,6 +11,7 @@ class QSortFilterProxyModel;
 
 namespace tqsdk::ui {
 
+class IndicatorController;
 class InstrumentTableModel;
 class MarketStore;
 class MarketToolBar;
@@ -75,12 +76,13 @@ private:
     TradeTableModel*       tradesModel_    = nullptr;
     TradeTapeModel*        tapeModel_      = nullptr;
 
-    MarketToolBar*      marketToolBar_      = nullptr;
-    WorkspaceLayout*    workspace_          = nullptr;
-    SymbolController*   symbolController_   = nullptr;
-    NodeDataController* nodeDataController_ = nullptr;
-    TradingController*  tradingController_  = nullptr;
-    Toast*              toast_              = nullptr;
+    MarketToolBar*       marketToolBar_       = nullptr;
+    WorkspaceLayout*     workspace_           = nullptr;
+    SymbolController*    symbolController_    = nullptr;
+    NodeDataController*  nodeDataController_  = nullptr;
+    TradingController*   tradingController_   = nullptr;
+    IndicatorController* indicatorController_ = nullptr;
+    Toast*               toast_               = nullptr;
 
     QTimer*           chartRefreshTimer_ = nullptr;
     QTimer*           selectionTimer_    = nullptr;

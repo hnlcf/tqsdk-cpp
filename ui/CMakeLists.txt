@@ -15,6 +15,8 @@ set(TQSDK_UI_SOURCES
     src/main.cpp
     src/app/MainWindow.cpp
     src/app/MainWindow.h
+    src/app/IndicatorController.cpp
+    src/app/IndicatorController.h
     src/app/NodeDataController.cpp
     src/app/NodeDataController.h
     src/app/SymbolController.cpp
@@ -41,6 +43,11 @@ set(TQSDK_UI_SOURCES
     src/model/InstrumentTableModel.h
     src/model/TradingModels.cpp
     src/model/TradingModels.h
+    src/indicator/IndicatorManager.cpp
+    src/indicator/IndicatorManager.h
+    src/indicator/IndicatorSettingsDialog.cpp
+    src/indicator/IndicatorSettingsDialog.h
+    src/indicator/IndicatorTypes.h
     src/chart/KLineChartWidget.cpp
     src/chart/KLineChartWidget.h
     src/widgets/TablePanel.cpp
@@ -90,6 +97,11 @@ set_target_properties(tqsdk-ui PROPERTIES
 install(TARGETS tqsdk-ui
         BUNDLE  DESTINATION .
         RUNTIME DESTINATION bin)
+
+# Python indicator sidecar is deployed as data, never linked into the UI.
+install(DIRECTORY indicator_sidecar
+        DESTINATION share/tqsdk
+        FILES_MATCHING PATTERN "*.py")
 
 option(TQSDK_BUILD_UI_TESTS "Build Qt UI tests" OFF)
 if(TQSDK_BUILD_UI_TESTS)
@@ -157,6 +169,7 @@ if(TQSDK_BUILD_UI_TESTS)
 
     qt_add_executable(tqsdk-ui-chart-tests
         tests/ChartWidgetTest.cpp
+        src/indicator/IndicatorTypes.h
         src/chart/KLineChartWidget.cpp
         src/chart/KLineChartWidget.h
         src/net/Protocol.cpp
@@ -174,6 +187,27 @@ if(TQSDK_BUILD_UI_TESTS)
     qt_import_plugins(tqsdk-ui-chart-tests INCLUDE Qt6::QOffscreenIntegrationPlugin)
     add_test(NAME tqsdk-ui-chart COMMAND tqsdk-ui-chart-tests)
     set_tests_properties(tqsdk-ui-chart PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    qt_add_executable(tqsdk-ui-indicator-tests
+        tests/IndicatorManagerTest.cpp
+        src/indicator/IndicatorManager.cpp
+        src/indicator/IndicatorManager.h
+        src/indicator/IndicatorTypes.h
+        src/net/Protocol.cpp
+        src/net/Protocol.h
+    )
+    target_include_directories(tqsdk-ui-indicator-tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(tqsdk-ui-indicator-tests PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Test
+    )
+    target_compile_definitions(tqsdk-ui-indicator-tests PRIVATE
+        TQSDK_TEST_SIDECAR_PATH="${CMAKE_CURRENT_SOURCE_DIR}/indicator_sidecar/indicator_sidecar.py"
+    )
+    add_test(NAME tqsdk-ui-indicator COMMAND tqsdk-ui-indicator-tests)
 
     qt_add_executable(tqsdk-ui-table-tests
         tests/TablePanelTest.cpp
@@ -197,6 +231,8 @@ if(TQSDK_BUILD_UI_TESTS)
         tests/MainWindowTest.cpp
         src/app/MainWindow.cpp
         src/app/MainWindow.h
+        src/app/IndicatorController.cpp
+        src/app/IndicatorController.h
         src/app/NodeDataController.cpp
         src/app/NodeDataController.h
         src/app/SymbolController.cpp
@@ -206,6 +242,11 @@ if(TQSDK_BUILD_UI_TESTS)
         src/app/TradingController.h
         src/app/WorkspaceLayout.cpp
         src/app/WorkspaceLayout.h
+        src/indicator/IndicatorManager.cpp
+        src/indicator/IndicatorManager.h
+        src/indicator/IndicatorSettingsDialog.cpp
+        src/indicator/IndicatorSettingsDialog.h
+        src/indicator/IndicatorTypes.h
         src/chart/KLineChartWidget.cpp
         src/chart/KLineChartWidget.h
         src/model/MarketStore.cpp

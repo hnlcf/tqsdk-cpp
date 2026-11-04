@@ -41,6 +41,8 @@ QString timeText(qint64 nanoseconds) {
 constexpr double kHeaderHeight = 56.0;
 constexpr double kAxisGap      = 28.0;
 constexpr double kVolumeHeight = 86.0;
+constexpr double kSubHeight    = 100.0;
+constexpr double kSubGap       = 8.0;
 constexpr double kBottomMargin = 8.0;
 
 } // namespace
@@ -122,17 +124,39 @@ void KLineChartWidget::setTheme(bool dark) {
     invalidateCache();
 }
 
+void KLineChartWidget::setIndicatorSeries(const QVector<IndicatorSeries>& series) {
+    indicators_ = series;
+    invalidateCache();
+}
+
 QSize KLineChartWidget::sizeHint() const {
     return {900, 520};
 }
 
 QRectF KLineChartWidget::plotArea() const {
+    const double subHeight = hasSubIndicator() ? kSubHeight + kSubGap : 0.0;
     return QRectF(14.0,
                   kHeaderHeight,
                   std::max(20.0, static_cast<double>(width()) - 92.0),
                   std::max(20.0,
                            static_cast<double>(height()) - kHeaderHeight - kAxisGap -
-                               kVolumeHeight - kBottomMargin));
+                               kVolumeHeight - kBottomMargin - subHeight));
+}
+
+bool KLineChartWidget::hasSubIndicator() const {
+    return std::any_of(indicators_.begin(), indicators_.end(), [](const IndicatorSeries& series) {
+        return series.panel == "sub";
+    });
+}
+
+QRectF KLineChartWidget::volumeArea() const {
+    const QRectF plot = plotArea();
+    return QRectF(plot.left(), plot.bottom() + kAxisGap, plot.width(), kVolumeHeight);
+}
+
+QRectF KLineChartWidget::subArea() const {
+    const QRectF volume = volumeArea();
+    return QRectF(volume.left(), volume.bottom() + kSubGap, volume.width(), kSubHeight);
 }
 
 int KLineChartWidget::visibleBarCount() const {
@@ -205,6 +229,17 @@ bool KLineChartWidget::visiblePriceRange(double& minPrice, double& maxPrice) con
             maxPrice = std::max(maxPrice, bar.high);
         }
     }
+    for (const auto& series : indicators_) {
+        if (series.panel != QStringLiteral("main")) {
+            continue;
+        }
+        for (const double value : series.values) {
+            if (finite(value)) {
+                minPrice = std::min(minPrice, value);
+                maxPrice = std::max(maxPrice, value);
+            }
+        }
+    }
     if (!finite(minPrice) || !finite(maxPrice)) {
         return false;
     }
@@ -241,10 +276,45 @@ void KLineChartWidget::renderCache() {
         drawEmpty(painter);
     } else {
         const QRectF plot = plotArea();
-        const QRectF volumePlot(plot.left(), plot.bottom() + kAxisGap, plot.width(), kVolumeHeight);
         drawGrid(painter, plot, minPrice, maxPrice);
         drawCandles(painter, plot, minPrice, maxPrice, first, count);
-        drawVolume(painter, volumePlot, first, count);
+        drawIndicators(painter, plot, minPrice, maxPrice, QStringLiteral("main"));
+        drawVolume(painter, volumeArea(), first, count);
+
+        if (hasSubIndicator()) {
+            const QRectF sub    = subArea();
+            double       subMin = std::numeric_limits<double>::infinity();
+            double       subMax = -std::numeric_limits<double>::infinity();
+            for (const auto& series : indicators_) {
+                if (series.panel != QStringLiteral("sub")) {
+                    continue;
+                }
+                for (const double value : series.values) {
+                    if (finite(value)) {
+                        subMin = std::min(subMin, value);
+                        subMax = std::max(subMax, value);
+                    }
+                }
+            }
+            if (!finite(subMin) || !finite(subMax)) {
+                subMin = -1.0;
+                subMax = 1.0;
+            } else if (subMax <= subMin) {
+                subMax = subMin + 1.0;
+                subMin -= 1.0;
+            }
+            const QColor line = dark_ ? QColor("#2a2a2a") : QColor("#ded7cc");
+            painter.setPen(QPen(line, 1.0));
+            for (int i = 0; i <= 2; ++i) {
+                const double y = sub.top() + sub.height() * i / 2.0;
+                painter.drawLine(QPointF(sub.left(), y), QPointF(sub.right(), y));
+            }
+            drawIndicators(painter, sub, subMin, subMax, QStringLiteral("sub"));
+            painter.setPen(dark_ ? QColor("#9a9a9a") : QColor("#6f675f"));
+            painter.drawText(QRectF(sub.left() + 4, sub.top() + 2, 180, 16),
+                             Qt::AlignLeft | Qt::AlignVCenter,
+                             QStringLiteral("MACD"));
+        }
     }
 
     cacheDirty_ = false;
@@ -277,6 +347,56 @@ void KLineChartWidget::paintEvent(QPaintEvent* event) {
         return;
     }
     drawCrosshair(painter, plotArea(), minPrice, maxPrice);
+}
+
+void KLineChartWidget::drawIndicators(QPainter&      painter,
+                                      const QRectF&  plot,
+                                      double         minPrice,
+                                      double         maxPrice,
+                                      const QString& panel) const {
+    if (plot.height() <= 0.0 || maxPrice <= minPrice) {
+        return;
+    }
+    const int first = firstVisibleBar();
+    const int count = visibleBarCount();
+    if (count <= 0) {
+        return;
+    }
+    QHash<qint64, int> indexByTime;
+    for (int i = first; i < first + count; ++i) {
+        indexByTime.insert(bars_.at(i).datetime, i);
+    }
+    const double step = plot.width() / count;
+    for (const auto& series : indicators_) {
+        if (series.panel != panel || series.values.isEmpty()) {
+            continue;
+        }
+        QPolygonF line;
+        for (int i = 0; i < series.values.size(); ++i) {
+            const double value = series.values.at(i);
+            if (!finite(value) || i >= series.datetimes.size()) {
+                continue;
+            }
+            const auto found = indexByTime.constFind(series.datetimes.at(i));
+            if (found == indexByTime.constEnd()) {
+                continue;
+            }
+            const int    index = found.value();
+            const double x     = plot.left() + step * (index - first + 0.5);
+            const double y =
+                plot.bottom() - (value - minPrice) / (maxPrice - minPrice) * plot.height();
+            line.append(QPointF(x, y));
+        }
+        if (line.size() >= 2) {
+            painter.setPen(QPen(series.color, 1.3));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawPolyline(line);
+        } else if (line.size() == 1) {
+            painter.setBrush(series.color);
+            painter.setPen(Qt::NoPen);
+            painter.drawEllipse(line.first(), 2.0, 2.0);
+        }
+    }
 }
 
 void KLineChartWidget::drawHeader(QPainter& painter) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "indicator/IndicatorTypes.h"
 #include "net/Protocol.h"
 
 #include <QFont>
@@ -32,11 +33,13 @@ public:
     void setQuote(const Quote& quote);
     void setTitle(const QString& symbol, const QString& interval = QStringLiteral("1d"));
     void setTheme(bool dark);
+    void setIndicatorSeries(const QVector<IndicatorSeries>& series);
 
     QString symbol() const { return symbol_; }
     QString interval() const { return interval_; }
 
     int  barCount() const { return bars_.size(); }
+    int  indicatorCount() const { return indicators_.size(); }
     int  visibleCount() const { return visibleCount_; }
     int  visibleStartIndex() const { return visibleStart_; }
     bool followLatest() const { return followLatest_; }
@@ -57,6 +60,9 @@ protected:
 
 private:
     QRectF plotArea() const;
+    QRectF volumeArea() const;
+    QRectF subArea() const;
+    bool   hasSubIndicator() const;
     int    firstVisibleBar() const;
     int    visibleBarCount() const;
     void   clampView();
@@ -75,21 +81,27 @@ private:
                        int           first,
                        int           count) const;
     void   drawVolume(QPainter& painter, const QRectF& plot, int first, int count) const;
+    void   drawIndicators(QPainter&      painter,
+                          const QRectF&  plot,
+                          double         minPrice,
+                          double         maxPrice,
+                          const QString& panel) const;
     void
     drawCrosshair(QPainter& painter, const QRectF& plot, double minPrice, double maxPrice) const;
 
-    QVector<KlineBar> bars_;
-    Quote             quote_;
-    QString           symbol_           = QStringLiteral("—");
-    QString           interval_         = QStringLiteral("1d");
-    bool              dark_             = true;
-    QPoint            crosshair_        = QPoint(-1, -1);
-    QPoint            pendingCrosshair_ = QPoint(-1, -1);
-    QTimer*           crosshairTimer_   = nullptr;
-    QFont             titleFont_;
-    QFont             valueFont_;
-    QPixmap           chartCache_;
-    bool              cacheDirty_ = true;
+    QVector<KlineBar>        bars_;
+    QVector<IndicatorSeries> indicators_;
+    Quote                    quote_;
+    QString                  symbol_           = QStringLiteral("—");
+    QString                  interval_         = QStringLiteral("1d");
+    bool                     dark_             = true;
+    QPoint                   crosshair_        = QPoint(-1, -1);
+    QPoint                   pendingCrosshair_ = QPoint(-1, -1);
+    QTimer*                  crosshairTimer_   = nullptr;
+    QFont                    titleFont_;
+    QFont                    valueFont_;
+    QPixmap                  chartCache_;
+    bool                     cacheDirty_ = true;
 
     int  visibleCount_ = 120;
     int  visibleStart_ = 0;

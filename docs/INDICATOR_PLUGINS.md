@@ -1,6 +1,6 @@
 # K 线指标插件设计
 
-> 状态：架构设计，暂未实现。
+> 状态：Phase B（Python sidecar + 内置 MA/EMA/BOLL/MACD）已实现；DSL/第三方插件目录仍待 Phase C。
 >
 > 目标不是把指标公式塞进 `paintEvent`，而是让指标计算、渲染和生命周期与
 > K 线数据、图表控件解耦，后续可以支持 Python 脚本、内置 DSL 和第三方插件包。
@@ -363,3 +363,138 @@ def on_bar(ctx, bar):
 当前路线备注：用户倾向后续直接从 **Python sidecar（第二阶段）** 开始，因此
 Phase A 的 DSL 可以只保留为轻量内置指标能力，不阻塞 Python 插件。
 无论先做哪一层，主图/副图渲染抽象和数据协议都应先稳定下来。
+
+## 12. P3 Phase B 实现记录（2026-11-04）
+
+状态：**Phase B 已实现**，内置指标已经通过 Qt UI → Manager → Python sidecar
+的完整链路运行；第三方插件目录、签名和依赖安装留到 Phase C。
+
+### 12.1 代码位置
+
+```text
+ui/src/indicator/IndicatorTypes.h           指标 spec/series 数据结构
+ui/src/indicator/IndicatorManager.{h,cpp}  QProcess 生命周期、协议、超时、重启
+ui/src/indicator/IndicatorSettingsDialog.* 数值参数编辑
+ui/indicator_sidecar/indicator_sidecar.py  独立 Python sidecar
+ui/tests/IndicatorManagerTest.cpp          协议/计算/异常测试
+ui/tests/MainWindowTest.cpp                UI 端到端指标测试
+```
+
+### 12.2 当前内置指标
+
+| id | 面板 | 参数 | 输出 |
+|---|---|---|---|
+| `ma` | main | fast、slow | `ma_fast`、`ma_slow` |
+| `ema` | main | fast、slow | `ema_fast`、`ema_slow` |
+| `boll` | main | period、mult | mid、upper、lower |
+| `macd` | sub | fast、slow、signal | macd、signal、histogram |
+
+`IndicatorManager` 只接收数值序列；图表不会执行 Python、不会持有 sidecar 对象。
+图表主图用价格坐标绘制 MA/EMA/BOLL，MACD 在副图独立缩放绘制。
+
+### 12.3 协议
+
+实际实现使用长度前缀 JSON，而不是换行分隔：
+
+```text
+[4-byte big-endian length][UTF-8 compact JSON]
+```
+
+请求：
+
+```json
+{"type":"init","indicator_id":"ma","params":{"fast":5,"slow":20}}
+{"type":"bars","indicator_id":"ma","reset":true,"bars":[{"datetime":...,"close":...}]}
+```
+
+响应：
+
+```json
+{"type":"series","indicator_id":"ma","series":[{"name":"ma_fast",
+  "panel":"main","points":[{"datetime":...,"value":...}]}]}
+```
+
+错误：
+
+```json
+{"type":"error","indicator_id":"ma","code":"indicator_error","message":"..."}
+```
+
+实现约束：
+
+- 只接受 `init`、`bars`、`stop`；
+- 每帧上限 16MB，UI 接收上限 8MB；
+- 输出只允许有限数值，NaN/Inf 被过滤；
+- 未知指标、未初始化指标、非法帧返回 error，不退出整个 sidecar；
+- 首帧 `ready` 后 UI 才发送 init/bars。
+
+### 12.4 Qt Manager 生命周期
+
+1. 启动时 `/ready` 发送 `ready`；
+2. `IndicatorManager` 为启用指标发送 `init`；
+3. K 线 reset 时发送完整窗口，后续相同合约/周期只发送最后一根 bar 或新增 bar；
+4. 结果按 `indicator_id` 聚合，按启用顺序发给图表；
+5. 进程退出后标记错误，1 秒后自动重启；
+6. 响应 3 秒超时、输出超限、启动失败都会返回错误信号；
+7. 进程环境会移除 `CTP_*`、密码和 AuthCode 变量，工作目录切到 sidecar 目录。
+
+### 12.5 UI 使用
+
+菜单栏新增“指标”：
+
+- 子菜单中勾选启用 MA/EMA/BOLL/MACD；
+- “参数...”打开数值参数编辑框；
+- 启用/参数保存到：
+
+```text
+ui/indicators/enabled
+ui/indicators/<id>/params   # compact JSON bytes
+```
+
+启用指标后，K 线数据继续只从 node 获取；指标不可用时图表保持原样，错误显示在
+状态栏和顶部 Toast，不会阻塞交易或自选操作。
+
+### 12.6 运行和测试
+
+```bash
+python3 ui/indicator_sidecar/indicator_sidecar.py   # 手工协议调试
+cmake --build build-ui --target tqsdk-ui-indicator-tests -j
+ctest --test-dir build-ui -R 'tqsdk-ui-(indicator|chart|window)' --output-on-failure
+```
+
+`scripts/run_live.sh` 会导出：
+
+```text
+TQSDK_INDICATOR_SIDECAR=<repo>/ui/indicator_sidecar/indicator_sidecar.py
+```
+
+也可以手动设置该环境变量或在 CMake install 后使用随包 `share/tqsdk/indicator_sidecar`。
+
+### 12.7 当前边界
+
+- 内置指标由 sidecar 静态注册，尚未做第三方目录扫描和 manifest 签名；
+- Python 依赖只使用标准库，暂不支持执行 `requirements.txt` 安装；
+- 副图当前固定一个 MACD 区域，后续可扩展多副图和十字光标联动；
+- 指标有独立覆盖层缓存，副图出现时会缩小主图和成交量区域；
+- 多指标同时启用时 sidecar 按请求顺序计算；大窗口/多指标基准测试留在 Phase C。
+
+### 12.8 验证记录
+
+2026-11-04 在 `build-ui`（RelWithDebInfo，Qt 6.11.2）执行：
+
+```text
+ctest --test-dir build-ui --output-on-failure
+273/273 tests passed
+2 个真实行情网络测试按设计跳过
+```
+
+指标相关覆盖：
+
+- `tqsdk-ui-indicator`：MA/MACD 计算、增量 update、参数下发、非法 sidecar 路径、崩溃 sidecar；
+- `tqsdk-ui-chart`：主图叠加 + MACD 副图绘制 smoke；
+- `tqsdk-ui-window`：FakeNodeClient K 线 → IndicatorManager → sidecar → 图表端到端；
+- 4K UI stress 仍保持最大 event-loop gap 约 9ms。
+
+已知性能边界：每次 K 线变化会由 sidecar 返回当前窗口数值序列；当前
+P3 只做单窗口/单 sidecar 的性能验证，100 指标、10 年 1m bar 的 Phase C
+压力测试尚未执行。

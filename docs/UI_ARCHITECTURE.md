@@ -251,6 +251,21 @@ WS messages ──► parse ──► pending MarketUpdate
 
 这些 controller 之间通过语义信号/明确接口连接，MainWindow 不直接处理交易或行情字段。
 
+### 5.2.1 IndicatorManager / Python sidecar（P3）
+
+`ui/src/indicator/IndicatorManager` 负责启动独立 `python3` sidecar，使用
+4 字节大端长度前缀 JSON 帧；UI 线程只做协议编解码和图表数据更新，不执行
+Python。sidecar 有 3 秒响应超时、8MB 输出上限、进程退出后 1 秒重启，并
+从子进程环境中移除 `CTP_*`、密码和 AuthCode。
+
+- 内置 MA/EMA/BOLL 为主图叠加，MACD 为副图；
+- `KLineChartWidget::setIndicatorSeries()` 只接收数值序列；
+- 主图指标参与价格坐标范围，副图使用独立数值范围；
+- 菜单“指标”负责启停和参数编辑；
+- 配置键：`ui/indicators/enabled`、`ui/indicators/<id>/params`；
+- 脚本路径可由 `TQSDK_INDICATOR_SIDECAR` 覆盖，也可以随 install 放在
+  `share/tqsdk/indicator_sidecar/`。
+
 ### 5.3 KLineChartWidget
 
 `ui/src/chart/KLineChartWidget.{h,cpp}`：
@@ -267,7 +282,8 @@ WS messages ──► parse ──► pending MarketUpdate
 - 只有最新价/昨结变化才触发图表 quote 重绘，纯成交量 diff 不重绘；
 - 只绘制可见区间；
 - K 线/网格/成交量缓存为 QPixmap，鼠标移动只重绘十字光标和头部，不重画 K 线；
-- 十字光标以 16ms 单次定时器合并鼠标移动事件。
+- 十字光标以 16ms 单次定时器合并鼠标移动事件；
+- 主图指标画在 K 线缓存中，副图（MACD）单独占底部区域，启用副图时自动压缩主图和成交量区域。
 
 ### 5.3.1 主题与绘制性能
 

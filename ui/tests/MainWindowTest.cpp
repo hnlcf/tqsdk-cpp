@@ -66,6 +66,7 @@ private slots:
     void orderFailureShowsToast();
     void watchlistCanRemoveAndReorder();
     void perSymbolChartStateIsRestored();
+    void indicatorsRenderThroughSidecar();
     void cleanup();
 
 private:
@@ -358,6 +359,39 @@ void MainWindowTest::perSymbolChartStateIsRestored() {
     QCOMPARE(chart->visibleCount(), 40);
     QCOMPARE(chart->visibleStartIndex(), 5);
     QVERIFY(!chart->followLatest());
+}
+
+void MainWindowTest::indicatorsRenderThroughSidecar() {
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("ui/watchlist"), QStringList{QStringLiteral("SHFE.rb2701")});
+    settings.setValue(QStringLiteral("ui/chart/symbol"), QStringLiteral("SHFE.rb2701"));
+    settings.setValue(QStringLiteral("ui/chart/durationNs"), qint64(60'000'000'000LL));
+    settings.setValue(QStringLiteral("ui/indicators/enabled"), QStringList{QStringLiteral("ma")});
+    settings.sync();
+
+    FakeNodeClient client;
+    MainWindow     window(&client);
+    window.show();
+    QTest::qWait(50);
+
+    auto* chart = window.findChild<KLineChartWidget*>();
+    QVERIFY(chart != nullptr);
+
+    KlineFrame frame;
+    frame.reset = true;
+    for (int i = 0; i < 40; ++i) {
+        KlineBar bar;
+        bar.datetime = (1'793'770'620LL + i * 60) * 1'000'000'000LL;
+        bar.open = bar.high = bar.low = bar.close = 100.0 + i;
+        bar.volume                                = 1;
+        frame.bars.push_back(bar);
+    }
+    client.publishKline(QStringLiteral("SHFE.rb2701"), 60'000'000'000LL, frame);
+    QTRY_COMPARE_WITH_TIMEOUT(chart->indicatorCount(), 2, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(chart->barCount(), 40, 3000);
+    QVERIFY(!chart->grab().isNull());
+    settings.clear();
 }
 
 void MainWindowTest::cleanup() {

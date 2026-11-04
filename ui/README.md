@@ -38,7 +38,8 @@ UI 默认关闭，避免影响后端核心构建。先安装 Qt，再用 UI pres
 export VCPKG_ROOT=/path/to/vcpkg
 cmake --preset ui-dev
 cmake --build --preset ui-dev
-ctest --test-dir build-ui -R 'tqsdk-ui-(protocol|models)' --output-on-failure
+ctest --test-dir build-ui --output-on-failure
+# 只测指标：ctest --test-dir build-ui -R 'tqsdk-ui-(indicator|chart|window)' --output-on-failure
 ./build-ui/bin/tqsdk-ui
 ```
 
@@ -64,6 +65,14 @@ Phase 1（已完成）：
 - Wayland 原生运行，保留 XCB/XWayland fallback；
 - QtTest 覆盖协议解析、MarketStore 合并和 table models。
 
+Phase 3（P3 Phase B 已完成）：
+- Python 指标 sidecar，独立进程运行，长度前缀 JSON 协议；
+- 内置 MA/EMA/BOLL/MACD；
+- 主图叠加和 MACD 副图；
+- 指标菜单、参数编辑、启停和 QSettings 持久化；
+- sidecar 超时、输出上限、崩溃重启和敏感环境变量隔离；
+- `tqsdk-ui-indicator` 测试覆盖协议、计算、增量更新和 UI 端到端。
+
 Phase 2（已完成基础版）：
 
 - 期权链 CALL/PUT 表格，双击合约加入自选；
@@ -76,6 +85,8 @@ Phase 2（已完成基础版）：
 
 ```bash
 ./build-ui/bin/tqsdk-ui --node-url http://127.0.0.1:18081
+# 指标 sidecar（正常由 IndicatorManager 自动启动）
+python3 ui/indicator_sidecar/indicator_sidecar.py
 ```
 
 ## Tq + CTP 一键启动

@@ -6,6 +6,8 @@
 #include "app/TradingController.h"
 #include "app/WorkspaceLayout.h"
 
+#include "app/IndicatorController.h"
+
 #include "chart/KLineChartWidget.h"
 #include "model/InstrumentTableModel.h"
 #include "model/MarketStore.h"
@@ -22,6 +24,7 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDockWidget>
+#include <QJsonDocument>
 #include <QMenu>
 #include <QMenuBar>
 #include <QSettings>
@@ -186,13 +189,16 @@ void MainWindow::buildUi() {
         }
     });
 
+    indicatorController_ =
+        new IndicatorController(workspace_->chart(), menuBar(), statusBar(), toast_, this);
+
     buildTradingController();
     buildViewMenu();
     buildTradingShortcuts();
     workspace_->restoreLayout();
     workspace_->chart()->setTitle(symbolController_->selectedSymbol(),
                                   symbolController_->selectedInterval());
-    statusBar()->showMessage(tr("Qt UI Phase 2 · 等待 node"));
+    statusBar()->showMessage(tr("Qt UI · 等待 node"));
 }
 
 void MainWindow::buildToolbar() {
@@ -385,6 +391,9 @@ void MainWindow::connectNode() {
             &NodeDataController::klineSeriesChanged,
             this,
             [this](const QString& symbol, qint64 durationNs, const QVector<KlineBar>& bars) {
+                if (indicatorController_ != nullptr) {
+                    indicatorController_->setBars(symbol, durationNs, bars);
+                }
                 queueChartBars(symbol, durationNs, bars);
             });
     connect(nodeDataController_,
@@ -535,6 +544,12 @@ void MainWindow::applySelectedSymbol(const QString& symbol) {
         nodeDataController_->setSelectedContract(symbol, symbolController_->selectedDurationNs());
     }
     workspace_->setChartSymbol(symbol);
+    if (indicatorController_ != nullptr) {
+        indicatorController_->setBars(
+            symbol,
+            symbolController_->selectedDurationNs(),
+            marketStore_->bars(symbol, symbolController_->selectedDurationNs()));
+    }
     workspace_->chart()->setTitle(symbol, symbolController_->selectedInterval());
     if (chartRefreshTimer_ != nullptr) {
         chartRefreshTimer_->stop();
@@ -551,6 +566,12 @@ void MainWindow::applyInterval(qint64 durationNs, const QString& label) {
     if (nodeDataController_ != nullptr) {
         nodeDataController_->setSelectedContract(symbolController_->selectedSymbol(),
                                                  symbolController_->selectedDurationNs());
+    }
+    if (indicatorController_ != nullptr) {
+        indicatorController_->setBars(symbolController_->selectedSymbol(),
+                                      symbolController_->selectedDurationNs(),
+                                      marketStore_->bars(symbolController_->selectedSymbol(),
+                                                         symbolController_->selectedDurationNs()));
     }
     if (chartRefreshTimer_ != nullptr) {
         chartRefreshTimer_->stop();

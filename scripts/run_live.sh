@@ -16,6 +16,7 @@
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export TQSDK_INDICATOR_SIDECAR="${TQSDK_INDICATOR_SIDECAR:-$ROOT/ui/indicator_sidecar/indicator_sidecar.py}"
 BUILD_DIR="${TQSDK_BUILD_DIR:-$ROOT/build-ui}"
 CONFIG_FILE="${TQSDK_LIVE_CONFIG:-$ROOT/config/live.local.env}"
 RUN_DIR="${TQSDK_RUN_DIR:-$ROOT/run/live}"
