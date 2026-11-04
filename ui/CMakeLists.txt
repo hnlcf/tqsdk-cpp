@@ -21,6 +21,8 @@ set(TQSDK_UI_SOURCES
     src/net/Protocol.h
     src/net/HttpWsNodeClient.cpp
     src/net/HttpWsNodeClient.h
+    src/net/JsonParserWorker.cpp
+    src/net/JsonParserWorker.h
     src/model/MarketStore.cpp
     src/model/MarketStore.h
     src/model/QuoteTableModel.cpp
@@ -106,4 +108,20 @@ if(TQSDK_BUILD_UI_TESTS)
         Qt6::Test
     )
     add_test(NAME tqsdk-ui-models COMMAND tqsdk-ui-model-tests)
+    qt_add_executable(tqsdk-ui-parser-tests
+        tests/JsonParserWorkerTest.cpp
+        src/net/JsonParserWorker.cpp
+        src/net/JsonParserWorker.h
+        src/net/Protocol.cpp
+        src/net/Protocol.h
+    )
+    target_include_directories(tqsdk-ui-parser-tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(tqsdk-ui-parser-tests PRIVATE
+        Qt6::Core
+        Qt6::Test
+    )
+    add_test(NAME tqsdk-ui-parser COMMAND tqsdk-ui-parser-tests)
+
 endif()

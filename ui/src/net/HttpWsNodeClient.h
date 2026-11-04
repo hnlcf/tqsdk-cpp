@@ -3,6 +3,7 @@
 #include "net/NodeClient.h"
 
 #include <QNetworkAccessManager>
+#include <QThread>
 #include <QTimer>
 #include <QUrl>
 #include <QWebSocket>
@@ -10,6 +11,9 @@
 #include <functional>
 
 class QNetworkReply;
+namespace tqsdk::ui {
+class JsonParserWorker;
+} // namespace tqsdk::ui
 
 namespace tqsdk::ui {
 
@@ -44,21 +48,23 @@ private:
     void openSocket();
     void scheduleReconnect();
     void sendSubscribe();
-    void handleEnvelope(const QJsonObject& envelope);
-    void handleMarketData(const QJsonObject& data);
     void emitMarketUpdate(const MarketUpdate& update);
 
     QUrl apiUrl(const QString& path) const;
     QUrl streamUrl() const;
 
     using JsonCallback = std::function<void(const QJsonObject&, const QString&)>;
+    using RawCallback  = std::function<void(const QByteArray&, const QString&)>;
     void getJson(const QUrl& url, JsonCallback callback);
+    void getRawJson(const QUrl& url, RawCallback callback);
     void sendJson(QNetworkAccessManager::Operation method,
                   const QUrl&                      url,
                   const QJsonObject&               body,
                   JsonCallback                     callback);
 
     QNetworkAccessManager network_;
+    QThread               parserThread_;
+    JsonParserWorker*     parser_ = nullptr;
     QWebSocket            socket_;
     QTimer                reconnectTimer_;
     QUrl                  nodeUrl_;

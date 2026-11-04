@@ -701,6 +701,30 @@ void MainWindow::buildBottomDock() {
         tr("三键下单"), orderBox, Qt::BottomDockWidgetArea, QStringLiteral("orderDock"));
     splitDockWidget(tradingDock_, orderDock_, Qt::Horizontal);
     orderDock_->setMinimumWidth(300);
+
+    const auto refreshCachedQuotes = [this] {
+        if (latestQuotes_.isEmpty()) {
+            return;
+        }
+        const auto quotes = latestQuotes_.values();
+        if (futuresDock_ != nullptr && futuresDock_->isVisible()) {
+            futuresModel_->applyQuotes(quotes);
+        }
+        if (optionsDock_ != nullptr && optionsDock_->isVisible()) {
+            callsModel_->applyQuotes(quotes);
+            putsModel_->applyQuotes(quotes);
+        }
+    };
+    if (futuresDock_ != nullptr) {
+        connect(futuresDock_, &QDockWidget::visibilityChanged, this, [refreshCachedQuotes](bool) {
+            refreshCachedQuotes();
+        });
+    }
+    if (optionsDock_ != nullptr) {
+        connect(optionsDock_, &QDockWidget::visibilityChanged, this, [refreshCachedQuotes](bool) {
+            refreshCachedQuotes();
+        });
+    }
 }
 
 void MainWindow::connectNode() {
@@ -771,11 +795,26 @@ void MainWindow::connectNode() {
     });
 
     connect(nodeClient_, &NodeClient::quotesUpdated, this, [this](const QVector<Quote>& quotes) {
+        for (const auto& quote : quotes) {
+            if (quote.instrumentId.isEmpty()) {
+                continue;
+            }
+            auto it = latestQuotes_.find(quote.instrumentId);
+            if (it == latestQuotes_.end()) {
+                latestQuotes_.insert(quote.instrumentId, quote);
+            } else {
+                *it = mergeQuote(*it, quote);
+            }
+        }
         marketStore_->applyQuotes(quotes);
         watchModel_->applyQuotes(quotes);
-        futuresModel_->applyQuotes(quotes);
-        callsModel_->applyQuotes(quotes);
-        putsModel_->applyQuotes(quotes);
+        if (futuresDock_ != nullptr && futuresDock_->isVisible()) {
+            futuresModel_->applyQuotes(quotes);
+        }
+        if (optionsDock_ != nullptr && optionsDock_->isVisible()) {
+            callsModel_->applyQuotes(quotes);
+            putsModel_->applyQuotes(quotes);
+        }
         updateQuotePanel();
     });
 

@@ -210,3 +210,8 @@ QString offsetText(Offset offset);
 QString priceTypeText(PriceType priceType);
 
 } // namespace tqsdk::ui
+
+Q_DECLARE_METATYPE(tqsdk::ui::MarketUpdate)
+Q_DECLARE_METATYPE(tqsdk::ui::OptionChain)
+Q_DECLARE_METATYPE(QVector<tqsdk::ui::Instrument>)
+Q_DECLARE_METATYPE(QVector<tqsdk::ui::KlineBar>)

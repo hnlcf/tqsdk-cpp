@@ -1,5 +1,7 @@
 #include "net/HttpWsNodeClient.h"
 
+#include "net/JsonParserWorker.h"
+
 #include <QAbstractSocket>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -33,6 +35,66 @@ HttpWsNodeClient::HttpWsNodeClient(QObject* parent)
       reconnectTimer_(this) {
     reconnectTimer_.setSingleShot(true);
 
+    qRegisterMetaType<MarketUpdate>("tqsdk::ui::MarketUpdate");
+    qRegisterMetaType<OptionChain>("tqsdk::ui::OptionChain");
+    qRegisterMetaType<QVector<Instrument>>("QVector<tqsdk::ui::Instrument>");
+    qRegisterMetaType<QVector<KlineBar>>("QVector<tqsdk::ui::KlineBar>");
+
+    parser_ = new JsonParserWorker;
+    parser_->moveToThread(&parserThread_);
+    connect(&parserThread_, &QThread::finished, parser_, &QObject::deleteLater);
+    connect(
+        parser_,
+        &JsonParserWorker::marketUpdateParsed,
+        this,
+        [this](const MarketUpdate& update) { emitMarketUpdate(update); },
+        Qt::QueuedConnection);
+    connect(
+        parser_,
+        &JsonParserWorker::wsSubscribed,
+        this,
+        [this] { setState(State::Ready, QStringLiteral("已订阅")); },
+        Qt::QueuedConnection);
+    connect(
+        parser_,
+        &JsonParserWorker::wsSnapshot,
+        this,
+        [this] { setState(State::Ready, QStringLiteral("已同步快照")); },
+        Qt::QueuedConnection);
+    connect(
+        parser_,
+        &JsonParserWorker::wsError,
+        this,
+        [this](const QString& error) { emit errorOccurred(error); },
+        Qt::QueuedConnection);
+    connect(
+        parser_,
+        &JsonParserWorker::parseError,
+        this,
+        [this](const QString& error) { emit errorOccurred(error); },
+        Qt::QueuedConnection);
+    connect(
+        parser_,
+        &JsonParserWorker::catalogParsed,
+        this,
+        [this](const QVector<Instrument>& instruments) { emit catalogLoaded(instruments); },
+        Qt::QueuedConnection);
+    connect(
+        parser_,
+        &JsonParserWorker::klineHistoryParsed,
+        this,
+        [this](const QString& symbol, qint64 duration, const QVector<KlineBar>& bars) {
+            emit klineHistoryLoaded(symbol, duration, bars);
+        },
+        Qt::QueuedConnection);
+    connect(
+        parser_,
+        &JsonParserWorker::optionChainParsed,
+        this,
+        [this](const OptionChain& chain) { emit optionChainLoaded(chain); },
+        Qt::QueuedConnection);
+    parserThread_.start();
+
     connect(&socket_, &QWebSocket::connected, this, [this] {
         reconnectTimer_.stop();
         reconnectDelayMs_ = 1000;
@@ -47,13 +109,12 @@ HttpWsNodeClient::HttpWsNodeClient(QObject* parent)
         scheduleReconnect();
     });
     connect(&socket_, &QWebSocket::textMessageReceived, this, [this](const QString& text) {
-        QJsonParseError error;
-        const auto      document = QJsonDocument::fromJson(text.toUtf8(), &error);
-        if (error.error != QJsonParseError::NoError || !document.isObject()) {
-            emit errorOccurred(QStringLiteral("invalid node WS JSON: %1").arg(error.errorString()));
+        if (parser_ == nullptr) {
             return;
         }
-        handleEnvelope(document.object());
+        const QByteArray payload = text.toUtf8();
+        QMetaObject::invokeMethod(
+            parser_, "parseWsMessage", Qt::QueuedConnection, Q_ARG(QByteArray, payload));
     });
     connect(&socket_, &QWebSocket::errorOccurred, this, [this](QAbstractSocket::SocketError) {
         emit errorOccurred(QStringLiteral("WebSocket: %1").arg(socket_.errorString()));
@@ -72,6 +133,11 @@ HttpWsNodeClient::~HttpWsNodeClient() {
     manualDisconnect_ = true;
     reconnectTimer_.stop();
     socket_.abort();
+    if (parser_ != nullptr && parserThread_.isRunning()) {
+        QMetaObject::invokeMethod(parser_, "stop", Qt::BlockingQueuedConnection);
+    }
+    parserThread_.quit();
+    parserThread_.wait(2000);
 }
 
 void HttpWsNodeClient::connectToNode(const QUrl& nodeUrl) {
@@ -134,42 +200,6 @@ void HttpWsNodeClient::sendSubscribe() {
     }
     const QJsonDocument document(makeSubscribe(subscription_));
     socket_.sendTextMessage(QString::fromUtf8(document.toJson(QJsonDocument::Compact)));
-}
-
-void HttpWsNodeClient::handleEnvelope(const QJsonObject& envelope) {
-    const QString type = envelope.value("type").toString();
-    if (type == QStringLiteral("error")) {
-        emit errorOccurred(envelope.value("error").toString());
-        return;
-    }
-    if (type == QStringLiteral("welcome")) {
-        return;
-    }
-    if (type == QStringLiteral("subscribed")) {
-        setState(State::Ready, QStringLiteral("已订阅"));
-        return;
-    }
-    if (type == QStringLiteral("snapshot")) {
-        setState(State::Ready, QStringLiteral("已同步快照"));
-        if (envelope.value("data").isObject()) {
-            handleMarketData(envelope.value("data").toObject());
-        }
-        return;
-    }
-    if (type == QStringLiteral("diff")) {
-        if (envelope.value("data").isObject()) {
-            handleMarketData(envelope.value("data").toObject());
-        }
-        return;
-    }
-    if (type == QStringLiteral("pong")) {
-        return;
-    }
-    emit errorOccurred(QStringLiteral("unknown node WS message type: %1").arg(type));
-}
-
-void HttpWsNodeClient::handleMarketData(const QJsonObject& data) {
-    emitMarketUpdate(parseMarketData(data));
 }
 
 void HttpWsNodeClient::emitMarketUpdate(const MarketUpdate& update) {
@@ -248,6 +278,25 @@ void HttpWsNodeClient::getJson(const QUrl& url, JsonCallback callback) {
         });
 }
 
+void HttpWsNodeClient::getRawJson(const QUrl& url, RawCallback callback) {
+    QNetworkRequest request(url);
+    request.setRawHeader("Accept", "application/json");
+    auto* reply = network_.get(request);
+
+    connect(
+        reply, &QNetworkReply::finished, this, [reply, callback = std::move(callback)]() mutable {
+            const QByteArray body = reply->readAll();
+            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const QString error = replyError(reply, status);
+            reply->deleteLater();
+            if (!error.isEmpty()) {
+                callback({}, error);
+                return;
+            }
+            callback(body, {});
+        });
+}
+
 void HttpWsNodeClient::sendJson(QNetworkAccessManager::Operation method,
                                 const QUrl&                      url,
                                 const QJsonObject&               body,
@@ -315,12 +364,15 @@ void HttpWsNodeClient::requestCatalog(const CatalogQuery& query) {
     q.addQueryItem("offset", QString::number(query.offset));
     url.setQuery(q);
 
-    getJson(url, [this](const QJsonObject& response, const QString& error) {
+    getRawJson(url, [this](const QByteArray& body, const QString& error) {
         if (!error.isEmpty()) {
             emit errorOccurred(error);
             return;
         }
-        emit catalogLoaded(parseCatalog(response));
+        if (parser_ != nullptr) {
+            QMetaObject::invokeMethod(
+                parser_, "parseCatalogPayload", Qt::QueuedConnection, Q_ARG(QByteArray, body));
+        }
     });
 }
 
@@ -348,16 +400,19 @@ void HttpWsNodeClient::requestQuotes(const QStringList& symbols) {
 
 void HttpWsNodeClient::requestOptionChain(const QString& underlying) {
     const QString encoded = QString::fromLatin1(QUrl::toPercentEncoding(underlying));
-    getJson(apiUrl(QStringLiteral("/catalog/option-chain/%1").arg(encoded)),
-            [this](const QJsonObject& response, const QString& error) {
-                if (!error.isEmpty()) {
-                    emit errorOccurred(error);
-                    return;
-                }
-                if (auto chain = parseOptionChain(response)) {
-                    emit optionChainLoaded(*chain);
-                }
-            });
+    getRawJson(apiUrl(QStringLiteral("/catalog/option-chain/%1").arg(encoded)),
+               [this](const QByteArray& body, const QString& error) {
+                   if (!error.isEmpty()) {
+                       emit errorOccurred(error);
+                       return;
+                   }
+                   if (parser_ != nullptr) {
+                       QMetaObject::invokeMethod(parser_,
+                                                 "parseOptionPayload",
+                                                 Qt::QueuedConnection,
+                                                 Q_ARG(QByteArray, body));
+                   }
+               });
 }
 
 void HttpWsNodeClient::requestKlineHistory(const QString& symbol,
@@ -366,12 +421,19 @@ void HttpWsNodeClient::requestKlineHistory(const QString& symbol,
     (void)viewWidth; // node 当前 REST 接口使用默认 200；扩展 query 后再接入。
     const QString encodedSymbol = QString::fromLatin1(QUrl::toPercentEncoding(symbol));
     const QUrl    url = apiUrl(QStringLiteral("/kline/%1/%2").arg(encodedSymbol).arg(durationNs));
-    getJson(url, [this, symbol, durationNs](const QJsonObject& response, const QString& error) {
+    getRawJson(url, [this, symbol, durationNs](const QByteArray& body, const QString& error) {
         if (!error.isEmpty()) {
             emit errorOccurred(error);
             return;
         }
-        emit klineHistoryLoaded(symbol, durationNs, parseKlineHistory(response));
+        if (parser_ != nullptr) {
+            QMetaObject::invokeMethod(parser_,
+                                      "parseKlinePayload",
+                                      Qt::QueuedConnection,
+                                      Q_ARG(QByteArray, body),
+                                      Q_ARG(QString, symbol),
+                                      Q_ARG(qint64, durationNs));
+        }
     });
 }
 

@@ -2,6 +2,7 @@
 
 #include "net/Protocol.h"
 
+#include <QHash>
 #include <QMainWindow>
 #include <QStringList>
 
@@ -88,6 +89,7 @@ private:
     QWidget*               chartHost_          = nullptr;
     QDialog*               chartDialog_        = nullptr;
     QTimer*                workspaceSaveTimer_ = nullptr;
+    QHash<QString, Quote>  latestQuotes_;
 
     QTableView*       watchTable_        = nullptr;
     QTableView*       futuresTable_      = nullptr;

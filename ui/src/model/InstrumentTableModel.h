@@ -4,6 +4,7 @@
 
 #include <QAbstractTableModel>
 #include <QHash>
+#include <QSet>
 #include <QVector>
 
 namespace tqsdk::ui {
@@ -46,6 +47,7 @@ public:
 private:
     QVector<Instrument>   instruments_;
     QHash<QString, Quote> quotes_;
+    QHash<QString, int>   rowBySymbol_;
 };
 
 } // namespace tqsdk::ui

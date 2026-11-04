@@ -143,9 +143,9 @@ GET  /kline-cache/status
 
 大合约目录（2.9 万条 symbol）解析不要阻塞 GUI：
 
-- `QNetworkReply` 完成后拿 `QByteArray`；
-- 在 `QtConcurrent::run` 中解析为紧凑 `QVector<Instrument>`；
-- 完成后 `QMetaObject::invokeMethod` 回 GUI 线程替换模型；
+- `QNetworkReply` 完成后只拿 `QByteArray`，不解析；
+- 通过 `JsonParserWorker`（独立 QThread）解析为紧凑 `QVector<Instrument>`；
+- 完成后通过 queued signal 回 GUI 线程替换模型；
 - 解析失败保留上一版目录。
 
 ### 2.5 重连与恢复
@@ -269,8 +269,11 @@ paintEvent:
 
 ## 4. 线程与对象生命周期
 
-- GUI、QNetworkAccessManager、QWebSocket 全部在 Qt 主线程；
-- 大目录解析可以放 `QtConcurrent`，完成后回主线程；
+- GUI、QNetworkAccessManager、QWebSocket 在主线程；socket 只负责收包；
+- WebSocket 市场 JSON、目录、K 线历史、期权链由 `JsonParserWorker` 在独立线程解析；
+- 市场增量在 worker 内约 33ms 合帧后回主线程，UI 每帧最多处理一次；
+- futures/options 表格不可见时不刷新，显示时用最新 quote 缓存补齐；
+- InstrumentTableModel 使用 symbol->row 索引，只对变化行发 dataChanged；
 - 所有 `QObject` 父子关系明确：`MainWindow -> AppController -> NodeClient`；
 - `QWebSocket` 的信号连接使用 `Qt::QueuedConnection` 或同线程直连；
 - `NodeRestClient` 持有 `QNetworkAccessManager`，reply 完成用 `deleteLater()`；

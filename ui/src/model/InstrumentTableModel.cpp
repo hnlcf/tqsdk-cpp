@@ -23,33 +23,38 @@ int InstrumentTableModel::columnCount(const QModelIndex& parent) const {
 void InstrumentTableModel::setInstruments(const QVector<Instrument>& instruments) {
     beginResetModel();
     instruments_ = instruments;
+    rowBySymbol_.clear();
+    rowBySymbol_.reserve(instruments_.size());
+    for (int row = 0; row < instruments_.size(); ++row) {
+        rowBySymbol_.insert(instruments_.at(row).instrumentId, row);
+    }
     endResetModel();
 }
 
 void InstrumentTableModel::applyQuotes(const QVector<Quote>& quotes) {
+    QSet<int> changedRows;
     for (const auto& quote : quotes) {
-        if (!quote.instrumentId.isEmpty()) {
-            auto it = quotes_.find(quote.instrumentId);
-            if (it == quotes_.end()) {
-                quotes_.insert(quote.instrumentId, quote);
-            } else {
-                *it = mergeQuote(*it, quote);
-            }
-        }
-    }
-    bool changed = false;
-    for (auto& instrument : instruments_) {
-        auto it = quotes_.constFind(instrument.instrumentId);
-        if (it == quotes_.constEnd()) {
+        if (quote.instrumentId.isEmpty()) {
             continue;
         }
-        changed = true;
-        if (std::isfinite(it.value().lastPrice) && it.value().lastPrice > 0.0) {
-            instrument.lastPrice = it.value().lastPrice;
+        auto quoteIt = quotes_.find(quote.instrumentId);
+        if (quoteIt == quotes_.end()) {
+            quoteIt = quotes_.insert(quote.instrumentId, quote);
+        } else {
+            *quoteIt = mergeQuote(*quoteIt, quote);
         }
+        const auto rowIt = rowBySymbol_.constFind(quote.instrumentId);
+        if (rowIt == rowBySymbol_.constEnd()) {
+            continue;
+        }
+        auto& instrument = instruments_[rowIt.value()];
+        if (std::isfinite(quoteIt.value().lastPrice) && quoteIt.value().lastPrice > 0.0) {
+            instrument.lastPrice = quoteIt.value().lastPrice;
+        }
+        changedRows.insert(rowIt.value());
     }
-    if (changed && !instruments_.isEmpty()) {
-        emit dataChanged(index(0, 0), index(instruments_.size() - 1, ColumnCount - 1));
+    for (const int row : changedRows) {
+        emit dataChanged(index(row, 0), index(row, ColumnCount - 1));
     }
 }
 
