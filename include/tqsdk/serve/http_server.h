@@ -41,6 +41,14 @@ inline void from_json(const json& j, CatalogQuery& q) {
     q.offset          = j.value("offset", std::string{});
 }
 
+/// `/quotes?symbols=A,B,C` 的批量行情查询参数。
+struct QuoteBatchQuery {
+    std::string symbols;
+};
+inline void from_json(const json& j, QuoteBatchQuery& q) {
+    q.symbols = j.value("symbols", std::string{});
+}
+
 /// HttpServer —— 对外暴露的只读 + 下单 REST 接口（node 进程 serve 层）。
 ///
 /// 这是"两进程架构"里 node 进程对外的服务边界：策略/前端通过 HTTP 拉取

@@ -10,6 +10,7 @@
 #include "tqsdk/domain/trade.h"
 
 namespace tqsdk {
+class InstrumentCatalog;
 namespace serve {
 
 // ============================================================================
@@ -23,8 +24,10 @@ namespace serve {
 //     形式表达；reset=true 时 bars 是全量，否则只含最后一根。
 // ============================================================================
 
-nlohmann::json quote_to_json(const Quote& q);
-nlohmann::json quote_diff_to_json(const Quote& q);
+/// 可选 catalog：把 price_tick / volume_multiple / price_decs 等静态字段
+/// 合并进行情 JSON，避免 CTP/Tq 推送只带动态字段时前端拿到 null。
+nlohmann::json quote_to_json(const Quote& q, const InstrumentCatalog* catalog = nullptr);
+nlohmann::json quote_diff_to_json(const Quote& q, const InstrumentCatalog* catalog = nullptr);
 
 // REST 形态：{"symbol","duration_ns","bars":[...]}
 nlohmann::json kline_to_json(const KlineStream& s);

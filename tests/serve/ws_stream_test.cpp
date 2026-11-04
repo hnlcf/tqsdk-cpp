@@ -331,6 +331,7 @@ TEST(WsStreamConfig, ParseServeWsSection) {
         heartbeat_interval_ms = 1500
         max_clients = 7
         max_queue = 9
+        coalesce_ms = 12
     )");
 
     EXPECT_EQ(cfg.serve_bind, "0.0.0.0");
@@ -339,4 +340,5 @@ TEST(WsStreamConfig, ParseServeWsSection) {
     EXPECT_EQ(cfg.ws.heartbeat_interval, std::chrono::milliseconds(1500));
     EXPECT_EQ(cfg.ws.max_clients, 7u);
     EXPECT_EQ(cfg.ws.max_queue, 9u);
+    EXPECT_EQ(cfg.ws.coalesce, std::chrono::milliseconds(12));
 }

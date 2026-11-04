@@ -184,3 +184,31 @@ python3 scripts/soak_two_process.py --duration 86400 \
 
 `order_err=2` 集中在 gw 重启窗口，进程、HTTP、WS 均无 fatal，FD/线程数稳定。
 该次为 P1/P2 功能回归短时验证；24h soak 仍按本文件上面的命令作为发布前任务。
+
+### 2026-11-04 P4 短时验证与 24h 长稳启动
+
+P4 通信/quote 元数据改动后的 20s Release 验证：
+
+```json
+{
+  "duration_s": 20.0,
+  "http_ok": 274530,
+  "http_err": 0,
+  "order_ok": 15,
+  "order_err": 4,
+  "ws_messages": 52097,
+  "ws_err": 0,
+  "reconnects": 3,
+  "node_max_rss_kb": 27612,
+  "node_max_fds": 15,
+  "node_max_threads": 4,
+  "gw_max_rss_kb": 26704,
+  "gw_max_fds": 10,
+  "gw_max_threads": 4,
+  "fatal": ""
+}
+```
+
+24h soak 已由 `scripts/soak_two_process.py --duration 86400` 启动，产物位于
+`artifacts/soak_24h_*.csv/json`；完成后按本节验收标准归档。Windows CTP 验证
+按计划推迟到后续阶段。

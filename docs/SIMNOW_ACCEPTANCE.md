@@ -91,7 +91,8 @@ python3 scripts/simnow_acceptance.py \
   --symbol SHFE.rb2701 \
   --orders --yes \
   --include-market \
-  --include-counterparty
+  --include-counterparty \
+  --cleanup-market
 ```
 
 - 市价：`price_type=ANY`；
@@ -103,7 +104,8 @@ python3 scripts/simnow_acceptance.py \
   - 对价 BUY -> 卖一价；
   - 对价 SELL -> 买一价；
 - 没有有效 quote/停板价时，下单直接返回错误；
-- 脚本不会自动平掉产生的仓位，需要人工确认；
+- `--cleanup-market` 只平掉相对测试前新增的净持仓，不会碰原有持仓；
+- 不带 `--cleanup-market` 时脚本不会自动平仓，需要人工确认；
 - 可选检查被柜台/交易所拒绝会记录 `WARN`，而不是误报成“下单成功”。
 
 ## 5. 报告

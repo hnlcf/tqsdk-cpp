@@ -45,6 +45,15 @@ public:
     virtual void requestPositions()                                                           = 0;
     virtual void requestTrades()                                                              = 0;
 
+    /// 一次请求返回 account/orders/trades/positions，减少启动和交易刷新时的
+    /// HTTP 往返。默认实现兼容旧 transport（逐项请求）。
+    virtual void requestTradingSnapshot() {
+        requestAccountSnapshot();
+        requestOrders();
+        requestPositions();
+        requestTrades();
+    }
+
     virtual void placeOrder(const OrderRequest& request) = 0;
     virtual void cancelOrder(const QString& orderId)     = 0;
 

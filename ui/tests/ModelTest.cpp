@@ -126,6 +126,35 @@ void ModelTest::tradingModelsMerge() {
     QCOMPARE(orders.rowCount(), 1);
     QVERIFY(!orders.isOrderAlive(0));
 
+    Order partial;
+    partial.orderId      = "1002";
+    partial.instrumentId = "SHFE.rb2701";
+    partial.direction    = "BUY";
+    partial.offset       = "OPEN";
+    partial.limitPrice   = 3000.0;
+    partial.volumeOrigin = 5;
+    partial.volumeLeft   = 3;
+    partial.status       = "ALIVE";
+    partial.message      = "部分成交";
+    orders.applyOrders({partial});
+    const int partialRow = orders.rowCount() - 1;
+    QCOMPARE(orders.data(orders.index(partialRow, OrderTableModel::VolumeLeft)).toString(),
+             QStringLiteral("3/5"));
+    QCOMPARE(orders.data(orders.index(partialRow, OrderTableModel::Message)).toString(),
+             QStringLiteral("部分成交"));
+
+    partial.isError = true;
+    partial.isDead  = true;
+    partial.status  = "FINISHED";
+    partial.message = "CTP 31: 平仓量超过持仓量";
+    orders.applyOrders({partial});
+    QCOMPARE(orders.rowCount(), 2);
+    QCOMPARE(orders.data(orders.index(partialRow, OrderTableModel::Message)).toString(),
+             QStringLiteral("CTP 31: 平仓量超过持仓量"));
+    const QVariant errorColor =
+        orders.data(orders.index(partialRow, OrderTableModel::Status), Qt::ForegroundRole);
+    QCOMPARE(errorColor.value<QColor>(), QColor(QStringLiteral("#e04a4a")));
+
     TradeTableModel trades;
     Trade           trade;
     trade.tradeId      = "2001";

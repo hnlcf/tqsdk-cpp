@@ -290,11 +290,16 @@ void MainWindow::buildTradingController() {
 
     tradingController_ = new TradingController(
         nodeClient_, ticket, positionsModel_, ordersModel_, workspace_->ordersPanel(), this);
+    connect(
+        tradingController_, &TradingController::cancelFailed, this, [this](const QString& message) {
+            statusBar()->showMessage(tr("撤单失败: %1").arg(message), 6000);
+            if (toast_ != nullptr) {
+                toast_->showMessage(tr("撤单失败: %1").arg(message), true);
+            }
+        });
     connect(tradingController_, &TradingController::refreshRequested, this, [this] {
         if (nodeClient_ != nullptr) {
-            nodeClient_->requestOrders();
-            nodeClient_->requestPositions();
-            nodeClient_->requestAccountSnapshot();
+            nodeClient_->requestTradingSnapshot();
         }
     });
     connect(ticket, &OrderTicketPanel::buyOpenRequested, this, [this] {

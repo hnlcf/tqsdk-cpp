@@ -1,5 +1,7 @@
 #include "tqsdk/serve/json_convert.h"
 
+#include "tqsdk/instrument/instrument_catalog.h"
+
 #include "tqsdk/domain/enum_util.h"
 
 namespace tqsdk {
@@ -90,16 +92,38 @@ void fill_quote(json& j, const Quote& q, uint64_t bits) {
 
 } // namespace
 
-nlohmann::json quote_to_json(const Quote& q) {
+namespace {
+
+void fill_quote_static(json& j, const Quote& q, const InstrumentCatalog* catalog) {
+    if (catalog == nullptr || q.instrument_id.empty()) {
+        return;
+    }
+    const auto instrument = catalog->find(q.instrument_id);
+    if (!instrument) {
+        return;
+    }
+    if (!j.contains("price_tick") || j["price_tick"].is_null()) {
+        j["price_tick"] = instrument->price_tick;
+    }
+    // 目录里的静态规格比交易所推送更完整；price_decs 甚至可能被默认成 0。
+    j["volume_multiple"] = static_cast<uint64_t>(instrument->volume_multiple);
+    j["price_decs"]      = static_cast<uint64_t>(instrument->price_decs);
+}
+
+} // namespace
+
+nlohmann::json quote_to_json(const Quote& q, const InstrumentCatalog* catalog) {
     json j             = json::object();
     j["instrument_id"] = q.instrument_id;
     fill_quote(j, q, ~uint64_t{0});
+    fill_quote_static(j, q, catalog);
     return j;
 }
 
-nlohmann::json quote_diff_to_json(const Quote& q) {
+nlohmann::json quote_diff_to_json(const Quote& q, const InstrumentCatalog* catalog) {
     json j = json::object();
     fill_quote(j, q, q.changed_fields);
+    fill_quote_static(j, q, catalog);
     return j;
 }
 

@@ -476,3 +476,32 @@ QT_QPA_PLATFORM=offscreen
   分页/虚拟模型，避免一次 reset；
 - 若 node 增加 view_width 参数，K 线历史请求可以一次拿更深历史；
 - `NodeClient` 的传输层可替换，不影响 Qt widget 和模型。
+
+### 10. UI ↔ node 通信优化（P4）
+
+本轮在保持 `NodeClient` 抽象不变的前提下降请求数量：
+
+- `GET /quotes?symbols=A,B,C`：自选列表初始截面从 N 次 HTTP 请求合并为一次；
+- `GET /trading-snapshot`：account/orders/trades/positions 一次返回，替换启动和交易确认后的四次请求；
+- `NodeClient::requestTradingSnapshot()` 有默认实现，旧的 Fake/备用 transport 仍保持兼容；
+- quote JSON 会从合约目录补齐 `price_tick`、`volume_multiple`、`price_decs`，
+  避免 UI 价格步进依赖默认 tick；
+- `/stream` 配置 `coalesce_ms`（live 默认 10ms），服务端在一个短窗口内合并
+  DataManager 变化后只发送一帧 diff，降低高频行情的帧数和 JSON 编解码次数。
+
+WebSocket 仍然是 text JSON；下一步可评估 MessagePack/固定二进制行情帧，
+但当前优先保持浏览器/调试工具可读性，先通过批量 REST、静态字段合并和服务端
+coalescing 降低实际负载。
+
+### 11. P4.3 UI 验收补充
+
+本轮已完成：
+
+- 3840x2160 Wayland、`QT_SCALE_FACTOR=1.5` 启动 UI + sidecar smoke；
+- 订单表增加部分成交显示测试（`剩余/总量`、回报信息）；
+- CTP 异步拒单、撤单失败走状态栏 + Toast；
+- SHFE 市价/对价转换后的订单以实际 LIMIT 价格和 IOC 进入委托表；
+- 委托选中联动成交、盘口点击填价、自选/图表/布局/指标配置恢复继续由回归测试覆盖。
+
+真实 4K 交互压力仍使用 offscreen 回归中的 3840x2160 窗口、100Hz 行情、
+快速自选切换和鼠标移动测试；本机实测 event-loop 最大 gap 约 9ms。

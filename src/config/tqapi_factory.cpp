@@ -449,6 +449,8 @@ NodeConfig build_node_from_toml(const toml::table& root) {
                 std::max<int64_t>(1, get_int(w, "max_clients", cfg.ws.max_clients)));
             cfg.ws.max_queue = static_cast<std::size_t>(
                 std::max<int64_t>(1, get_int(w, "max_queue", cfg.ws.max_queue)));
+            cfg.ws.coalesce = std::chrono::milliseconds(
+                std::max<int64_t>(0, get_int(w, "coalesce_ms", cfg.ws.coalesce.count())));
         }
     }
     if (const auto& t = require_table(root, "instruments"); !t.empty()) {

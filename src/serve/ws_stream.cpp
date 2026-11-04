@@ -395,6 +395,15 @@ asio::awaitable<void> WebSocketHub::push_loop() {
         if (!std::get<0>(raced) || stopped_.load()) {
             break;
         }
+        if (options_.coalesce.count() > 0) {
+            asio::steady_timer timer(ex_);
+            timer.expires_after(options_.coalesce);
+            boost::system::error_code ec;
+            co_await timer.async_wait(asio::redirect_error(asio::use_awaitable, ec));
+            if (stopped_.load()) {
+                break;
+            }
+        }
         json diff = build_diff();
         if (!diff.empty()) {
             broadcast(diff);
@@ -558,7 +567,7 @@ nlohmann::json WebSocketHub::snapshot_for(const Client& client) const {
 
     for (const auto& sym : client.symbols) {
         if (const Quote* q = api_->data().quotes.find(sym)) {
-            data["quotes"][sym] = quote_to_json(*q);
+            data["quotes"][sym] = quote_to_json(*q, catalog_);
         }
     }
     for (const auto& [key, width] : client.klines) {
@@ -606,7 +615,7 @@ nlohmann::json WebSocketHub::build_diff() const {
             continue;
         }
         if (const Quote* q = api_->data().quotes.find(sym); q && q->changed_fields != 0) {
-            data["quotes"][sym] = quote_diff_to_json(*q);
+            data["quotes"][sym] = quote_diff_to_json(*q, catalog_);
         }
     }
     for (const auto& [key, ref] : kline_refs_) {

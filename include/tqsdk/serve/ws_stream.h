@@ -11,6 +11,7 @@
 #include <boost/beast/websocket.hpp>
 
 namespace tqsdk {
+class InstrumentCatalog;
 namespace serve {
 
 namespace beast = boost::beast;
@@ -30,6 +31,10 @@ struct WsOptions {
 
     /// 单连接待发送队列上限；慢消费者丢最旧消息（行情可丢，避免拖垮进程）。
     std::size_t max_queue = 1024;
+
+    /// 数据面合并窗口：wait_update 后在 core strand 上短暂等待，把同一窗口
+    /// 内的行情/交易变化合并为一帧 diff。0 表示不额外延迟（测试默认）。
+    std::chrono::milliseconds coalesce{0};
 };
 
 /// WebSocketHub —— node serve 层的实时推送中心。
@@ -91,6 +96,9 @@ public:
     /// 停止接收/关闭所有客户端，并唤醒后台 push_loop 退出（可独立于 TqApi::close 调用）。
     void stop() noexcept;
 
+    /// 可选：为快照/增量补充合约目录中的静态字段。
+    void set_catalog(const InstrumentCatalog* catalog) noexcept { catalog_ = catalog; }
+
     bool             full() const;
     std::size_t      client_count() const;
     const WsOptions& options() const noexcept { return options_; }
@@ -130,6 +138,7 @@ private:
     uint64_t                                              next_client_id_ = 1;
     std::atomic<uint64_t>                                 seq_{0};
     mutable std::mutex                                    clients_mu_;
+    const InstrumentCatalog*                              catalog_ = nullptr;
     std::unordered_map<uint64_t, std::shared_ptr<Client>> clients_;
     std::unordered_map<std::string, int>                  quote_refs_;
     struct KlineRef {

@@ -382,26 +382,29 @@ void HttpWsNodeClient::requestCatalog(const CatalogQuery& query) {
 }
 
 void HttpWsNodeClient::requestQuotes(const QStringList& symbols) {
+    QStringList clean;
     for (const QString& symbol : symbols) {
-        if (symbol.isEmpty()) {
-            continue;
+        if (!symbol.isEmpty() && !clean.contains(symbol)) {
+            clean.push_back(symbol);
         }
-        const QString encoded = QString::fromLatin1(QUrl::toPercentEncoding(symbol));
-        getRawJson(apiUrl(QStringLiteral("/quote/%1").arg(encoded)),
-                   [this, symbol](const QByteArray& body, const QString& error) {
-                       if (!error.isEmpty()) {
-                           emit errorOccurred(error);
-                           return;
-                       }
-                       if (parser_ != nullptr) {
-                           QMetaObject::invokeMethod(parser_,
-                                                     "parseQuotePayload",
-                                                     Qt::QueuedConnection,
-                                                     Q_ARG(QByteArray, body),
-                                                     Q_ARG(QString, symbol));
-                       }
-                   });
     }
+    if (clean.isEmpty()) {
+        return;
+    }
+    QUrl      url = apiUrl(QStringLiteral("/quotes"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("symbols"), clean.join(QLatin1Char(',')));
+    url.setQuery(query);
+    getRawJson(url, [this](const QByteArray& body, const QString& error) {
+        if (!error.isEmpty()) {
+            emit errorOccurred(error);
+            return;
+        }
+        if (parser_ != nullptr) {
+            QMetaObject::invokeMethod(
+                parser_, "parseMarketPayload", Qt::QueuedConnection, Q_ARG(QByteArray, body));
+        }
+    });
 }
 
 void HttpWsNodeClient::requestOptionChain(const QString& underlying) {
@@ -497,6 +500,22 @@ void HttpWsNodeClient::requestTrades() {
                     parser_, "parseMarketPayload", Qt::QueuedConnection, Q_ARG(QByteArray, body));
             }
         });
+}
+
+void HttpWsNodeClient::requestTradingSnapshot() {
+    getRawJson(apiUrl(QStringLiteral("/trading-snapshot")),
+               [this](const QByteArray& body, const QString& error) {
+                   if (!error.isEmpty()) {
+                       emit errorOccurred(error);
+                       return;
+                   }
+                   if (parser_ != nullptr) {
+                       QMetaObject::invokeMethod(parser_,
+                                                 "parseMarketPayload",
+                                                 Qt::QueuedConnection,
+                                                 Q_ARG(QByteArray, body));
+                   }
+               });
 }
 
 void HttpWsNodeClient::placeOrder(const OrderRequest& request) {

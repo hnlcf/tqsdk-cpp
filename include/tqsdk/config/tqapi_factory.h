@@ -182,6 +182,7 @@ struct NodeConfig {
         std::chrono::milliseconds heartbeat_interval{std::chrono::seconds(30)};
         std::size_t               max_clients = 256;
         std::size_t               max_queue   = 1024;
+        std::chrono::milliseconds coalesce{0};
     } ws;
 
     /// [runtime] worker 线程数（io_context 线程；数据面仍由 core strand 串行）。

@@ -53,6 +53,7 @@ HttpServer::HttpServer(TqApi*                api,
       data_ex_(data_ex ? std::move(data_ex) : io_ex_),
       acceptor_(io_ex_),
       ws_(std::make_shared<WebSocketHub>(api_, data_ex_, io_ex_, std::move(ws_options))) {
+    ws_->set_catalog(catalog_);
     setup_routes();
 }
 
@@ -152,7 +153,7 @@ void HttpServer::setup_routes() {
              json puts  = json::array();
              for (const auto& contract : contracts) {
                  auto item     = InstrumentCatalog::to_json(contract);
-                 item["quote"] = quote_to_json(api_->get_quote(contract.instrument_id));
+                 item["quote"] = quote_to_json(api_->get_quote(contract.instrument_id), catalog_);
                  if (contract.option_class == "CALL") {
                      calls.push_back(std::move(item));
                  } else if (contract.option_class == "PUT") {
@@ -165,7 +166,7 @@ void HttpServer::setup_routes() {
              co_return json{
                  {"underlying", underlying},
                  {"underlying_contract", std::move(underlying_json)},
-                 {"underlying_quote", quote_to_json(api_->get_quote(underlying))},
+                 {"underlying_quote", quote_to_json(api_->get_quote(underlying), catalog_)},
                  {"expire_datetime", contracts.front().expire_datetime},
                  {"product", InstrumentCatalog::product_of(underlying)},
                  {"product_name", contracts.front().product_short_name},
@@ -181,7 +182,46 @@ void HttpServer::setup_routes() {
          make_entry([this](std::string symbol) -> asio::awaitable<json> {
              // get_quote 在不存在时创建空 Quote 并触发订阅（首次访问）。
              Quote& q = api_->get_quote(symbol);
-             co_return quote_to_json(q);
+             co_return quote_to_json(q, catalog_);
+         })},
+        {http::verb::get,
+         "/quotes",
+         make_entry([this](Query<QuoteBatchQuery> query) -> asio::awaitable<json> {
+             json out          = json::object();
+             out["quotes"]     = json::object();
+             std::size_t count = 0;
+             std::size_t begin = 0;
+             while (begin <= query.value.symbols.size() && count < 500) {
+                 const auto end  = query.value.symbols.find(',', begin);
+                 const auto part = query.value.symbols.substr(
+                     begin, end == std::string::npos ? std::string::npos : end - begin);
+                 if (!part.empty()) {
+                     out["quotes"][part] = quote_to_json(api_->get_quote(part), catalog_);
+                     ++count;
+                 }
+                 if (end == std::string::npos) {
+                     break;
+                 }
+                 begin = end + 1;
+             }
+             co_return out;
+         })},
+        {http::verb::get, "/trading-snapshot", make_entry([this]() -> asio::awaitable<json> {
+             json out       = json::object();
+             out["account"] = account_to_json(api_->get_account());
+             out["orders"]  = json::object();
+             for (const auto& [oid, order] : api_->data().orders) {
+                 out["orders"][oid] = order_to_json(order);
+             }
+             out["trades"] = json::object();
+             for (const auto& [tid, trade] : api_->data().trades) {
+                 out["trades"][tid] = trade_to_json(trade);
+             }
+             out["positions"] = json::object();
+             for (const auto& [symbol, position] : api_->data().positions) {
+                 out["positions"][symbol] = position_to_json(position);
+             }
+             co_return out;
          })},
         {http::verb::get,
          "/kline/{symbol}/{duration_ns}",

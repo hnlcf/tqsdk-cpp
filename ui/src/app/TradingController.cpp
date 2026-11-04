@@ -141,6 +141,7 @@ void TradingController::cancelSelectedOrder() {
     if (orderId.isEmpty()) {
         return;
     }
+    pendingCancelId_ = orderId;
     nodeClient_->cancelOrder(orderId);
     if (ticket_ != nullptr) {
         ticket_->setStatus(tr("撤单请求: %1").arg(orderId));
@@ -148,11 +149,20 @@ void TradingController::cancelSelectedOrder() {
 }
 
 void TradingController::handleOrderAck(const OrderAck& ack) {
-    if (ticket_ != nullptr) {
+    const bool failedCancel =
+        !ack.success && !pendingCancelId_.isEmpty() && ack.orderId == pendingCancelId_;
+    if (failedCancel) {
+        const QString message = ack.error.isEmpty() ? tr("柜台拒绝撤单") : ack.error;
+        if (ticket_ != nullptr) {
+            ticket_->setStatus(tr("撤单失败: %1").arg(message), true);
+        }
+        emit cancelFailed(message);
+    } else if (ticket_ != nullptr) {
         ticket_->setStatus(ack.success ? tr("命令已接受: %1").arg(ack.orderId)
                                        : tr("下单失败: %1").arg(ack.error),
                            !ack.success);
     }
+    pendingCancelId_.clear();
     updateControls();
     emit refreshRequested();
 }

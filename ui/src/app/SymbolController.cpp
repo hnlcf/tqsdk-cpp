@@ -420,10 +420,7 @@ void SymbolController::requestInitialData() {
     nodeClient_->requestCatalog(query);
     nodeClient_->requestQuotes(watchlist_);
     requestSelectedKlineHistory();
-    nodeClient_->requestAccountSnapshot();
-    nodeClient_->requestOrders();
-    nodeClient_->requestPositions();
-    nodeClient_->requestTrades();
+    nodeClient_->requestTradingSnapshot();
 }
 
 void SymbolController::updateSubscription() {

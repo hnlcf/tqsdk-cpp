@@ -337,3 +337,17 @@ SHFE 不接受 CTP 的 `AnyPrice` / `BestPrice` 报单类型。node 在
 - 没有有效停板价或买一/卖一价时，下单直接返回错误，不会发送错误的 CTP 报单；
 - 其他交易所仍保留原有 `ANY` / `BEST` 映射；
 - CTP 网关仍对市价单发送 `LimitPrice=0`，作为最后的字段兜底。
+
+## 10. quote 静态元数据
+
+HTTP quote、批量 `/quotes` 和 WebSocket snapshot 都会从 `InstrumentCatalog`
+补齐：
+
+```text
+price_tick
+volume_multiple
+price_decs
+```
+
+CTP 行情回调只保证动态行情字段，静态规格以合约目录为准；这样 UI 价格步进、
+限价校验和验收脚本不再看到 `price_tick=null`。

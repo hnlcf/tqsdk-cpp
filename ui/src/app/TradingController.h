@@ -39,16 +39,19 @@ public:
 signals:
     /// ack 后请求刷新委托/持仓/账户。
     void refreshRequested();
+    /// 撤单命令被拒绝时上报给 MainWindow 做 Toast/状态提示。
+    void cancelFailed(const QString& message);
 
 private:
-    NodeClient*         nodeClient_ = nullptr;
-    OrderTicketPanel*   ticket_     = nullptr;
-    PositionTableModel* positions_  = nullptr;
-    OrderTableModel*    orders_     = nullptr;
+    NodeClient*         nodeClient_  = nullptr;
+    OrderTicketPanel*   ticket_      = nullptr;
+    PositionTableModel* positions_   = nullptr;
+    OrderTableModel*    orders_      = nullptr;
     OrdersPanel*        ordersPanel_ = nullptr;
     QString             selectedSymbol_;
     bool                nodeReady_     = false;
     bool                accountLoaded_ = false;
+    QString             pendingCancelId_;
 };
 
 } // namespace tqsdk::ui

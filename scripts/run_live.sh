@@ -251,6 +251,7 @@ path = "/stream"
 heartbeat_interval_ms = 30000
 max_clients = 256
 max_queue = 1024
+coalesce_ms = 10
 
 [instruments]
 enabled = true

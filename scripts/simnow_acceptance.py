@@ -215,6 +215,7 @@ class Acceptance:
         )
         self.quote: dict[str, Any] = {}
         self.order_ids: list[str] = []
+        self.position_before: dict[str, int] = {}
 
     def check(self, name: str, status: str, detail: str = "", evidence: Any = None) -> None:
         self.report.add(name, status, detail, evidence)
@@ -548,12 +549,70 @@ class Acceptance:
             if not reject_passed:
                 self.check("orders.reject", FAIL, f"volume=0 未被拒绝: {error_response.body}", error_evidence)
 
+        self.position_before = self.position_volumes()
         # 错误单检查通过后仍需继续执行可选的市价/对价检查；不能 return，
         # 否则 --include-market/--include-counterparty 会被静默跳过。
         if self.args.include_market:
             self.run_optional_market("orders.market", "ANY")
         if self.args.include_counterparty:
             self.run_optional_market("orders.counterparty", "BEST")
+        if self.args.cleanup_market:
+            self.cleanup_market_positions()
+
+    def position_volumes(self) -> dict[str, int]:
+        response = self.http.get("/positions")
+        if response.status != 200 or not isinstance(response.body, dict):
+            return {}
+        position = response.body.get("positions", {}).get(self.args.symbol, {})
+        if not isinstance(position, dict):
+            return {}
+        return {
+            "long": int(position.get("volume_long", 0) or 0),
+            "short": int(position.get("volume_short", 0) or 0),
+        }
+
+    def cleanup_market_positions(self) -> None:
+        current = self.position_volumes()
+        wanted_long = max(0, current.get("long", 0) - self.position_before.get("long", 0))
+        wanted_short = max(0, current.get("short", 0) - self.position_before.get("short", 0))
+        if wanted_long == 0 and wanted_short == 0:
+            self.check("orders.cleanup", PASS, "可选市价/对价未产生净新增持仓")
+            return
+        if wanted_long:
+            self.close_position("long", wanted_long)
+        if wanted_short:
+            self.close_position("short", wanted_short)
+        after = self.position_volumes()
+        ok = after.get("long", 0) <= self.position_before.get("long", 0) and                after.get("short", 0) <= self.position_before.get("short", 0)
+        self.check(
+            "orders.cleanup",
+            PASS if ok else FAIL,
+            f"新增持仓平仓结果: before={self.position_before}, after={after}",
+            {"before": self.position_before, "after": after},
+        )
+
+    def close_position(self, side: str, volume: int) -> None:
+        payload: dict[str, Any] = {
+            "instrument_id": self.args.symbol,
+            "direction": "SELL" if side == "long" else "BUY",
+            "offset": "CLOSE",
+            "price_type": "ANY",
+            "time_cond": "IOC",
+            "volume_cond": "ANY",
+            "volume": volume,
+        }
+        response = self.http.post("/order", payload)
+        evidence: dict[str, Any] = {"cleanup_submit": response.body}
+        if response.status != 200 or not isinstance(response.body, dict) or not response.body.get("success"):
+            self.check(f"orders.cleanup.{side}", FAIL, f"平仓提交失败: {response.body}")
+            return
+        order_id = str(response.body.get("order_id", ""))
+        order = self.wait_order(order_id, self.args.order_timeout)
+        evidence["order"] = order
+        if order is None or order.get("is_error"):
+            self.check(f"orders.cleanup.{side}", FAIL, f"平仓失败: {order}", evidence)
+            return
+        self.check(f"orders.cleanup.{side}", PASS, f"平仓 {volume} 手: {order.get('last_msg')}", evidence)
 
     def run_optional_market(self, name: str, price_type: str) -> None:
         payload = self.order_payload(limit_price=None, volume=self.args.order_volume)
@@ -627,6 +686,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--ws", action="store_true", default=True, help="check WebSocket subscription")
     parser.add_argument("--no-ws", dest="ws", action="store_false")
     parser.add_argument("--metrics", action="store_true", help="also check /metrics")
+    parser.add_argument(
+        "--cleanup-market",
+        action="store_true",
+        help="close only the net positions created by optional market/counterparty checks",
+    )
     parser.add_argument("--direction", default="BUY", choices=["BUY", "SELL"])
     parser.add_argument("--offset", default="OPEN", choices=["OPEN", "CLOSE", "CLOSETODAY", "CLOSEYESTERDAY"])
     parser.add_argument("--order-volume", type=int, default=1)

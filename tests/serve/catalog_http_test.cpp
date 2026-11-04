@@ -44,7 +44,8 @@ TEST(CatalogHttp, QueryNumbersAreStrictAndBounded) {
     {
         std::ofstream out(path);
         out << R"({
-          "A": {"class":"FUTURE","instrument_id":"A","expired":false},
+          "A": {"class":"FUTURE","instrument_id":"A","expired":false,
+                "price_tick":0.5,"volume_multiple":10,"price_decs":2},
           "B": {"class":"FUTURE","instrument_id":"B","expired":false}
         })";
     }
@@ -70,6 +71,9 @@ TEST(CatalogHttp, QueryNumbersAreStrictAndBounded) {
                      "/catalog/instruments?limit=999999999999999999999999",
                      "/catalog/instruments?limit=abc&offset=abc",
                      "/catalog/instruments?include_expired=TRUE",
+                     "/quote/A",
+                     "/quotes?symbols=A,B",
+                     "/trading-snapshot",
                  }) {
                 responses.push_back(co_await get_json(core_ex, port, target));
             }
@@ -79,8 +83,9 @@ TEST(CatalogHttp, QueryNumbersAreStrictAndBounded) {
         asio::detached);
     io.run();
 
-    ASSERT_EQ(responses.size(), 4u);
-    for (const auto& [status, body] : responses) {
+    ASSERT_EQ(responses.size(), 7u);
+    for (std::size_t i = 0; i < 4; ++i) {
+        const auto& [status, body] = responses[i];
         EXPECT_EQ(status, 200u) << body.dump();
         EXPECT_TRUE(body.contains("instruments")) << body.dump();
         EXPECT_TRUE(body["instruments"].is_array()) << body.dump();
@@ -90,6 +95,18 @@ TEST(CatalogHttp, QueryNumbersAreStrictAndBounded) {
     EXPECT_EQ(responses[1].second["instruments"].size(), 2u);
     EXPECT_EQ(responses[2].second["instruments"].size(), 2u);
     EXPECT_EQ(responses[3].second["instruments"].size(), 2u);
+    EXPECT_EQ(responses[4].first, 200u);
+    EXPECT_DOUBLE_EQ(responses[4].second["price_tick"].get<double>(), 0.5);
+    EXPECT_EQ(responses[4].second["volume_multiple"].get<uint64_t>(), 10u);
+    EXPECT_EQ(responses[4].second["price_decs"].get<uint64_t>(), 2u);
+    EXPECT_EQ(responses[5].first, 200u);
+    EXPECT_TRUE(responses[5].second["quotes"].contains("A"));
+    EXPECT_TRUE(responses[5].second["quotes"].contains("B"));
+    EXPECT_EQ(responses[6].first, 200u);
+    EXPECT_TRUE(responses[6].second.contains("account"));
+    EXPECT_TRUE(responses[6].second.contains("orders"));
+    EXPECT_TRUE(responses[6].second.contains("trades"));
+    EXPECT_TRUE(responses[6].second.contains("positions"));
 
     server.stop();
     api.close();

@@ -45,6 +45,7 @@ public:
     void requestOrders() override;
     void requestPositions() override;
     void requestTrades() override;
+    void requestTradingSnapshot() override;
 
     void placeOrder(const OrderRequest& request) override;
     void cancelOrder(const QString& orderId) override;

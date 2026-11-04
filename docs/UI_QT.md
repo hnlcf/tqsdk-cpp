@@ -421,3 +421,12 @@ Qt6::WebSockets
 
 各组件、线程模型、数据流、持久化键和测试 target 见
 [`UI_ARCHITECTURE.md`](./UI_ARCHITECTURE.md)。
+
+## UI ↔ node 传输优化
+
+- REST `GET /quotes?symbols=...`：批量 quote 快照；
+- REST `GET /trading-snapshot`：合并交易快照；
+- 交易确认后不再发四次独立请求；
+- WebSocket `/stream` 支持 `coalesce_ms`，live 配置 10ms，服务端在 core strand
+  上合并变化后发送单帧 diff；
+- quote 静态字段来自 catalog，避免 `price_tick=null`。

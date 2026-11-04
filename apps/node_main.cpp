@@ -112,6 +112,7 @@ int main(int argc, char** argv) {
         ws_opts.heartbeat_interval = cfg.ws.heartbeat_interval;
         ws_opts.max_clients        = cfg.ws.max_clients;
         ws_opts.max_queue          = cfg.ws.max_queue;
+        ws_opts.coalesce           = cfg.ws.coalesce;
 
         rt->http = std::make_unique<serve::HttpServer>(
             rt->api.get(), io_ex, std::move(ws_opts), core_ex, rt->catalog.get());
