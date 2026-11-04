@@ -287,10 +287,21 @@ void KLineChartWidget::drawCandles(QPainter&     painter,
 
         painter.setPen(QPen(color, 1.0));
         painter.drawLine(QPointF(x, yFor(bar.high)), QPointF(x, yFor(bar.low)));
+
         const double top    = std::min(yOpen, yClose);
         const double bottom = std::max(yOpen, yClose);
-        painter.fillRect(QRectF(x - bodyWidth / 2.0, top, bodyWidth, std::max(1.0, bottom - top)),
-                         color);
+        const QRectF body(x - bodyWidth / 2.0, top, bodyWidth, std::max(1.0, bottom - top));
+        if (bar.close >= bar.open) {
+            // A-share/futures convention: rising candles are hollow red.
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(color, 1.0));
+            painter.drawRect(body);
+        } else {
+            // Falling candles remain solid green.
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(color);
+            painter.drawRect(body);
+        }
 
         if (i == 0 || i == count / 2 || i == count - 1) {
             painter.setPen(text);

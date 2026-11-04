@@ -243,7 +243,7 @@ WS messages ──► parse ──► pending MarketUpdate
 
 `ui/src/chart/KLineChartWidget.{h,cpp}`：
 
-- 自绘蜡烛、成交量、网格、十字光标；
+- 自绘蜡烛、成交量、网格、十字光标；上涨红 K 为空心，下跌绿 K 为实心；
 - 头部显示最新价、涨跌、涨跌幅；
 - 滚轮缩放；
 - 左键拖动平移；
