@@ -71,8 +71,15 @@ def compute(params, bars):
     return {"rsi": values}
 ```
 
-也可以使用 `def manifest(): return {...}` 接口。把文件放入目录后，在
-“指标”菜单点“刷新指标列表”即可，不需要重新编译 UI。
+也可以使用 `def manifest(): return {...}` 接口。通用计算和颜色从共享库导入：
+
+```python
+from indicator_lib import param, series_def, sma, ema, boll, macd
+```
+
+`indicator_lib` 位于 `ui/indicator_sidecar/indicator_lib.py`，sidecar 会自动把
+自身目录加入 `sys.path`。把文件放入目录后，在“指标”菜单点“刷新指标列表”
+即可，不需要重新编译 UI。
 
 ## 当前阶段
 

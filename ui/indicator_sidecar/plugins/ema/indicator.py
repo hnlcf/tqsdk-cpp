@@ -1,32 +1,21 @@
 """EMA indicator plugin."""
 
+from indicator_lib import ema, param, series_def
+
 MANIFEST = {
     "id": "ema",
     "name": "EMA",
     "version": "1.0",
     "panel": "main",
     "params": [
-        {"key": "fast", "label": "快线", "type": "int", "default": 12, "min": 1, "max": 500},
-        {"key": "slow", "label": "慢线", "type": "int", "default": 26, "min": 1, "max": 1000},
+        param("fast", "快线", 12, 1, 500),
+        param("slow", "慢线", 26, 1, 1000),
     ],
     "series": [
-        {"name": "ema_fast", "label": "EMA快", "color": "#ffb86b"},
-        {"name": "ema_slow", "label": "EMA慢", "color": "#c792ea"},
+        series_def("ema_fast", "EMA快", "orange"),
+        series_def("ema_slow", "EMA慢", "purple"),
     ],
 }
-
-
-def ema(values, period):
-    period = max(1, int(period))
-    result = [None] * len(values)
-    alpha = 2.0 / (period + 1.0)
-    previous = None
-    for i, value in enumerate(values):
-        if value is None:
-            continue
-        previous = value if previous is None else alpha * value + (1.0 - alpha) * previous
-        result[i] = previous
-    return result
 
 
 def compute(params, bars):

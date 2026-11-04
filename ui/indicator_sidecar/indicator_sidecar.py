@@ -51,6 +51,11 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
+# 让用户目录插件也能 import indicator_lib。
+_SIDECAR_ROOT = Path(__file__).resolve().parent
+if str(_SIDECAR_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SIDECAR_ROOT))
+
 PROTOCOL_VERSION = 2
 MAX_BARS = 20000
 

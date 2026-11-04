@@ -601,7 +601,62 @@ Qt UI 用它构建菜单、参数编辑和颜色；GUI 不执行 Python。
 - 多指标同时启用时 sidecar 按请求顺序计算；大窗口/多指标基准测试留在 Phase C；
 - 参数目前只支持数值类型，字符串/枚举参数后续扩展。
 
-### 12.9 验证记录
+### 12.9 共享指标库 `indicator_lib.py`
+
+通用计算和颜色集中放在：
+
+```text
+ui/indicator_sidecar/indicator_lib.py
+```
+
+插件可以直接导入：
+
+```python
+from indicator_lib import (
+    COLORS, PALETTE, param, series_def,
+    sma, ema, stdev, boll, macd, rsi,
+    highest, lowest, ref, crossover, crossunder,
+)
+```
+
+提供：
+
+- `sma` / `ema` / `stdev`；
+- `boll`（中轨、上轨、下轨）；
+- `macd`（DIF、DEA、柱）；
+- `rsi`；
+- `highest` / `lowest` / `ref` / `crossover` / `crossunder`；
+- `safe`：把非法数值转为 None；
+- `COLORS` / `PALETTE`：统一的指标颜色；
+- `param()` / `series_def()`：减少 manifest 重复代码。
+
+现有 MA/EMA/BOLL/MACD 插件已经改成只保留元数据和参数映射，计算统一调用
+`indicator_lib`。例如：
+
+```python
+from indicator_lib import param, series_def, sma
+
+MANIFEST = {
+    "id": "ma",
+    "name": "MA",
+    "panel": "main",
+    "params": [param("fast", "快线", 5, 1, 500)],
+    "series": [series_def("ma_fast", "MA快", "gold")],
+}
+
+def compute(params, bars):
+    closes = [float(bar["close"]) for bar in bars]
+    return {"ma_fast": sma(closes, int(params.get("fast", 5)))}
+```
+
+sidecar 启动时会把自身目录加入 `sys.path`，所以用户插件目录里的文件也可以
+直接 `import indicator_lib`。颜色名称包括：
+
+```text
+gold / blue / orange / purple / red / teal / muted / green
+```
+
+### 12.10 验证记录
 
 2026-11-04 在 `build-ui`（RelWithDebInfo，Qt 6.11.2）执行：
 

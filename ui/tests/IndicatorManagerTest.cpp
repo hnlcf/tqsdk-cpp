@@ -2,8 +2,6 @@
 
 #include <QFile>
 #include <QFileInfo>
-#include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -142,37 +140,19 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         QDir().mkpath(directory.filePath(QStringLiteral("rsi")));
-        const QJsonObject manifestObject{
-            {QStringLiteral("id"), QStringLiteral("rsi")},
-            {QStringLiteral("name"), QStringLiteral("RSI")},
-            {QStringLiteral("version"), QStringLiteral("1.0")},
-            {QStringLiteral("panel"), QStringLiteral("sub")},
-            {QStringLiteral("params"),
-             QJsonArray{QJsonObject{{QStringLiteral("key"), QStringLiteral("period")},
-                                    {QStringLiteral("label"), QStringLiteral("周期")},
-                                    {QStringLiteral("type"), QStringLiteral("int")},
-                                    {QStringLiteral("default"), 5},
-                                    {QStringLiteral("min"), 2},
-                                    {QStringLiteral("max"), 100}}}},
-            {QStringLiteral("series"),
-             QJsonArray{QJsonObject{{QStringLiteral("name"), QStringLiteral("rsi")},
-                                    {QStringLiteral("label"), QStringLiteral("RSI")},
-                                    {QStringLiteral("color"), QStringLiteral("#f0c75e")}}}},
-        };
         QFile plugin(directory.filePath(QStringLiteral("rsi/indicator.py")));
         QVERIFY(plugin.open(QIODevice::WriteOnly));
-        // 元数据和实现放在同一个 Python 文件；这里用 manifest() 接口形式验证兼容性。
-        plugin.write("def manifest():\n    return ");
-        plugin.write(QJsonDocument(manifestObject).toJson(QJsonDocument::Compact));
-        plugin.write("\n\ndef compute(params, bars):\n"
-                     "    period = max(1, int(params.get('period', 5)))\n"
-                     "    out = []\n"
+        // 用户目录插件也可以直接 import 共享 indicator_lib。
+        plugin.write("from indicator_lib import param, series_def, sma\n\n"
+                     "def manifest():\n"
+                     "    return {\n"
+                     "        'id': 'rsi', 'name': 'RSI', 'version': '1.0', 'panel': 'sub',\n"
+                     "        'params': [param('period', '周期', 5, 2, 100)],\n"
+                     "        'series': [series_def('rsi', 'RSI', 'gold')],\n"
+                     "    }\n\n"
+                     "def compute(params, bars):\n"
                      "    closes = [float(bar['close']) for bar in bars]\n"
-                     "    for i in range(len(closes)):\n"
-                     "        start = max(0, i - period + 1)\n"
-                     "        window = closes[start:i + 1]\n"
-                     "        out.append(sum(window) / len(window))\n"
-                     "    return {'rsi': out}\n");
+                     "    return {'rsi': sma(closes, int(params.get('period', 5)))}\n");
         plugin.close();
 
         IndicatorManager manager;
@@ -180,6 +160,7 @@ private slots:
         manager.setPluginDirectoriesForTest({directory.path()});
         QTRY_COMPARE_WITH_TIMEOUT(manager.specs().size(), 1, 3000);
         QCOMPARE(manager.specs().first().id, QStringLiteral("rsi"));
+        QCOMPARE(manager.specs().first().colors.first(), QStringLiteral("#f0c75e"));
 
         QSignalSpy spy(&manager, &IndicatorManager::seriesChanged);
         QSignalSpy errors(&manager, &IndicatorManager::errorOccurred);
