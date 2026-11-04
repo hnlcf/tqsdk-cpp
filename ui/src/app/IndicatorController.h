@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QVector>
 
+class QMenu;
 class QMenuBar;
 class QStatusBar;
 
@@ -29,7 +30,7 @@ public:
     void setBars(const QString& symbol, qint64 durationNs, const QVector<KlineBar>& bars);
 
 private:
-    void buildMenu();
+    void rebuildMenu();
     void saveEnabled();
 
     KLineChartWidget* chart_     = nullptr;

@@ -1,6 +1,9 @@
 #include "indicator/IndicatorManager.h"
 
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -24,6 +27,11 @@ QVector<KlineBar> makeBars(int count) {
         bars.push_back(bar);
     }
     return bars;
+}
+
+QString builtinPlugins() {
+    return QFileInfo(QStringLiteral(TQSDK_TEST_SIDECAR_PATH)).absolutePath() +
+           QStringLiteral("/plugins");
 }
 
 QVector<IndicatorSeries> latestSeries(const QSignalSpy& spy) {
@@ -130,6 +138,71 @@ private slots:
         manager.setEnabled({});
     }
 
+    void externalPluginLoadsWithoutRecompiling() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QDir().mkpath(directory.filePath(QStringLiteral("rsi")));
+        QFile manifest(directory.filePath(QStringLiteral("rsi/manifest.json")));
+        QVERIFY(manifest.open(QIODevice::WriteOnly));
+        const QJsonObject manifestObject{
+            {QStringLiteral("id"), QStringLiteral("rsi")},
+            {QStringLiteral("name"), QStringLiteral("RSI")},
+            {QStringLiteral("version"), QStringLiteral("1.0")},
+            {QStringLiteral("panel"), QStringLiteral("sub")},
+            {QStringLiteral("params"),
+             QJsonArray{QJsonObject{{QStringLiteral("key"), QStringLiteral("period")},
+                                    {QStringLiteral("label"), QStringLiteral("周期")},
+                                    {QStringLiteral("type"), QStringLiteral("int")},
+                                    {QStringLiteral("default"), 5},
+                                    {QStringLiteral("min"), 2},
+                                    {QStringLiteral("max"), 100}}}},
+            {QStringLiteral("series"),
+             QJsonArray{QJsonObject{{QStringLiteral("name"), QStringLiteral("rsi")},
+                                    {QStringLiteral("label"), QStringLiteral("RSI")},
+                                    {QStringLiteral("color"), QStringLiteral("#f0c75e")}}}},
+        };
+        manifest.write(QJsonDocument(manifestObject).toJson(QJsonDocument::Compact));
+        manifest.close();
+        QFile plugin(directory.filePath(QStringLiteral("rsi/indicator.py")));
+        QVERIFY(plugin.open(QIODevice::WriteOnly));
+        plugin.write("def compute(params, bars):\n"
+                     "    period = max(1, int(params.get('period', 5)))\n"
+                     "    out = []\n"
+                     "    closes = [float(bar['close']) for bar in bars]\n"
+                     "    for i in range(len(closes)):\n"
+                     "        start = max(0, i - period + 1)\n"
+                     "        window = closes[start:i + 1]\n"
+                     "        out.append(sum(window) / len(window))\n"
+                     "    return {'rsi': out}\n");
+        plugin.close();
+
+        IndicatorManager manager;
+        manager.setSidecarPathForTest(QStringLiteral(TQSDK_TEST_SIDECAR_PATH));
+        manager.setPluginDirectoriesForTest({directory.path()});
+        QCOMPARE(manager.specs().size(), 1);
+        QCOMPARE(manager.specs().first().id, QStringLiteral("rsi"));
+
+        QSignalSpy spy(&manager, &IndicatorManager::seriesChanged);
+        QSignalSpy errors(&manager, &IndicatorManager::errorOccurred);
+        manager.setEnabled({QStringLiteral("rsi")});
+        manager.setBars(QStringLiteral("SHFE.rb2701"), 60'000'000'000LL, makeBars(20));
+        const auto hasOutput = [&spy] {
+            for (const auto& item : latestSeries(spy)) {
+                if (!item.values.isEmpty()) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(hasOutput(), 4000);
+        QVERIFY(errors.isEmpty());
+        const auto series = latestSeries(spy);
+        QVERIFY(!series.isEmpty());
+        QCOMPARE(series.first().indicatorId, QStringLiteral("rsi"));
+        QVERIFY(!series.first().values.isEmpty());
+        manager.setEnabled({});
+    }
+
     void crashedSidecarIsReported() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -146,6 +219,7 @@ private slots:
 
         IndicatorManager manager;
         manager.setSidecarPathForTest(script);
+        manager.setPluginDirectoriesForTest({builtinPlugins()});
         QSignalSpy errors(&manager, &IndicatorManager::errorOccurred);
         manager.setEnabled({QStringLiteral("ma")});
         QTRY_VERIFY_WITH_TIMEOUT(!errors.isEmpty(), 3000);
@@ -155,6 +229,7 @@ private slots:
     void missingSidecarReportsError() {
         IndicatorManager manager;
         manager.setSidecarPathForTest(QStringLiteral("/nonexistent/tqsdk-indicator-sidecar.py"));
+        manager.setPluginDirectoriesForTest({builtinPlugins()});
         QSignalSpy errors(&manager, &IndicatorManager::errorOccurred);
         manager.setEnabled({QStringLiteral("ma")});
         QTRY_VERIFY_WITH_TIMEOUT(!errors.isEmpty(), 1000);

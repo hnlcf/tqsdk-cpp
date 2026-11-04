@@ -1,6 +1,6 @@
 # K 线指标插件设计
 
-> 状态：Phase B（Python sidecar + 内置 MA/EMA/BOLL/MACD）已实现；DSL/第三方插件目录仍待 Phase C。
+> 状态：Phase B（Python sidecar、manifest 动态发现、内置 MA/EMA/BOLL/MACD）已实现；插件签名/依赖管理和 DSL 仍待 Phase C。
 >
 > 目标不是把指标公式塞进 `paintEvent`，而是让指标计算、渲染和生命周期与
 > K 线数据、图表控件解耦，后续可以支持 Python 脚本、内置 DSL 和第三方插件包。
@@ -472,13 +472,83 @@ TQSDK_INDICATOR_SIDECAR=<repo>/ui/indicator_sidecar/indicator_sidecar.py
 
 ### 12.7 当前边界
 
-- 内置指标由 sidecar 静态注册，尚未做第三方目录扫描和 manifest 签名；
+- 第三方插件目录扫描和动态菜单刷新已实现；插件签名、权限沙箱和依赖安装尚未实现；
 - Python 依赖只使用标准库，暂不支持执行 `requirements.txt` 安装；
 - 副图当前固定一个 MACD 区域，后续可扩展多副图和十字光标联动；
 - 指标有独立覆盖层缓存，副图出现时会缩小主图和成交量区域；
 - 多指标同时启用时 sidecar 按请求顺序计算；大窗口/多指标基准测试留在 Phase C。
+- Python 插件由 sidecar 直接 import，仍未做文件/网络/进程访问限制。
 
-### 12.8 验证记录
+### 12.8 动态添加指标（无需重新编译）
+
+指标元数据从 `manifest.json` 发现，C++ UI 不包含指标公式列表，Python
+sidecar 也不需要在每次新增指标时改主脚本。新增一个指标只需要增加目录和两个文件：
+
+```text
+~/.config/tqsdk/indicators/rsi/
+  manifest.json
+  indicator.py
+```
+
+`manifest.json` 示例：
+
+```json
+{
+  "id": "rsi",
+  "name": "RSI",
+  "version": "1.0",
+  "panel": "sub",
+  "params": [
+    {"key": "period", "label": "周期", "type": "int",
+     "default": 14, "min": 2, "max": 500}
+  ],
+  "series": [
+    {"name": "rsi", "label": "RSI", "color": "#f0c75e"}
+  ]
+}
+```
+
+`indicator.py` 示例：
+
+```python
+def compute(params, bars):
+    period = max(1, int(params.get("period", 14)))
+    values = []
+    closes = [float(bar["close"]) for bar in bars]
+    for i in range(len(closes)):
+        window = closes[max(0, i - period + 1):i + 1]
+        values.append(sum(window) / len(window))
+    return {"rsi": values}
+```
+
+要求：
+
+- `compute(params, bars)` 返回 `{series_name: values}`；
+- 每个 values 的长度必须等于 bars；
+- 返回 `None` 或 NaN 会从图中过滤；
+- `panel` 只能是 `main` 或 `sub`；
+- 参数目前按 manifest 的数值类型编辑，`type` 支持 `int` / `float`；
+- 插件入口必须在插件目录内部，不能用 `../` 越界。
+
+扫描目录：
+
+```text
+<应用配置>/tqsdk/indicators/          # 普通用户插件
+<QStandardPaths::AppConfigLocation>/indicators/
+$TQSDK_INDICATOR_PLUGIN_DIRS          # 可显式追加，路径分隔符分隔
+<sidecar 目录>/plugins/               # 项目自带 manifest + 内置实现
+```
+
+UI 和 sidecar 使用同一目录列表。添加文件后：
+
+1. 指标菜单中的“刷新指标列表”；
+2. 新指标会立即出现在菜单中；
+3. 启用后 sidecar 按需重启并加载 Python 文件。
+
+内置指标的 manifest 在 `ui/indicator_sidecar/plugins/`，可以直接作为第三方
+插件模板复制。新增指标不需要重新编译 C++，也不需要重新构建 Qt UI。
+
+### 12.9 验证记录
 
 2026-11-04 在 `build-ui`（RelWithDebInfo，Qt 6.11.2）执行：
 
@@ -490,7 +560,7 @@ ctest --test-dir build-ui --output-on-failure
 
 指标相关覆盖：
 
-- `tqsdk-ui-indicator`：MA/MACD 计算、增量 update、参数下发、非法 sidecar 路径、崩溃 sidecar；
+- `tqsdk-ui-indicator`：MA/MACD 计算、增量 update、参数下发、manifest 外部插件动态加载、非法 sidecar 路径、崩溃 sidecar；
 - `tqsdk-ui-chart`：主图叠加 + MACD 副图绘制 smoke；
 - `tqsdk-ui-window`：FakeNodeClient K 线 → IndicatorManager → sidecar → 图表端到端；
 - 4K UI stress 仍保持最大 event-loop gap 约 9ms。

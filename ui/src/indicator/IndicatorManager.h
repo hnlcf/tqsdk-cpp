@@ -32,7 +32,10 @@ public:
     QStringList            enabled() const { return enabled_; }
 
     /// 测试/打包环境可显式指定脚本路径；正常路径由环境变量或源码目录发现。
-    void setSidecarPathForTest(const QString& path);
+    void        setSidecarPathForTest(const QString& path);
+    void        setPluginDirectoriesForTest(const QStringList& directories);
+    void        reloadCatalog();
+    QStringList pluginDirectories() const;
 
     void setEnabled(const QStringList& indicatorIds);
     void setParams(const QString& indicatorId, const QJsonObject& params);
@@ -42,22 +45,24 @@ public:
 signals:
     void seriesChanged(const QVector<tqsdk::ui::IndicatorSeries>& series);
     void errorOccurred(const QString& error);
+    void catalogChanged();
 
 private:
-    void    startProcess();
-    void    stopProcess();
-    void    scheduleRestart();
-    void    sendFrame(const QJsonObject& message);
-    void    sendInit(const QString& indicatorId);
-    void    sendBars(bool forceReset);
-    void    flushInput();
-    void    handleMessage(const QJsonObject& message);
-    void    emitSeries();
-    QString resolveSidecarPath() const;
-    QString pythonExecutable() const;
-    QString specName(const QString& indicatorId) const;
-    QString specPanel(const QString& indicatorId) const;
-    QColor  seriesColor(const QString& indicatorId, int index) const;
+    void                   startProcess();
+    void                   stopProcess();
+    void                   scheduleRestart();
+    void                   sendFrame(const QJsonObject& message);
+    void                   sendInit(const QString& indicatorId);
+    void                   sendBars(bool forceReset);
+    void                   flushInput();
+    void                   handleMessage(const QJsonObject& message);
+    void                   emitSeries();
+    QString                resolveSidecarPath() const;
+    QString                pythonExecutable() const;
+    QVector<IndicatorSpec> loadSpecs(const QStringList& directories) const;
+    QString                specName(const QString& indicatorId) const;
+    QString                specPanel(const QString& indicatorId) const;
+    QColor                 seriesColor(const QString& indicatorId, int index) const;
 
     QVector<IndicatorSpec>      specs_;
     QHash<QString, QJsonObject> params_;
@@ -68,6 +73,7 @@ private:
     QTimer*           responseTimer_ = nullptr;
     QByteArray        inputBuffer_;
     QString           sidecarPath_;
+    QStringList       pluginDirsOverride_;
     QString           symbol_;
     qint64            durationNs_ = 0;
     QVector<KlineBar> bars_;

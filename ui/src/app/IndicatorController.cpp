@@ -11,6 +11,7 @@
 #include <QMenuBar>
 #include <QSettings>
 #include <QStatusBar>
+#include <QTimer>
 
 namespace tqsdk::ui {
 
@@ -40,7 +41,12 @@ IndicatorController::IndicatorController(KLineChartWidget* chart,
             toast_->showMessage(error, true);
         }
     });
-    buildMenu();
+    connect(manager_, &IndicatorManager::catalogChanged, this, [this] {
+        // 刷新动作可能正由菜单项的 triggered 信号触发；延后重建，避免在
+        // QMenu::clear() 时删除当前信号发送者。
+        QTimer::singleShot(0, this, &IndicatorController::rebuildMenu);
+    });
+    rebuildMenu();
 }
 
 void IndicatorController::setBars(const QString&           symbol,
@@ -56,7 +62,7 @@ void IndicatorController::saveEnabled() {
     QSettings().setValue(QStringLiteral("ui/indicators/enabled"), manager_->enabled());
 }
 
-void IndicatorController::buildMenu() {
+void IndicatorController::rebuildMenu() {
     if (menuBar_ == nullptr) {
         return;
     }
@@ -111,6 +117,8 @@ void IndicatorController::buildMenu() {
     }
 
     indicatorMenu->addSeparator();
+    auto* refresh = indicatorMenu->addAction(tr("刷新指标列表"));
+    connect(refresh, &QAction::triggered, this, [this] { manager_->reloadCatalog(); });
     auto* hint = indicatorMenu->addAction(tr("指标计算由独立 Python sidecar 执行"));
     hint->setEnabled(false);
     manager_->setEnabled(enabled);

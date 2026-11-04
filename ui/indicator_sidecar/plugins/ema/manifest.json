@@ -1,0 +1,14 @@
+{
+  "id": "ema",
+  "name": "EMA",
+  "version": "1.0",
+  "panel": "main",
+  "params": [
+    {"key": "fast", "label": "快线", "type": "int", "default": 12, "min": 1, "max": 500},
+    {"key": "slow", "label": "慢线", "type": "int", "default": 26, "min": 1, "max": 1000}
+  ],
+  "series": [
+    {"name": "ema_fast", "label": "EMA快", "color": "#ffb86b"},
+    {"name": "ema_slow", "label": "EMA慢", "color": "#c792ea"}
+  ]
+}

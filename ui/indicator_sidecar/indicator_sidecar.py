@@ -4,6 +4,25 @@
 The sidecar is intentionally a separate process. The Qt UI only sends numeric
 OHLCV bars and receives numeric series; no Python executes in the GUI thread.
 
+Plugin discovery
+----------------
+The manager passes ``TQSDK_INDICATOR_PLUGIN_DIRS`` (path-separator separated).
+Each plugin directory contains one subdirectory per indicator:
+
+    ma/
+      manifest.json
+      indicator.py       # optional for built-in indicators
+
+Built-in indicators are implemented below and registered by manifest id. A
+third-party plugin only needs a manifest and an ``indicator.py`` exposing:
+
+    def compute(params, bars):
+        return {"my_series": [value_or_None, ...]}
+
+``bars`` is a list of dicts with datetime/open/high/low/close/volume/open_oi/
+close_oi. The returned list must align with the input bars; None/NaN points are
+not sent to the chart.
+
 Wire format (both directions):
     4-byte big-endian payload length + UTF-8 compact JSON
 
@@ -21,21 +40,17 @@ Responses:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import math
+import os
 import struct
 import sys
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
 PROTOCOL_VERSION = 1
 MAX_BARS = 20000
-
-DEFAULTS: dict[str, dict[str, float]] = {
-    "ma": {"fast": 5, "slow": 20},
-    "ema": {"fast": 12, "slow": 26},
-    "boll": {"period": 20, "mult": 2.0},
-    "macd": {"fast": 12, "slow": 26, "signal": 9},
-}
 
 
 def read_exact(stream: Any, size: int) -> bytes | None:
@@ -106,65 +121,175 @@ def stdev(values: list[float | None], period: int) -> list[float | None]:
     return result
 
 
-def series(name: str, panel: str, datetimes: list[int], values: list[float | None]) -> dict[str, Any]:
-    points = [
-        {"datetime": int(datetime), "value": float(value)}
-        for datetime, value in zip(datetimes, values)
-        if value is not None and math.isfinite(value)
+def closes(bars: list[dict[str, Any]]) -> list[float | None]:
+    return [finite(bar.get("close")) for bar in bars]
+
+
+def compute_ma(params: dict[str, Any], bars: list[dict[str, Any]]) -> dict[str, list[Any]]:
+    values = closes(bars)
+    fast = max(1, int(params.get("fast", 5)))
+    slow = max(1, int(params.get("slow", 20)))
+    return {"ma_fast": sma(values, fast), "ma_slow": sma(values, slow)}
+
+
+def compute_ema(params: dict[str, Any], bars: list[dict[str, Any]]) -> dict[str, list[Any]]:
+    values = closes(bars)
+    fast = max(1, int(params.get("fast", 12)))
+    slow = max(1, int(params.get("slow", 26)))
+    return {"ema_fast": ema(values, fast), "ema_slow": ema(values, slow)}
+
+
+def compute_boll(params: dict[str, Any], bars: list[dict[str, Any]]) -> dict[str, list[Any]]:
+    values = closes(bars)
+    period = max(1, int(params.get("period", 20)))
+    mult = max(0.0, float(params.get("mult", 2.0)))
+    middle = sma(values, period)
+    deviation = stdev(values, period)
+    upper = [None if m is None or d is None else m + mult * d for m, d in zip(middle, deviation)]
+    lower = [None if m is None or d is None else m - mult * d for m, d in zip(middle, deviation)]
+    return {"boll_mid": middle, "boll_upper": upper, "boll_lower": lower}
+
+
+def compute_macd(params: dict[str, Any], bars: list[dict[str, Any]]) -> dict[str, list[Any]]:
+    values = closes(bars)
+    fast = max(1, int(params.get("fast", 12)))
+    slow = max(1, int(params.get("slow", 26)))
+    signal_period = max(1, int(params.get("signal", 9)))
+    fast_ema = ema(values, fast)
+    slow_ema = ema(values, slow)
+    macd_values = [None if f is None or s is None else f - s for f, s in zip(fast_ema, slow_ema)]
+    signal_values = ema(macd_values, signal_period)
+    histogram_values = [
+        None if m is None or s is None else m - s for m, s in zip(macd_values, signal_values)
     ]
-    return {"name": name, "panel": panel, "points": points}
+    return {"macd": macd_values, "signal": signal_values, "histogram": histogram_values}
 
 
-def compute(indicator_id: str, params: dict[str, Any], bars: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    datetimes = [int(bar["datetime"]) for bar in bars]
-    closes = [finite(bar.get("close")) for bar in bars]
+BUILTIN_COMPUTERS: dict[str, Callable[[dict[str, Any], list[dict[str, Any]]], dict[str, list[Any]]]] = {
+    "ma": compute_ma,
+    "ema": compute_ema,
+    "boll": compute_boll,
+    "macd": compute_macd,
+}
 
-    if indicator_id == "ma":
-        fast = max(1, int(params.get("fast", 5)))
-        slow = max(1, int(params.get("slow", 20)))
-        return [
-            series("ma_fast", "main", datetimes, sma(closes, fast)),
-            series("ma_slow", "main", datetimes, sma(closes, slow)),
-        ]
-    if indicator_id == "ema":
-        fast = max(1, int(params.get("fast", 12)))
-        slow = max(1, int(params.get("slow", 26)))
-        return [
-            series("ema_fast", "main", datetimes, ema(closes, fast)),
-            series("ema_slow", "main", datetimes, ema(closes, slow)),
-        ]
-    if indicator_id == "boll":
-        period = max(1, int(params.get("period", 20)))
-        mult = max(0.0, float(params.get("mult", 2.0)))
-        middle = sma(closes, period)
-        deviation = stdev(closes, period)
-        upper = [None if m is None or d is None else m + mult * d for m, d in zip(middle, deviation)]
-        lower = [None if m is None or d is None else m - mult * d for m, d in zip(middle, deviation)]
-        return [
-            series("boll_mid", "main", datetimes, middle),
-            series("boll_upper", "main", datetimes, upper),
-            series("boll_lower", "main", datetimes, lower),
-        ]
-    if indicator_id == "macd":
-        fast = max(1, int(params.get("fast", 12)))
-        slow = max(1, int(params.get("slow", 26)))
-        signal_period = max(1, int(params.get("signal", 9)))
-        fast_ema = ema(closes, fast)
-        slow_ema = ema(closes, slow)
-        macd_values = [
-            None if f is None or s is None else f - s for f, s in zip(fast_ema, slow_ema)
-        ]
-        signal_values = ema(macd_values, signal_period)
-        histogram_values = [
-            None if m is None or s is None else m - s
-            for m, s in zip(macd_values, signal_values)
-        ]
-        return [
-            series("macd", "sub", datetimes, macd_values),
-            series("signal", "sub", datetimes, signal_values),
-            series("histogram", "sub", datetimes, histogram_values),
-        ]
-    raise ValueError(f"unknown indicator: {indicator_id}")
+
+def plugin_directories() -> list[Path]:
+    configured = os.environ.get("TQSDK_INDICATOR_PLUGIN_DIRS", "")
+    directories = [Path(item) for item in configured.split(os.pathsep) if item.strip()]
+    if not directories:
+        directories = [Path(__file__).resolve().parent / "plugins"]
+    result: list[Path] = []
+    seen: set[str] = set()
+    for directory in directories:
+        resolved = str(directory.resolve())
+        if resolved not in seen:
+            seen.add(resolved)
+            result.append(directory)
+    return result
+
+
+def load_plugin_module(indicator_id: str, entry: Path) -> Callable[..., Any]:
+    spec = importlib.util.spec_from_file_location(f"tqsdk_indicator_{indicator_id}", entry)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load plugin module: {entry}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    compute = getattr(module, "compute", None)
+    if not callable(compute):
+        raise RuntimeError(f"plugin {indicator_id} has no compute(params, bars)")
+    return compute
+
+
+def load_catalog() -> dict[str, dict[str, Any]]:
+    catalog: dict[str, dict[str, Any]] = {}
+    for directory in plugin_directories():
+        if not directory.is_dir():
+            continue
+        candidates = sorted(directory.glob("*/manifest.json"))
+        direct = directory / "manifest.json"
+        if direct.exists():
+            candidates.append(direct)
+        for manifest_path in candidates:
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                indicator_id = str(manifest.get("id", "")).strip()
+                if not indicator_id or indicator_id in catalog:
+                    continue
+                if manifest.get("panel") not in ("main", "sub"):
+                    raise ValueError("panel must be main or sub")
+                if indicator_id in BUILTIN_COMPUTERS:
+                    compute = BUILTIN_COMPUTERS[indicator_id]
+                else:
+                    entry_name = str(manifest.get("entry", "indicator.py"))
+                    entry = (manifest_path.parent / entry_name).resolve()
+                    base = manifest_path.parent.resolve()
+                    try:
+                        entry.relative_to(base)
+                    except ValueError as exc:
+                        raise ValueError("plugin entry escapes plugin directory") from exc
+                    compute = load_plugin_module(indicator_id, entry)
+                catalog[indicator_id] = {"manifest": manifest, "compute": compute}
+            except Exception as exc:  # noqa: BLE001 - one bad plugin must not kill others
+                print(f"indicator plugin skipped: {manifest_path}: {exc}", file=sys.stderr)
+    return catalog
+
+
+def default_params(manifest: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for item in manifest.get("params", []):
+        if isinstance(item, dict) and "key" in item:
+            result[str(item["key"])] = item.get("default", 0)
+    return result
+
+
+def series_specs(manifest: dict[str, Any], result: dict[str, Any]) -> list[dict[str, Any]]:
+    specs = [item for item in manifest.get("series", []) if isinstance(item, dict)]
+    if specs:
+        return specs
+    return [{"name": name, "label": name, "color": "#9aa4b2"} for name in result]
+
+
+def build_series(
+    indicator_id: str,
+    manifest: dict[str, Any],
+    datetimes: list[int],
+    values_by_name: dict[str, Any],
+) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for item in series_specs(manifest, values_by_name):
+        name = str(item.get("name", ""))
+        values = values_by_name.get(name)
+        if values is None or not isinstance(values, (list, tuple)):
+            values = []
+        if len(values) != len(datetimes):
+            raise ValueError(
+                f"series {name} length {len(values)} does not match bars {len(datetimes)}"
+            )
+        points = []
+        for datetime, raw in zip(datetimes, values):
+            value = finite(raw)
+            if value is not None:
+                points.append({"datetime": int(datetime), "value": value})
+        output.append(
+            {
+                "name": name,
+                "panel": str(manifest.get("panel", "sub")),
+                "points": points,
+            }
+        )
+    return output
+
+
+def run_compute(
+    indicator_id: str,
+    state: dict[str, Any],
+    bars: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    manifest = state["manifest"]
+    values = state["compute"](state["params"], bars)
+    if not isinstance(values, dict):
+        raise ValueError("plugin compute must return a dict of series")
+    return build_series(indicator_id, manifest, [int(bar["datetime"]) for bar in bars], values)
 
 
 def merge_bars(existing: list[dict[str, Any]], incoming: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -176,7 +301,8 @@ def merge_bars(existing: list[dict[str, Any]], incoming: list[dict[str, Any]]) -
 
 
 def main() -> int:
-    send({"type": "ready", "protocol": PROTOCOL_VERSION})
+    catalog = load_catalog()
+    send({"type": "ready", "protocol": PROTOCOL_VERSION, "indicators": sorted(catalog)})
     states: dict[str, dict[str, Any]] = {}
     while True:
         header = read_exact(sys.stdin.buffer, 4)
@@ -189,27 +315,41 @@ def main() -> int:
         payload = read_exact(sys.stdin.buffer, length)
         if payload is None:
             return 0
+        indicator_id = ""
         try:
             message = json.loads(payload)
             indicator_id = str(message.get("indicator_id", ""))
             kind = str(message.get("type", ""))
             if kind == "init":
-                if indicator_id not in DEFAULTS:
+                if indicator_id not in catalog:
                     raise ValueError(f"unknown indicator: {indicator_id}")
-                defaults = DEFAULTS[indicator_id].copy()
-                defaults.update(message.get("params") or {})
-                states[indicator_id] = {"params": defaults, "bars": []}
+                entry = catalog[indicator_id]
+                params = default_params(entry["manifest"])
+                params.update(message.get("params") or {})
+                states[indicator_id] = {
+                    "params": params,
+                    "manifest": entry["manifest"],
+                    "compute": entry["compute"],
+                    "bars": [],
+                }
                 send({"type": "initialized", "indicator_id": indicator_id})
             elif kind == "bars":
                 if indicator_id not in states:
                     raise ValueError(f"indicator not initialized: {indicator_id}")
                 state = states[indicator_id]
                 incoming = [bar for bar in message.get("bars", []) if isinstance(bar, dict)]
-                state["bars"] = incoming[-MAX_BARS:] if message.get("reset") else merge_bars(
-                    state["bars"], incoming
+                state["bars"] = (
+                    incoming[-MAX_BARS:]
+                    if message.get("reset")
+                    else merge_bars(state["bars"], incoming)
                 )
-                result = compute(indicator_id, state["params"], state["bars"])
-                send({"type": "series", "indicator_id": indicator_id, "series": result})
+                send(
+                    {
+                        "type": "series",
+                        "indicator_id": indicator_id,
+                        "series": run_compute(indicator_id, state, state["bars"]),
+                    }
+                )
             elif kind == "stop":
                 return 0
             else:
@@ -218,7 +358,7 @@ def main() -> int:
             send(
                 {
                     "type": "error",
-                    "indicator_id": str(locals().get("indicator_id", "")),
+                    "indicator_id": indicator_id,
                     "code": "indicator_error",
                     "message": str(exc),
                 }

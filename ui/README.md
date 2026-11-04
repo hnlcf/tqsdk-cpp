@@ -50,6 +50,18 @@ cmake -S . -B build-ui -DTQSDK_BUILD_UI=ON
 cmake --build build-ui --target tqsdk-ui -j
 ```
 
+## 指标插件（动态加载）
+
+内置 manifest 位于 `ui/indicator_sidecar/plugins/`。用户指标放到：
+
+```text
+~/.config/tqsdk/indicators/<id>/manifest.json
+~/.config/tqsdk/indicators/<id>/indicator.py
+```
+
+插件 Python 只需实现 `compute(params, bars)`，返回 `{series: values}`。
+修改文件后在“指标”菜单点“刷新指标列表”，不需要重新编译 UI。
+
 ## 当前阶段
 
 已在 Qt 6.11.2 + QtWebSockets + Wayland 上验证 configure/build 和运行时连接。
@@ -70,6 +82,8 @@ Phase 3（P3 Phase B 已完成）：
 - 内置 MA/EMA/BOLL/MACD；
 - 主图叠加和 MACD 副图；
 - 指标菜单、参数编辑、启停和 QSettings 持久化；
+- manifest 动态发现插件，新增指标无需重新编译；
+- 指标菜单“刷新指标列表”可在运行时加载新插件；
 - sidecar 超时、输出上限、崩溃重启和敏感环境变量隔离；
 - `tqsdk-ui-indicator` 测试覆盖协议、计算、增量更新和 UI 端到端。
 

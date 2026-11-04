@@ -2,11 +2,15 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QSet>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QtEndian>
 
@@ -19,42 +23,6 @@ namespace {
 
 constexpr int kMaxSidecarBytes   = 8 * 1024 * 1024;
 constexpr int kResponseTimeoutMs = 3000;
-
-QVector<IndicatorSpec> makeSpecs() {
-    QVector<IndicatorSpec> specs;
-    specs.push_back({QStringLiteral("ma"),
-                     QStringLiteral("MA"),
-                     QStringLiteral("main"),
-                     {{QStringLiteral("fast"), QStringLiteral("快线"), 5.0, 1.0, 500.0, 0, true},
-                      {QStringLiteral("slow"), QStringLiteral("慢线"), 20.0, 1.0, 1000.0, 0, true}},
-                     {QStringLiteral("#f0c75e"), QStringLiteral("#53b7ff")},
-                     {QStringLiteral("ma_fast"), QStringLiteral("ma_slow")}});
-    specs.push_back({QStringLiteral("ema"),
-                     QStringLiteral("EMA"),
-                     QStringLiteral("main"),
-                     {{QStringLiteral("fast"), QStringLiteral("快线"), 12.0, 1.0, 500.0, 0, true},
-                      {QStringLiteral("slow"), QStringLiteral("慢线"), 26.0, 1.0, 1000.0, 0, true}},
-                     {QStringLiteral("#ffb86b"), QStringLiteral("#c792ea")},
-                     {QStringLiteral("ema_fast"), QStringLiteral("ema_slow")}});
-    specs.push_back(
-        {QStringLiteral("boll"),
-         QStringLiteral("BOLL"),
-         QStringLiteral("main"),
-         {{QStringLiteral("period"), QStringLiteral("周期"), 20.0, 2.0, 500.0, 0, true},
-          {QStringLiteral("mult"), QStringLiteral("倍数"), 2.0, 0.1, 10.0, 2, false}},
-         {QStringLiteral("#f0c75e"), QStringLiteral("#f28e8e"), QStringLiteral("#23b39a")},
-         {QStringLiteral("boll_mid"), QStringLiteral("boll_upper"), QStringLiteral("boll_lower")}});
-    specs.push_back(
-        {QStringLiteral("macd"),
-         QStringLiteral("MACD"),
-         QStringLiteral("sub"),
-         {{QStringLiteral("fast"), QStringLiteral("快线"), 12.0, 1.0, 500.0, 0, true},
-          {QStringLiteral("slow"), QStringLiteral("慢线"), 26.0, 1.0, 1000.0, 0, true},
-          {QStringLiteral("signal"), QStringLiteral("信号"), 9.0, 1.0, 500.0, 0, true}},
-         {QStringLiteral("#f0c75e"), QStringLiteral("#53b7ff"), QStringLiteral("#9aa4b2")},
-         {QStringLiteral("macd"), QStringLiteral("signal"), QStringLiteral("histogram")}});
-    return specs;
-}
 
 QJsonArray barsToJson(const QVector<KlineBar>& bars, int start) {
     QJsonArray array;
@@ -74,14 +42,85 @@ QJsonArray barsToJson(const QVector<KlineBar>& bars, int start) {
     return array;
 }
 
+/// 从 manifest 构建可显示/可参数化的 spec。manifest 是动态插件与 UI 的唯一接口，
+/// 新指标不需要修改 C++ 代码。
+IndicatorSpec parseManifest(const QFileInfo& file, bool& ok) {
+    ok = false;
+    IndicatorSpec spec;
+    QFile         handle(file.absoluteFilePath());
+    if (!handle.open(QIODevice::ReadOnly)) {
+        return spec;
+    }
+    const QJsonDocument document = QJsonDocument::fromJson(handle.readAll());
+    if (!document.isObject()) {
+        return spec;
+    }
+    const QJsonObject object = document.object();
+    spec.id                  = object.value(QStringLiteral("id")).toString();
+    spec.name                = object.value(QStringLiteral("name")).toString(spec.id);
+    spec.panel = object.value(QStringLiteral("panel")).toString(QStringLiteral("sub"));
+    if (spec.id.isEmpty() ||
+        spec.panel != QStringLiteral("main") && spec.panel != QStringLiteral("sub")) {
+        return spec;
+    }
+    if (spec.id.contains(QLatin1Char('/')) || spec.id.contains(QLatin1Char('\\'))) {
+        return spec;
+    }
+
+    static const QStringList fallbackColors = {QStringLiteral("#f0c75e"),
+                                               QStringLiteral("#53b7ff"),
+                                               QStringLiteral("#f28e8e"),
+                                               QStringLiteral("#c792ea"),
+                                               QStringLiteral("#23b39a")};
+    const QJsonArray         params         = object.value(QStringLiteral("params")).toArray();
+    for (const auto& item : params) {
+        const QJsonObject param = item.toObject();
+        const QString     key   = param.value(QStringLiteral("key")).toString();
+        if (key.isEmpty()) {
+            continue;
+        }
+        IndicatorParamSpec definition;
+        definition.key          = key;
+        definition.label        = param.value(QStringLiteral("label")).toString(key);
+        definition.defaultValue = param.value(QStringLiteral("default")).toDouble(0.0);
+        definition.minimum      = param.value(QStringLiteral("minimum"))
+                                      .toDouble(param.value(QStringLiteral("min")).toDouble(0.0));
+        definition.maximum      = param.value(QStringLiteral("maximum"))
+                                      .toDouble(param.value(QStringLiteral("max")).toDouble(1.0e9));
+        definition.integer =
+            param.value(QStringLiteral("type")).toString() != QStringLiteral("float");
+        definition.decimals =
+            definition.integer ? 0 : param.value(QStringLiteral("decimals")).toInt(2);
+        spec.params.push_back(definition);
+    }
+
+    const QJsonArray series = object.value(QStringLiteral("series")).toArray();
+    int              index  = 0;
+    for (const auto& item : series) {
+        const QJsonObject seriesObject = item.toObject();
+        QString           name         = seriesObject.value(QStringLiteral("name")).toString();
+        if (name.isEmpty() && item.isString()) {
+            name = item.toString();
+        }
+        if (name.isEmpty()) {
+            continue;
+        }
+        spec.seriesNames.push_back(name);
+        spec.colors.push_back(seriesObject.value(QStringLiteral("color"))
+                                  .toString(fallbackColors.at(index % fallbackColors.size())));
+        ++index;
+    }
+    if (spec.seriesNames.isEmpty()) {
+        return spec;
+    }
+    ok = true;
+    return spec;
+}
+
 } // namespace
 
 IndicatorManager::IndicatorManager(QObject* parent)
-    : QObject(parent),
-      specs_(makeSpecs()) {
-    for (const auto& spec : specs_) {
-        params_.insert(spec.id, spec.defaults());
-    }
+    : QObject(parent) {
     qRegisterMetaType<IndicatorSeries>("tqsdk::ui::IndicatorSeries");
     qRegisterMetaType<QVector<IndicatorSeries>>("QVector<tqsdk::ui::IndicatorSeries>");
 
@@ -102,6 +141,7 @@ IndicatorManager::IndicatorManager(QObject* parent)
             startProcess();
         }
     });
+    reloadCatalog();
 }
 
 IndicatorManager::~IndicatorManager() {
@@ -115,6 +155,117 @@ QJsonObject IndicatorManager::params(const QString& indicatorId) const {
 
 void IndicatorManager::setSidecarPathForTest(const QString& path) {
     sidecarPath_ = path;
+    reloadCatalog();
+}
+
+void IndicatorManager::setPluginDirectoriesForTest(const QStringList& directories) {
+    pluginDirsOverride_ = directories;
+    reloadCatalog();
+}
+
+QStringList IndicatorManager::pluginDirectories() const {
+    if (!pluginDirsOverride_.isEmpty()) {
+        return pluginDirsOverride_;
+    }
+
+    QStringList   directories;
+    const QString config = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    if (!config.isEmpty()) {
+        directories.push_back(QDir(config).filePath(QStringLiteral("tqsdk/indicators")));
+    }
+    const QString appConfig = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    if (!appConfig.isEmpty()) {
+        directories.push_back(QDir(appConfig).filePath(QStringLiteral("indicators")));
+    }
+    const QString env = qEnvironmentVariable("TQSDK_INDICATOR_PLUGIN_DIRS");
+    if (!env.isEmpty()) {
+        directories += env.split(QDir::listSeparator(), Qt::SkipEmptyParts);
+    }
+    const QString script = resolveSidecarPath();
+    if (!script.isEmpty()) {
+        directories.push_back(
+            QDir(QFileInfo(script).absolutePath()).filePath(QStringLiteral("plugins")));
+    }
+    QStringList   result;
+    QSet<QString> seen;
+    for (const QString& directory : directories) {
+        const QString clean = QDir::cleanPath(directory);
+        if (!clean.isEmpty() && !seen.contains(clean)) {
+            seen.insert(clean);
+            result.push_back(clean);
+        }
+    }
+    return result;
+}
+
+QVector<IndicatorSpec> IndicatorManager::loadSpecs(const QStringList& directories) const {
+    QVector<IndicatorSpec> specs;
+    QSet<QString>          seenIds;
+    for (const QString& directory : directories) {
+        QDir root(directory);
+        if (!root.exists()) {
+            continue;
+        }
+        QStringList     manifests;
+        const QFileInfo direct(root.filePath(QStringLiteral("manifest.json")));
+        if (direct.isFile()) {
+            manifests.push_back(direct.absoluteFilePath());
+        }
+        for (const QFileInfo& subdir :
+             root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+            const QFileInfo manifest(subdir.absoluteFilePath() + QStringLiteral("/manifest.json"));
+            if (manifest.isFile()) {
+                manifests.push_back(manifest.absoluteFilePath());
+            }
+        }
+        for (const QString& manifest : manifests) {
+            bool          ok   = false;
+            IndicatorSpec spec = parseManifest(QFileInfo(manifest), ok);
+            if (!ok || seenIds.contains(spec.id)) {
+                continue;
+            }
+            seenIds.insert(spec.id);
+            specs.push_back(spec);
+        }
+    }
+    std::sort(specs.begin(), specs.end(), [](const IndicatorSpec& a, const IndicatorSpec& b) {
+        return a.name.localeAwareCompare(b.name) < 0;
+    });
+    return specs;
+}
+
+void IndicatorManager::reloadCatalog() {
+    const QStringList                 oldEnabled = enabled_;
+    const QHash<QString, QJsonObject> oldParams  = params_;
+    specs_                                       = loadSpecs(pluginDirectories());
+    params_.clear();
+    for (const auto& spec : specs_) {
+        params_.insert(spec.id, oldParams.value(spec.id, spec.defaults()));
+    }
+
+    QStringList normalized;
+    for (const QString& id : oldEnabled) {
+        for (const auto& spec : specs_) {
+            if (spec.id == id) {
+                normalized.push_back(id);
+                break;
+            }
+        }
+    }
+    enabled_ = normalized;
+    seriesById_.clear();
+    if (process_ != nullptr) {
+        stopProcess();
+        if (!enabled_.isEmpty()) {
+            startProcess();
+        }
+    } else if (!enabled_.isEmpty()) {
+        startProcess();
+    }
+    if (enabled_.isEmpty()) {
+        emit seriesChanged({});
+    }
+    emit catalogChanged();
 }
 
 QString IndicatorManager::pythonExecutable() const {
@@ -173,6 +324,9 @@ void IndicatorManager::startProcess() {
             environment.remove(key);
         }
     }
+    // UI 与 sidecar 必须扫描完全相同的目录，否则菜单会出现无法执行的指标。
+    environment.insert(QStringLiteral("TQSDK_INDICATOR_PLUGIN_DIRS"),
+                       pluginDirectories().join(QDir::listSeparator()));
     process_->setProcessEnvironment(environment);
     process_->setWorkingDirectory(QFileInfo(script).absolutePath());
     ready_    = false;

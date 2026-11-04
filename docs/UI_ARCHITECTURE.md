@@ -259,6 +259,8 @@ Python。sidecar 有 3 秒响应超时、8MB 输出上限、进程退出后 1 �
 从子进程环境中移除 `CTP_*`、密码和 AuthCode。
 
 - 内置 MA/EMA/BOLL 为主图叠加，MACD 为副图；
+- 指标 manifest 由 `IndicatorManager` 动态扫描，用户目录新增指标只需“刷新指标列表”，不重新编译；
+- 第三方 `.py` 只存在于 sidecar 子进程，入口限定在插件目录内；
 - `KLineChartWidget::setIndicatorSeries()` 只接收数值序列；
 - 主图指标参与价格坐标范围，副图使用独立数值范围；
 - 菜单“指标”负责启停和参数编辑；
