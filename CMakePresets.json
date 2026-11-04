@@ -68,7 +68,12 @@
                 "tqsdk-ui",
                 "tqsdk-ui-tests",
                 "tqsdk_tests",
-                "tqsdk-ui-model-tests"
+                "tqsdk-ui-model-tests",
+                "tqsdk-ui-parser-tests",
+                "tqsdk-ui-chart-tests",
+                "tqsdk-ui-table-tests",
+                "tqsdk-ui-window-tests",
+                "tqsdk-ui-panel-tests"
             ]
         }
     ],

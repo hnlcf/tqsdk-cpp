@@ -10,20 +10,20 @@ class QCompleter;
 class QCloseEvent;
 class QDockWidget;
 class QDialog;
-class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSortFilterProxyModel;
-class QSpinBox;
 class QStringListModel;
-class QTabWidget;
 class QTableView;
 class QTimer;
 
 namespace tqsdk::ui {
 
 class InstrumentTableModel;
+class OrderTicketPanel;
+class QuoteSnapshotPanel;
+class TradingTablesPanel;
 class KLineChartWidget;
 class MarketStore;
 class NodeClient;
@@ -105,22 +105,19 @@ private:
     QTimer*                workspaceSaveTimer_ = nullptr;
     QHash<QString, Quote>  latestQuotes_;
 
-    QTableView*       watchTable_        = nullptr;
-    QTableView*       futuresTable_      = nullptr;
-    QTableView*       callsTable_        = nullptr;
-    QTableView*       putsTable_         = nullptr;
-    QTableView*       positionTable_     = nullptr;
-    QTableView*       orderTable_        = nullptr;
-    QTableView*       tradeTable_        = nullptr;
-    QTableView*       tapeTable_         = nullptr;
-    QLineEdit*        search_            = nullptr;
-    QLineEdit*        tradeSymbolEdit_   = nullptr;
-    QCompleter*       searchCompleter_   = nullptr;
-    QStringListModel* searchCompletions_ = nullptr;
-    QCompleter*       tradeCompleter_    = nullptr;
-    QStringListModel* tradeCompletions_  = nullptr;
-    QPushButton*      addSymbolButton_   = nullptr;
-    QPushButton*      componentsButton_  = nullptr;
+    QTableView*         watchTable_        = nullptr;
+    QTableView*         futuresTable_      = nullptr;
+    QTableView*         callsTable_        = nullptr;
+    QTableView*         putsTable_         = nullptr;
+    QTableView*         tapeTable_         = nullptr;
+    QLineEdit*          search_            = nullptr;
+    QCompleter*         searchCompleter_   = nullptr;
+    QStringListModel*   searchCompletions_ = nullptr;
+    QPushButton*        addSymbolButton_   = nullptr;
+    QPushButton*        componentsButton_  = nullptr;
+    QuoteSnapshotPanel* quotePanel_        = nullptr;
+    OrderTicketPanel*   orderTicket_       = nullptr;
+    TradingTablesPanel* tradingTables_     = nullptr;
 
     QDockWidget* watchDock_   = nullptr;
     QDockWidget* quoteDock_   = nullptr;
@@ -130,31 +127,9 @@ private:
     QDockWidget* futuresDock_ = nullptr;
     QDockWidget* optionsDock_ = nullptr;
 
-    QLabel*      connectionLabel_   = nullptr;
-    QLabel*      symbolLabel_       = nullptr;
-    QLabel*      lastLabel_         = nullptr;
-    QLabel*      nameLabel_         = nullptr;
-    QLabel*      changeLabel_       = nullptr;
-    QLabel*      changePctLabel_    = nullptr;
-    QLabel*      bidAskLabel_       = nullptr;
-    QLabel*      volumeLabel_       = nullptr;
-    QLabel*      openInterestLabel_ = nullptr;
-    QLabel*      oiChangeLabel_     = nullptr;
-    QLabel*      highLowLabel_      = nullptr;
-    QLabel*      futuresStatus_     = nullptr;
-    QLabel*      orderStatus_       = nullptr;
-    QLabel*      accountBalance_    = nullptr;
-    QLabel*      accountAvailable_  = nullptr;
-    QLabel*      accountMargin_     = nullptr;
-    QLabel*      accountRisk_       = nullptr;
-    QPushButton* themeButton_       = nullptr;
-
-    QDoubleSpinBox* priceBox_     = nullptr;
-    QSpinBox*       volumeBox_    = nullptr;
-    QPushButton*    buyButton_    = nullptr;
-    QPushButton*    sellButton_   = nullptr;
-    QPushButton*    closeButton_  = nullptr;
-    QPushButton*    cancelButton_ = nullptr;
+    QLabel*      connectionLabel_ = nullptr;
+    QLabel*      futuresStatus_   = nullptr;
+    QPushButton* themeButton_     = nullptr;
 
     QStringList watchlist_;
     QString     selectedSymbol_     = QStringLiteral("SHFE.rb2701");

@@ -234,7 +234,19 @@ WS messages ──► parse ──► pending MarketUpdate
 - `visibleCount/visibleStart/followLatest` 可持久化；
 - 只绘制可见区间。
 
-### 5.3 TablePanel
+### 5.3 QuoteSnapshotPanel / OrderTicketPanel / TradingTablesPanel
+
+这三个面板从 MainWindow 拆出，分别负责：
+
+- `QuoteSnapshotPanel`：行情字段展示和红绿格式化，不持有 node/model；
+- `OrderTicketPanel`：三键下单输入、模糊补全入口和按钮信号，不直接下 order；
+- `TradingTablesPanel`：持仓/委托/成交/账户页签、撤单入口和账户字段展示。
+
+MainWindow 只做这些组件与模型/NodeClient 之间的连接。交易方向、OrderRequest
+构造和是否允许平仓仍由 MainWindow 的交易协调逻辑决定，但具体控件不再写在
+MainWindow 里。
+
+### 5.4 TablePanel
 
 `ui/src/widgets/TablePanel.{h,cpp}`：
 
@@ -349,6 +361,7 @@ tqsdk-ui-parser-tests    worker parse, burst coalescing
 tqsdk-ui-chart-tests     chart viewport, drag, wheel, paint smoke test
 tqsdk-ui-table-tests     TablePanel column order/width/hidden persistence
 tqsdk-ui-window-tests    MainWindow chart/selection integration + QSettings restore
+tqsdk-ui-panel-tests     Quote/order/trading panels formatting and actions
 ```
 
 运行：

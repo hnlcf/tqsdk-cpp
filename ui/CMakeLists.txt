@@ -25,6 +25,7 @@ set(TQSDK_UI_SOURCES
     src/net/JsonParserWorker.h
     src/model/MarketStore.cpp
     src/model/MarketStore.h
+    src/model/Formatting.h
     src/model/QuoteTableModel.cpp
     src/model/QuoteTableModel.h
     src/model/InstrumentTableModel.cpp
@@ -35,6 +36,12 @@ set(TQSDK_UI_SOURCES
     src/chart/KLineChartWidget.h
     src/widgets/TablePanel.cpp
     src/widgets/TablePanel.h
+    src/widgets/QuoteSnapshotPanel.cpp
+    src/widgets/QuoteSnapshotPanel.h
+    src/widgets/OrderTicketPanel.cpp
+    src/widgets/OrderTicketPanel.h
+    src/widgets/TradingTablesPanel.cpp
+    src/widgets/TradingTablesPanel.h
 )
 
 qt_add_executable(tqsdk-ui ${TQSDK_UI_SOURCES})
@@ -92,6 +99,7 @@ if(TQSDK_BUILD_UI_TESTS)
         src/net/Protocol.h
         src/model/MarketStore.cpp
         src/model/MarketStore.h
+    src/model/Formatting.h
         src/model/QuoteTableModel.cpp
         src/model/QuoteTableModel.h
         src/model/InstrumentTableModel.cpp
@@ -170,6 +178,7 @@ if(TQSDK_BUILD_UI_TESTS)
         src/chart/KLineChartWidget.h
         src/model/MarketStore.cpp
         src/model/MarketStore.h
+    src/model/Formatting.h
         src/model/QuoteTableModel.cpp
         src/model/QuoteTableModel.h
         src/model/InstrumentTableModel.cpp
@@ -182,6 +191,12 @@ if(TQSDK_BUILD_UI_TESTS)
         src/net/Protocol.h
         src/widgets/TablePanel.cpp
         src/widgets/TablePanel.h
+        src/widgets/QuoteSnapshotPanel.cpp
+        src/widgets/QuoteSnapshotPanel.h
+        src/widgets/OrderTicketPanel.cpp
+        src/widgets/OrderTicketPanel.h
+        src/widgets/TradingTablesPanel.cpp
+        src/widgets/TradingTablesPanel.h
     )
     target_include_directories(tqsdk-ui-window-tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -195,5 +210,33 @@ if(TQSDK_BUILD_UI_TESTS)
     qt_import_plugins(tqsdk-ui-window-tests INCLUDE Qt6::QOffscreenIntegrationPlugin)
     add_test(NAME tqsdk-ui-window COMMAND tqsdk-ui-window-tests)
     set_tests_properties(tqsdk-ui-window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    qt_add_executable(tqsdk-ui-panel-tests
+        tests/WidgetsTest.cpp
+        src/widgets/QuoteSnapshotPanel.cpp
+        src/widgets/QuoteSnapshotPanel.h
+        src/widgets/OrderTicketPanel.cpp
+        src/widgets/OrderTicketPanel.h
+        src/widgets/TradingTablesPanel.cpp
+        src/widgets/TradingTablesPanel.h
+        src/widgets/TablePanel.cpp
+        src/widgets/TablePanel.h
+        src/model/TradingModels.cpp
+        src/model/TradingModels.h
+        src/net/Protocol.cpp
+        src/net/Protocol.h
+    )
+    target_include_directories(tqsdk-ui-panel-tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(tqsdk-ui-panel-tests PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        Qt6::Test
+    )
+    qt_import_plugins(tqsdk-ui-panel-tests INCLUDE Qt6::QOffscreenIntegrationPlugin)
+    add_test(NAME tqsdk-ui-panels COMMAND tqsdk-ui-panel-tests)
+    set_tests_properties(tqsdk-ui-panels PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 endif()

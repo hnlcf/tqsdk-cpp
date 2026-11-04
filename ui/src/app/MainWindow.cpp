@@ -1,12 +1,16 @@
 #include "app/MainWindow.h"
 
 #include "chart/KLineChartWidget.h"
+#include "model/Formatting.h"
 #include "model/InstrumentTableModel.h"
 #include "model/MarketStore.h"
 #include "model/QuoteTableModel.h"
 #include "model/TradingModels.h"
 #include "net/NodeClient.h"
+#include "widgets/OrderTicketPanel.h"
+#include "widgets/QuoteSnapshotPanel.h"
 #include "widgets/TablePanel.h"
+#include "widgets/TradingTablesPanel.h"
 
 #include <QAbstractItemView>
 #include <QAction>
@@ -15,9 +19,7 @@
 #include <QCompleter>
 #include <QDialog>
 #include <QDockWidget>
-#include <QDoubleSpinBox>
 #include <QEvent>
-#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QItemSelectionModel>
@@ -30,10 +32,8 @@
 #include <QSettings>
 #include <QSize>
 #include <QSortFilterProxyModel>
-#include <QSpinBox>
 #include <QStatusBar>
 #include <QStringListModel>
-#include <QTabWidget>
 #include <QTableView>
 #include <QTimer>
 #include <QToolBar>
@@ -46,25 +46,6 @@
 
 namespace tqsdk::ui {
 namespace {
-
-QString priceText(double value) {
-    return std::isfinite(value) ? QString::number(value, 'f', 2) : QStringLiteral("—");
-}
-
-QString changeText(double percent) {
-    if (!std::isfinite(percent)) {
-        return QStringLiteral("—");
-    }
-    return QStringLiteral("%1%2%").arg(percent >= 0.0 ? "+" : "").arg(percent, 0, 'f', 2);
-}
-
-double changePercent(const Quote& quote) {
-    if (!std::isfinite(quote.lastPrice) || !std::isfinite(quote.preSettlement) ||
-        quote.preSettlement == 0.0) {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
-    return (quote.lastPrice - quote.preSettlement) / quote.preSettlement * 100.0;
-}
 
 QString themeStyle(bool dark) {
     const QString bg       = dark ? "#0d1117" : "#f5f7fb";
@@ -564,32 +545,10 @@ void MainWindow::buildWorkspace() {
     });
     optionsDock_->hide();
 
-    auto* quoteContainer = new QWidget(this);
-    auto* quoteForm      = new QFormLayout(quoteContainer);
-    quoteForm->setContentsMargins(12, 12, 12, 12);
-    symbolLabel_       = new QLabel(selectedSymbol_, quoteContainer);
-    nameLabel_         = new QLabel(tr("—"), quoteContainer);
-    lastLabel_         = new QLabel(tr("—"), quoteContainer);
-    changeLabel_       = new QLabel(tr("—"), quoteContainer);
-    changePctLabel_    = new QLabel(tr("—"), quoteContainer);
-    bidAskLabel_       = new QLabel(tr("—"), quoteContainer);
-    volumeLabel_       = new QLabel(tr("—"), quoteContainer);
-    openInterestLabel_ = new QLabel(tr("—"), quoteContainer);
-    oiChangeLabel_     = new QLabel(tr("—"), quoteContainer);
-    highLowLabel_      = new QLabel(tr("—"), quoteContainer);
-    lastLabel_->setStyleSheet("font-size: 22px; font-weight: 700;");
-    quoteForm->addRow(tr("合约"), symbolLabel_);
-    quoteForm->addRow(tr("名称"), nameLabel_);
-    quoteForm->addRow(tr("最新"), lastLabel_);
-    quoteForm->addRow(tr("涨跌"), changeLabel_);
-    quoteForm->addRow(tr("涨幅"), changePctLabel_);
-    quoteForm->addRow(tr("买卖"), bidAskLabel_);
-    quoteForm->addRow(tr("成交"), volumeLabel_);
-    quoteForm->addRow(tr("持仓"), openInterestLabel_);
-    quoteForm->addRow(tr("增仓"), oiChangeLabel_);
-    quoteForm->addRow(tr("高/低"), highLowLabel_);
+    quotePanel_ = new QuoteSnapshotPanel(this);
+    quotePanel_->setSymbol(selectedSymbol_);
     quoteDock_ = addModuleDock(
-        tr("行情快照"), quoteContainer, Qt::RightDockWidgetArea, QStringLiteral("quoteDock"));
+        tr("行情快照"), quotePanel_, Qt::RightDockWidgetArea, QStringLiteral("quoteDock"));
 
     auto* tapePanel = new TablePanel(tapeModel_, this);
     tapePanel->installColumnMenu(QStringLiteral("tape"));
@@ -599,80 +558,46 @@ void MainWindow::buildWorkspace() {
     splitDockWidget(quoteDock_, tapeDock_, Qt::Vertical);
 }
 
-void MainWindow::buildOrderPanel(QWidget* parent) {
-    auto* form = new QFormLayout(parent);
-    form->setContentsMargins(12, 4, 12, 12);
+void MainWindow::buildBottomDock() {
+    tradingTables_ = new TradingTablesPanel(positionsModel_, ordersModel_, tradesModel_, this);
+    connect(tradingTables_,
+            &TradingTablesPanel::positionActivated,
+            this,
+            [this](const QString& symbol) {
+                if (!symbol.isEmpty() && symbol != selectedSymbol_) {
+                    selectSymbol(symbol);
+                }
+            });
+    connect(tradingTables_, &TradingTablesPanel::orderSelectionChanged, this, [this] {
+        updateOrderControls();
+    });
+    connect(tradingTables_, &TradingTablesPanel::cancelRequested, this, [this] {
+        cancelSelectedOrder();
+    });
 
-    priceBox_ = new QDoubleSpinBox(parent);
-    priceBox_->setRange(0.0, 1.0e9);
-    priceBox_->setDecimals(2);
-    priceBox_->setSingleStep(1.0);
-    priceBox_->setValue(0.0);
-    volumeBox_ = new QSpinBox(parent);
-    volumeBox_->setRange(1, 1000);
-    volumeBox_->setValue(1);
+    tradingDock_ = addModuleDock(tr("持仓 / 委托 / 成交"),
+                                 tradingTables_,
+                                 Qt::BottomDockWidgetArea,
+                                 QStringLiteral("tradingDock"));
 
-    tradeSymbolEdit_ = new QLineEdit(parent);
-    tradeSymbolEdit_->setText(selectedSymbol_);
-    tradeSymbolEdit_->setPlaceholderText(tr("输入或搜索合约，回车切换图表"));
-    tradeCompletions_ = new QStringListModel(this);
-    tradeCompleter_   = new QCompleter(tradeCompletions_, this);
-    tradeCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
-    tradeCompleter_->setFilterMode(Qt::MatchContains);
-    tradeCompleter_->setCompletionMode(QCompleter::PopupCompletion);
-    tradeCompleter_->setMaxVisibleItems(16);
-    tradeSymbolEdit_->setCompleter(tradeCompleter_);
-    const auto applyTradeSymbol = [this] {
-        const QString symbol = resolveSymbol(tradeSymbolEdit_->text());
+    orderTicket_ = new OrderTicketPanel(this);
+    orderTicket_->setSymbol(selectedSymbol_);
+    connect(orderTicket_, &OrderTicketPanel::symbolSubmitted, this, [this](const QString& input) {
+        const QString symbol = resolveSymbol(input);
         if (symbol.isEmpty()) {
-            orderStatus_->setText(tr("没有匹配的交易合约"));
+            orderTicket_->setStatus(tr("没有匹配的交易合约"), true);
             return;
         }
         addSymbolToWatchlist(symbol);
-        tradeSymbolEdit_->setText(symbol);
-    };
-    connect(tradeSymbolEdit_, &QLineEdit::returnPressed, this, applyTradeSymbol);
-    connect(tradeCompleter_,
-            QOverload<const QString&>::of(&QCompleter::activated),
-            this,
-            [this](const QString& text) {
-                addSymbolFromInput(text);
-                tradeSymbolEdit_->setText(selectedSymbol_);
-            });
-
-    auto* buttons      = new QWidget(parent);
-    auto* buttonLayout = new QHBoxLayout(buttons);
-    buttonLayout->setContentsMargins(0, 0, 0, 0);
-    buttonLayout->setSpacing(6);
-    buyButton_ = new QPushButton(tr("买开"), buttons);
-    buyButton_->setEnabled(false);
-    sellButton_ = new QPushButton(tr("卖开"), buttons);
-    sellButton_->setEnabled(false);
-    closeButton_ = new QPushButton(tr("平仓"), buttons);
-    closeButton_->setEnabled(false);
-    buyButton_->setStyleSheet("background:#c62828;color:white;font-weight:600;padding:9px;");
-    sellButton_->setStyleSheet("background:#1b8f5a;color:white;font-weight:600;padding:9px;");
-    closeButton_->setStyleSheet("background:#9a6b00;color:white;font-weight:600;padding:9px;");
-    buttonLayout->addWidget(buyButton_, 1);
-    buttonLayout->addWidget(sellButton_, 1);
-    buttonLayout->addWidget(closeButton_, 1);
-
-    orderStatus_ = new QLabel(tr("未连接交易账户"), parent);
-    orderStatus_->setWordWrap(true);
-    orderStatus_->setStyleSheet("color: #8b93a3;");
-
-    form->addRow(tr("合约"), tradeSymbolEdit_);
-    form->addRow(tr("价格"), priceBox_);
-    form->addRow(tr("数量"), volumeBox_);
-    form->addRow(tr("三键"), buttons);
-    form->addRow(orderStatus_);
-    connect(buyButton_, &QPushButton::clicked, this, [this] {
+        orderTicket_->setSymbol(selectedSymbol_);
+    });
+    connect(orderTicket_, &OrderTicketPanel::buyOpenRequested, this, [this] {
         submitOrder(Direction::Buy, Offset::Open);
     });
-    connect(sellButton_, &QPushButton::clicked, this, [this] {
+    connect(orderTicket_, &OrderTicketPanel::sellOpenRequested, this, [this] {
         submitOrder(Direction::Sell, Offset::Open);
     });
-    connect(closeButton_, &QPushButton::clicked, this, [this] {
+    connect(orderTicket_, &OrderTicketPanel::closeRequested, this, [this] {
         qint64 longVolume  = 0;
         qint64 shortVolume = 0;
         for (const auto& position : positionsModel_->positions()) {
@@ -687,74 +612,12 @@ void MainWindow::buildOrderPanel(QWidget* parent) {
         } else if (shortVolume > 0) {
             submitOrder(Direction::Buy, Offset::Close);
         } else {
-            orderStatus_->setText(tr("当前合约无持仓"));
+            orderTicket_->setStatus(tr("当前合约无持仓"), true);
         }
     });
-}
 
-void MainWindow::buildBottomDock() {
-    auto* tabs = new QTabWidget(this);
-
-    auto* positionPanel = new TablePanel(positionsModel_, tabs);
-    positionPanel->installColumnMenu(QStringLiteral("positions"));
-    positionTable_ = positionPanel->view();
-    connect(positionTable_->selectionModel(),
-            &QItemSelectionModel::currentRowChanged,
-            this,
-            [this](const QModelIndex& current) {
-                if (!current.isValid() || current.row() >= positionsModel_->positions().size()) {
-                    return;
-                }
-                const QString symbol = positionsModel_->positions().at(current.row()).instrumentId;
-                if (!symbol.isEmpty() && symbol != selectedSymbol_) {
-                    selectSymbol(symbol);
-                }
-            });
-    tabs->addTab(positionPanel, tr("持仓"));
-
-    auto* orderPage   = new QWidget(tabs);
-    auto* orderLayout = new QVBoxLayout(orderPage);
-    orderLayout->setContentsMargins(4, 4, 4, 4);
-    auto* orderBar = new QHBoxLayout();
-    cancelButton_  = new QPushButton(tr("撤销选中委托"), orderPage);
-    cancelButton_->setEnabled(false);
-    orderBar->addWidget(cancelButton_);
-    orderBar->addStretch(1);
-    orderLayout->addLayout(orderBar);
-    auto* orderPanel = new TablePanel(ordersModel_, orderPage);
-    orderPanel->installColumnMenu(QStringLiteral("orders"));
-    orderTable_ = orderPanel->view();
-    orderLayout->addWidget(orderPanel, 1);
-    connect(cancelButton_, &QPushButton::clicked, this, [this] { cancelSelectedOrder(); });
-    connect(orderTable_->selectionModel(), &QItemSelectionModel::currentRowChanged, this, [this] {
-        updateOrderControls();
-    });
-    tabs->addTab(orderPage, tr("委托"));
-
-    auto* tradePanel = new TablePanel(tradesModel_, tabs);
-    tradePanel->installColumnMenu(QStringLiteral("trades"));
-    tradeTable_ = tradePanel->view();
-    tabs->addTab(tradePanel, tr("成交"));
-
-    auto* accountPage = new QWidget(tabs);
-    auto* accountForm = new QFormLayout(accountPage);
-    accountBalance_   = new QLabel(tr("—"), accountPage);
-    accountAvailable_ = new QLabel(tr("—"), accountPage);
-    accountMargin_    = new QLabel(tr("—"), accountPage);
-    accountRisk_      = new QLabel(tr("—"), accountPage);
-    accountForm->addRow(tr("权益"), accountBalance_);
-    accountForm->addRow(tr("可用"), accountAvailable_);
-    accountForm->addRow(tr("保证金"), accountMargin_);
-    accountForm->addRow(tr("风险度"), accountRisk_);
-    tabs->addTab(accountPage, tr("账户"));
-
-    tradingDock_ = addModuleDock(
-        tr("持仓 / 委托 / 成交"), tabs, Qt::BottomDockWidgetArea, QStringLiteral("tradingDock"));
-
-    auto* orderBox = new QWidget(this);
-    buildOrderPanel(orderBox);
     orderDock_ = addModuleDock(
-        tr("三键下单"), orderBox, Qt::BottomDockWidgetArea, QStringLiteral("orderDock"));
+        tr("三键下单"), orderTicket_, Qt::BottomDockWidgetArea, QStringLiteral("orderDock"));
     splitDockWidget(tradingDock_, orderDock_, Qt::Horizontal);
 
     const auto refreshCachedQuotes = [this] {
@@ -844,8 +707,8 @@ void MainWindow::connectNode() {
 
     connect(nodeClient_, &NodeClient::errorOccurred, this, [this](const QString& error) {
         statusBar()->showMessage(error, 8000);
-        if (orderStatus_ != nullptr) {
-            orderStatus_->setText(error);
+        if (orderTicket_ != nullptr) {
+            orderTicket_->setStatus(error, true);
         }
     });
 
@@ -903,14 +766,14 @@ void MainWindow::connectNode() {
             this,
             [this](const QVector<Instrument>& instruments) {
                 futuresModel_->setInstruments(instruments);
-                if (tradeCompletions_ != nullptr) {
+                if (orderTicket_ != nullptr) {
                     QStringList suggestions;
                     suggestions.reserve(instruments.size());
                     for (const auto& instrument : instruments) {
                         suggestions.push_back(instrument.instrumentId + QStringLiteral("  ") +
                                               instrument.name);
                     }
-                    tradeCompletions_->setStringList(suggestions);
+                    orderTicket_->setCompletions(suggestions);
                 }
                 updateQuotePanel();
                 if (futuresStatus_ != nullptr) {
@@ -965,8 +828,11 @@ void MainWindow::connectNode() {
         tradesModel_->applyTrades(trades);
     });
     connect(nodeClient_, &NodeClient::orderAckReceived, this, [this](const OrderAck& ack) {
-        orderStatus_->setText(ack.success ? tr("命令已接受: %1").arg(ack.orderId)
-                                          : tr("下单失败: %1").arg(ack.error));
+        if (orderTicket_ != nullptr) {
+            orderTicket_->setStatus(ack.success ? tr("命令已接受: %1").arg(ack.orderId)
+                                                : tr("下单失败: %1").arg(ack.error),
+                                    !ack.success);
+        }
         updateOrderControls();
         if (nodeClient_ != nullptr) {
             nodeClient_->requestOrders();
@@ -1110,8 +976,8 @@ void MainWindow::selectSymbol(const QString& symbol) {
         return;
     }
     selectedSymbol_ = symbol;
-    if (tradeSymbolEdit_ != nullptr) {
-        tradeSymbolEdit_->setText(symbol);
+    if (orderTicket_ != nullptr) {
+        orderTicket_->setSymbol(symbol);
     }
     if (tapeModel_ != nullptr) {
         tapeModel_->clear();
@@ -1129,7 +995,9 @@ void MainWindow::selectSymbol(const QString& symbol) {
         }
     }
 
-    symbolLabel_->setText(symbol);
+    if (quotePanel_ != nullptr) {
+        quotePanel_->setSymbol(symbol);
+    }
     chart_->setTitle(symbol, selectedInterval_);
     chart_->setBars(marketStore_->bars(symbol, selectedDurationNs_));
     updateQuotePanel();
@@ -1204,91 +1072,39 @@ void MainWindow::setInterval(qint64 durationNs, const QString& label) {
 }
 
 void MainWindow::updateQuotePanel() {
-    if (symbolLabel_ == nullptr) {
+    if (quotePanel_ == nullptr) {
         return;
     }
-    const Quote* quote = marketStore_->quote(selectedSymbol_);
-    symbolLabel_->setText(selectedSymbol_);
+    const Quote*      quote      = marketStore_->quote(selectedSymbol_);
     const Instrument* instrument = findInstrument(selectedSymbol_);
-    nameLabel_->setText(instrument != nullptr && !instrument->name.isEmpty() ? instrument->name
-                                                                             : QStringLiteral("—"));
-    if (quote == nullptr) {
-        chart_->setQuote(Quote{});
-        lastLabel_->setText(tr("—"));
-        changeLabel_->setText(tr("—"));
-        changePctLabel_->setText(tr("—"));
-        bidAskLabel_->setText(tr("—"));
-        volumeLabel_->setText(tr("—"));
-        openInterestLabel_->setText(tr("—"));
-        oiChangeLabel_->setText(tr("—"));
-        highLowLabel_->setText(tr("—"));
-        updateOrderControls();
-        return;
-    }
 
-    chart_->setQuote(*quote);
-    if (tapeModel_ != nullptr) {
+    quotePanel_->setSymbol(selectedSymbol_);
+    quotePanel_->setQuote(quote, instrument != nullptr ? instrument->name : QString{});
+    chart_->setQuote(quote != nullptr ? *quote : Quote{});
+    if (quote != nullptr && tapeModel_ != nullptr) {
         tapeModel_->applyQuote(*quote);
-    }
-    lastLabel_->setText(priceText(quote->lastPrice));
-    const double  change  = std::isfinite(quote->lastPrice) && std::isfinite(quote->preSettlement)
-                                ? quote->lastPrice - quote->preSettlement
-                                : std::numeric_limits<double>::quiet_NaN();
-    const double  percent = changePercent(*quote);
-    const QString color =
-        !std::isfinite(change) ? "#8b93a3" : (change >= 0.0 ? "#e43c4a" : "#2fbf71");
-    changeLabel_->setText(
-        std::isfinite(change)
-            ? QStringLiteral("%1%2").arg(change >= 0.0 ? "+" : "").arg(change, 0, 'f', 2)
-            : QStringLiteral("—"));
-    changeLabel_->setStyleSheet(QStringLiteral("font-weight: 600; color: %1;").arg(color));
-    changePctLabel_->setText(changeText(percent));
-    changePctLabel_->setStyleSheet(QStringLiteral("font-weight: 600; color: %1;").arg(color));
-    bidAskLabel_->setText(
-        QStringLiteral("%1 / %2").arg(priceText(quote->bidPrice1), priceText(quote->askPrice1)));
-    volumeLabel_->setText(quote->volume > 0 ? QString::number(quote->volume) : QStringLiteral("—"));
-    openInterestLabel_->setText(std::isfinite(quote->openInterest)
-                                    ? QString::number(quote->openInterest, 'f', 0)
-                                    : QStringLiteral("—"));
-    if (std::isfinite(quote->openInterest) && std::isfinite(quote->preOpenInterest)) {
-        const double oiChange = quote->openInterest - quote->preOpenInterest;
-        oiChangeLabel_->setText(
-            QStringLiteral("%1%2").arg(oiChange >= 0.0 ? "+" : "").arg(oiChange, 0, 'f', 0));
-        oiChangeLabel_->setStyleSheet(QStringLiteral("font-weight: 600; color: %1;")
-                                          .arg(oiChange >= 0.0 ? "#e43c4a" : "#2fbf71"));
-    } else {
-        oiChangeLabel_->setText(QStringLiteral("—"));
-        oiChangeLabel_->setStyleSheet("color: #8b93a3;");
-    }
-    highLowLabel_->setText(
-        QStringLiteral("%1 / %2").arg(priceText(quote->high), priceText(quote->low)));
-    if (priceBox_ != nullptr && priceBox_->value() <= 0.0 && std::isfinite(quote->lastPrice)) {
-        priceBox_->setValue(quote->lastPrice);
+        if (orderTicket_ != nullptr) {
+            orderTicket_->setPriceIfEmpty(quote->lastPrice);
+        }
     }
     updateOrderControls();
 }
 
 void MainWindow::updateAccountPanel(const Account& account) {
     accountLoaded_ = true;
-    if (accountBalance_ == nullptr) {
-        return;
+    if (tradingTables_ != nullptr) {
+        tradingTables_->setAccount(account);
     }
-    accountBalance_->setText(priceText(account.balance));
-    accountAvailable_->setText(priceText(account.available));
-    accountMargin_->setText(priceText(account.margin));
-    accountRisk_->setText(std::isfinite(account.riskRatio)
-                              ? QString::number(account.riskRatio * 100.0, 'f', 2) + "%"
-                              : QStringLiteral("—"));
     updateOrderControls();
 }
 
 void MainWindow::updateOrderControls() {
-    if (buyButton_ == nullptr) {
+    if (orderTicket_ == nullptr) {
         return;
     }
     const bool canSubmit = nodeReady_ && accountLoaded_;
-    buyButton_->setEnabled(canSubmit);
-    sellButton_->setEnabled(canSubmit);
+    orderTicket_->setTradingEnabled(canSubmit);
+
     qint64 longVolume  = 0;
     qint64 shortVolume = 0;
     for (const auto& position : positionsModel_->positions()) {
@@ -1297,20 +1113,25 @@ void MainWindow::updateOrderControls() {
             shortVolume += position.volumeShort;
         }
     }
-    closeButton_->setEnabled(canSubmit && (longVolume > 0 || shortVolume > 0));
-    if (cancelButton_ != nullptr && orderTable_ != nullptr) {
-        const auto current = orderTable_->currentIndex();
-        cancelButton_->setEnabled(current.isValid() && ordersModel_->isOrderAlive(current.row()));
+    orderTicket_->setCloseEnabled(canSubmit && (longVolume > 0 || shortVolume > 0));
+
+    if (tradingTables_ != nullptr) {
+        const auto current = tradingTables_->orderTable()->currentIndex();
+        tradingTables_->setCancelEnabled(current.isValid() &&
+                                         ordersModel_->isOrderAlive(current.row()));
     }
 }
 
 void MainWindow::submitOrder(Direction direction, Offset offset) {
-    if (nodeClient_ == nullptr || !nodeReady_ || !accountLoaded_) {
-        orderStatus_->setText(tr("交易未就绪"));
+    if (orderTicket_ == nullptr) {
         return;
     }
-    if (priceBox_->value() <= 0.0 || volumeBox_->value() <= 0) {
-        orderStatus_->setText(tr("价格/数量无效"));
+    if (nodeClient_ == nullptr || !nodeReady_ || !accountLoaded_) {
+        orderTicket_->setStatus(tr("交易未就绪"), true);
+        return;
+    }
+    if (orderTicket_->price() <= 0.0 || orderTicket_->volume() <= 0) {
+        orderTicket_->setStatus(tr("价格/数量无效"), true);
         return;
     }
 
@@ -1319,30 +1140,32 @@ void MainWindow::submitOrder(Direction direction, Offset offset) {
     request.direction    = direction;
     request.offset       = offset;
     request.priceType    = PriceType::Limit;
-    request.limitPrice   = priceBox_->value();
-    request.volume       = volumeBox_->value();
+    request.limitPrice   = orderTicket_->price();
+    request.volume       = orderTicket_->volume();
     nodeClient_->placeOrder(request);
-    orderStatus_->setText(tr("已提交 %1 %2 手 @ %3")
-                              .arg(selectedSymbol_)
-                              .arg(request.volume)
-                              .arg(priceText(request.limitPrice)));
+    orderTicket_->setStatus(tr("已提交 %1 %2 手 @ %3")
+                                .arg(selectedSymbol_)
+                                .arg(request.volume)
+                                .arg(priceText(request.limitPrice)));
     updateOrderControls();
 }
 
 void MainWindow::cancelSelectedOrder() {
-    if (nodeClient_ == nullptr || orderTable_ == nullptr) {
+    if (nodeClient_ == nullptr || tradingTables_ == nullptr) {
         return;
     }
-    const auto index = orderTable_->currentIndex();
-    if (!index.isValid() || !ordersModel_->isOrderAlive(index.row())) {
+    const auto current = tradingTables_->orderTable()->currentIndex();
+    if (!current.isValid() || !ordersModel_->isOrderAlive(current.row())) {
         return;
     }
-    const QString orderId = ordersModel_->orderIdAt(index.row());
+    const QString orderId = ordersModel_->orderIdAt(current.row());
     if (orderId.isEmpty()) {
         return;
     }
     nodeClient_->cancelOrder(orderId);
-    orderStatus_->setText(tr("撤单请求: %1").arg(orderId));
+    if (orderTicket_ != nullptr) {
+        orderTicket_->setStatus(tr("撤单请求: %1").arg(orderId));
+    }
 }
 
 const Instrument* MainWindow::findInstrument(const QString& symbol) const {
