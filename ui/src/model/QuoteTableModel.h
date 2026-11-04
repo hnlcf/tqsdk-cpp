@@ -19,6 +19,14 @@ public:
         Bid1,
         Ask1,
         Volume,
+        Change,
+        PreSettlement,
+        OpenInterest,
+        OiChange,
+        UpperLimit,
+        LowerLimit,
+        High,
+        Low,
         ColumnCount,
     };
 

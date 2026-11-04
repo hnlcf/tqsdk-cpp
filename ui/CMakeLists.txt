@@ -31,6 +31,8 @@ set(TQSDK_UI_SOURCES
     src/model/TradingModels.h
     src/chart/KLineChartWidget.cpp
     src/chart/KLineChartWidget.h
+    src/widgets/TablePanel.cpp
+    src/widgets/TablePanel.h
 )
 
 qt_add_executable(tqsdk-ui ${TQSDK_UI_SOURCES})

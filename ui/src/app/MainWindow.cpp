@@ -6,35 +6,33 @@
 #include "model/QuoteTableModel.h"
 #include "model/TradingModels.h"
 #include "net/NodeClient.h"
+#include "widgets/TablePanel.h"
 
-#include <QAbstractItemModel>
-#include <QAbstractItemView>
 #include <QAction>
 #include <QApplication>
-#include <QComboBox>
+#include <QCloseEvent>
 #include <QCompleter>
+#include <QDialog>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
-#include <QGroupBox>
 #include <QHBoxLayout>
-#include <QHeaderView>
 #include <QItemSelectionModel>
-#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMenuBar>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QSize>
 #include <QSortFilterProxyModel>
 #include <QSpinBox>
-#include <QSplitter>
 #include <QStatusBar>
 #include <QStringListModel>
 #include <QTabWidget>
 #include <QTableView>
+#include <QTimer>
 #include <QToolBar>
 #include <QVBoxLayout>
 
@@ -45,37 +43,6 @@
 
 namespace tqsdk::ui {
 namespace {
-
-QLabel* placeholder(const QString& text, QWidget* parent = nullptr) {
-    auto* label = new QLabel(text, parent);
-    label->setAlignment(Qt::AlignCenter);
-    label->setWordWrap(true);
-    label->setStyleSheet("color: #8b93a3; padding: 24px;");
-    return label;
-}
-
-QWidget* panel(const QString& title, QWidget* content, QWidget* parent = nullptr) {
-    auto* box    = new QWidget(parent);
-    auto* layout = new QVBoxLayout(box);
-    layout->setContentsMargins(8, 8, 8, 8);
-    auto* heading = new QLabel(title, box);
-    heading->setStyleSheet("font-weight: 600; padding: 4px 2px;");
-    layout->addWidget(heading);
-    layout->addWidget(content, 1);
-    return box;
-}
-
-QTableView* makeTable(QWidget* parent, QAbstractItemModel* model) {
-    auto* table = new QTableView(parent);
-    table->setModel(model);
-    table->setSelectionBehavior(QAbstractItemView::SelectRows);
-    table->setSelectionMode(QAbstractItemView::SingleSelection);
-    table->verticalHeader()->setVisible(false);
-    table->horizontalHeader()->setStretchLastSection(true);
-    table->setAlternatingRowColors(true);
-    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    return table;
-}
 
 QString priceText(double value) {
     return std::isfinite(value) ? QString::number(value, 'f', 2) : QStringLiteral("—");
@@ -164,11 +131,31 @@ MainWindow::MainWindow(NodeClient* nodeClient, QWidget* parent)
       nodeClient_(nodeClient) {
     setWindowTitle(tr("TQSDK Terminal (Qt)"));
     resize(1480, 940);
+    setDockNestingEnabled(true);
 
-    watchlist_ = {QStringLiteral("SHFE.rb2701"),
-                  QStringLiteral("DCE.m2701"),
+    watchlist_ = {QStringLiteral("DCE.i2701"),
+                  QStringLiteral("DCE.jm2701"),
                   QStringLiteral("CZCE.SA701"),
-                  QStringLiteral("CFFEX.IF2612")};
+                  QStringLiteral("SHFE.rb2701"),
+                  QStringLiteral("SHFE.au2701"),
+                  QStringLiteral("SHFE.ag2701"),
+                  QStringLiteral("SHFE.cu2701"),
+                  QStringLiteral("DCE.m2701"),
+                  QStringLiteral("DCE.p2701"),
+                  QStringLiteral("DCE.y2701"),
+                  QStringLiteral("CZCE.MA701"),
+                  QStringLiteral("CZCE.TA701"),
+                  QStringLiteral("CFFEX.IF2612"),
+                  QStringLiteral("CFFEX.IC2612"),
+                  QStringLiteral("SHFE.al2701"),
+                  QStringLiteral("SHFE.ni2701")};
+    {
+        QSettings         settings;
+        const QStringList saved = settings.value(QStringLiteral("ui/watchlist")).toStringList();
+        if (!saved.isEmpty()) {
+            watchlist_ = saved;
+        }
+    }
 
     marketStore_    = new MarketStore(this);
     watchModel_     = new QuoteTableModel(this);
@@ -241,6 +228,10 @@ void MainWindow::buildToolbar() {
     });
     toolbar->addWidget(addSymbolButton_);
 
+    componentsButton_ = new QPushButton(tr("组件"), toolbar);
+    componentsButton_->setObjectName("componentsButton");
+    toolbar->addWidget(componentsButton_);
+
     toolbar->addSeparator();
     auto* interval = new QLabel(tr("周期"), toolbar);
     interval->setStyleSheet("padding: 0 6px;");
@@ -287,13 +278,122 @@ void MainWindow::buildToolbar() {
     toolbar->addWidget(themeButton_);
 }
 
-void MainWindow::buildWorkspace() {
-    auto* splitter = new QSplitter(Qt::Horizontal, this);
+QDockWidget* MainWindow::addModuleDock(const QString&     title,
+                                       QWidget*           content,
+                                       Qt::DockWidgetArea area,
+                                       const QString&     objectName) {
+    auto* dock = new QDockWidget(title, this);
+    dock->setObjectName(objectName);
+    dock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable |
+                      QDockWidget::DockWidgetFloatable);
+    dock->setWidget(content);
+    addDockWidget(area, dock);
+    return dock;
+}
 
-    watchTable_ = makeTable(splitter, watchModel_);
-    installColumnMenu(watchTable_, QStringLiteral("watchlist"));
+void MainWindow::buildViewMenu() {
+    auto*      viewMenu  = menuBar()->addMenu(tr("视图 / 组件"));
+    const auto addToggle = [viewMenu](QDockWidget* dock) {
+        if (dock == nullptr) {
+            return;
+        }
+        QAction* action = dock->toggleViewAction();
+        action->setText(dock->windowTitle());
+        viewMenu->addAction(action);
+    };
+    addToggle(watchDock_);
+    addToggle(futuresDock_);
+    addToggle(quoteDock_);
+    addToggle(tapeDock_);
+    addToggle(optionsDock_);
+    addToggle(tradingDock_);
+    addToggle(orderDock_);
+    viewMenu->addSeparator();
+    QAction* chartPopout = viewMenu->addAction(tr("图表弹出 / 收回"));
+    connect(chartPopout, &QAction::triggered, this, [this] { toggleChartPopout(); });
+    QAction* reset = viewMenu->addAction(tr("恢复默认布局"));
+    connect(reset, &QAction::triggered, this, [this] { resetWorkspace(); });
+    componentsButton_->setMenu(viewMenu);
+}
+
+void MainWindow::resetWorkspace() {
+    QSettings settings;
+    settings.remove(QStringLiteral("ui/workspaceState"));
+    for (QDockWidget* dock : {watchDock_, quoteDock_, tapeDock_, tradingDock_, orderDock_}) {
+        if (dock != nullptr) {
+            dock->setFloating(false);
+            dock->show();
+        }
+    }
+    if (futuresDock_ != nullptr) {
+        futuresDock_->hide();
+    }
+    if (optionsDock_ != nullptr) {
+        optionsDock_->hide();
+    }
+    if (chartDialog_ != nullptr) {
+        chartDialog_->close();
+    }
+    setCentralWidget(chartHost_);
+    resizeDocks({watchDock_}, {500}, Qt::Horizontal);
+    resizeDocks({quoteDock_}, {330}, Qt::Horizontal);
+    resizeDocks({tapeDock_}, {220}, Qt::Vertical);
+    resizeDocks({tradingDock_, orderDock_}, {1000, 340}, Qt::Horizontal);
+}
+
+void MainWindow::saveWorkspace() {
+    QSettings settings;
+    settings.setValue(QStringLiteral("ui/workspaceState"), saveState());
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+    QSettings settings;
+    settings.setValue(QStringLiteral("ui/watchlist"), watchlist_);
+    saveWorkspace();
+    QMainWindow::closeEvent(event);
+}
+
+void MainWindow::toggleChartPopout() {
+    if (chartDialog_ != nullptr) {
+        chartDialog_->close();
+        return;
+    }
+    if (chart_ == nullptr || chartHost_ == nullptr) {
+        return;
+    }
+    chartDialog_ = new QDialog(this);
+    chartDialog_->setWindowTitle(tr("TQSDK 图表"));
+    chartDialog_->resize(1200, 800);
+    auto* layout = new QVBoxLayout(chartDialog_);
+    layout->addWidget(chart_);
+    chartDialog_->show();
+    connect(chartDialog_, &QDialog::finished, this, [this] {
+        if (chart_ != nullptr && chartHost_ != nullptr) {
+            chartHost_->layout()->addWidget(chart_);
+            chart_->show();
+        }
+        QDialog* dialog = chartDialog_;
+        chartDialog_    = nullptr;
+        if (dialog != nullptr) {
+            dialog->deleteLater();
+        }
+    });
+}
+
+void MainWindow::buildWorkspace() {
+    chartHost_        = new QWidget(this);
+    auto* chartLayout = new QVBoxLayout(chartHost_);
+    chartLayout->setContentsMargins(0, 0, 0, 0);
+    chart_ = new KLineChartWidget(chartHost_);
+    chart_->setTitle(selectedSymbol_, selectedInterval_);
+    chartLayout->addWidget(chart_);
+    setCentralWidget(chartHost_);
+
+    auto* watchPanel = new TablePanel(watchModel_, this);
+    watchPanel->installColumnMenu(QStringLiteral("watchlist"));
+    watchTable_ = watchPanel->view();
     watchTable_->setColumnWidth(QuoteTableModel::Symbol, 118);
-    watchTable_->setMinimumWidth(290);
+    watchTable_->setMinimumWidth(300);
     connect(watchTable_->selectionModel(),
             &QItemSelectionModel::currentRowChanged,
             this,
@@ -306,45 +406,40 @@ void MainWindow::buildWorkspace() {
                     selectSymbol(symbol);
                 }
             });
-    splitter->addWidget(panel(tr("自选 / 最近"), watchTable_, splitter));
+    watchDock_ = addModuleDock(
+        tr("自选列表"), watchPanel, Qt::LeftDockWidgetArea, QStringLiteral("watchlistDock"));
+    watchDock_->setMinimumWidth(400);
+    QTimer::singleShot(0, this, [this] { resizeDocks({watchDock_}, {500}, Qt::Horizontal); });
 
-    centerTabs_ = new QTabWidget(splitter);
-    chart_      = new KLineChartWidget(centerTabs_);
-    chart_->setTitle(selectedSymbol_, selectedInterval_);
-    centerTabs_->addTab(chart_, tr("交易终端"));
-
-    auto* futuresContainer = new QWidget(centerTabs_);
-    auto* futuresLayout    = new QVBoxLayout(futuresContainer);
-    futuresLayout->setContentsMargins(4, 4, 4, 4);
-    futuresStatus_ = new QLabel(tr("正在加载合约目录…"), futuresContainer);
-    futuresStatus_->setStyleSheet("color: #8b93a3; padding: 4px;");
-    futuresLayout->addWidget(futuresStatus_);
-    futuresTable_ = makeTable(futuresContainer, futuresProxy_);
-    installColumnMenu(futuresTable_, QStringLiteral("futures"));
+    auto* futuresPanel = new TablePanel(futuresProxy_, this);
+    futuresPanel->installColumnMenu(QStringLiteral("futures"));
+    futuresTable_ = futuresPanel->view();
     connect(futuresTable_, &QTableView::doubleClicked, this, [this](const QModelIndex& index) {
         const auto    source = futuresProxy_->mapToSource(index);
         const QString symbol = futuresModel_->symbolAt(source.row());
         if (!symbol.isEmpty()) {
             addSymbolToWatchlist(symbol);
-            centerTabs_->setCurrentIndex(0);
         }
     });
-    futuresLayout->addWidget(futuresTable_, 1);
-    centerTabs_->addTab(futuresContainer, tr("期货列表"));
+    futuresDock_ = addModuleDock(
+        tr("期货列表"), futuresPanel, Qt::LeftDockWidgetArea, QStringLiteral("futuresDock"));
+    tabifyDockWidget(watchDock_, futuresDock_);
+    futuresDock_->hide();
 
-    auto* optionsContainer = new QWidget(centerTabs_);
+    auto* optionsContainer = new QWidget(this);
     auto* optionsLayout    = new QHBoxLayout(optionsContainer);
     optionsLayout->setContentsMargins(4, 4, 4, 4);
-    callsTable_ = makeTable(optionsContainer, callsModel_);
-    installColumnMenu(callsTable_, QStringLiteral("option-calls"));
-    putsTable_ = makeTable(optionsContainer, putsModel_);
-    installColumnMenu(putsTable_, QStringLiteral("option-puts"));
+    auto* callsPanel = new TablePanel(callsModel_, optionsContainer);
+    callsPanel->installColumnMenu(QStringLiteral("option-calls"));
+    callsTable_     = callsPanel->view();
+    auto* putsPanel = new TablePanel(putsModel_, optionsContainer);
+    putsPanel->installColumnMenu(QStringLiteral("option-puts"));
+    putsTable_ = putsPanel->view();
     auto addOption =
         [this](QTableView* table, InstrumentTableModel* model, const QModelIndex& index) {
             const QString symbol = model->symbolAt(index.row());
             if (!symbol.isEmpty()) {
                 addSymbolToWatchlist(symbol);
-                centerTabs_->setCurrentIndex(0);
             }
         };
     connect(
@@ -355,18 +450,19 @@ void MainWindow::buildWorkspace() {
         putsTable_, &QTableView::doubleClicked, this, [this, addOption](const QModelIndex& index) {
             addOption(putsTable_, putsModel_, index);
         });
-    optionsLayout->addWidget(panel(tr("CALL"), callsTable_, optionsContainer), 1);
-    optionsLayout->addWidget(panel(tr("PUT"), putsTable_, optionsContainer), 1);
-    centerTabs_->addTab(optionsContainer, tr("期权链"));
-    connect(centerTabs_, &QTabWidget::currentChanged, this, [this](int index) {
-        if (index == 2) {
+    optionsLayout->addWidget(callsPanel, 1);
+    optionsLayout->addWidget(putsPanel, 1);
+    optionsDock_ = addModuleDock(
+        tr("期权链"), optionsContainer, Qt::RightDockWidgetArea, QStringLiteral("optionsDock"));
+
+    connect(optionsDock_, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+        if (visible) {
             requestOptionChain();
         }
     });
-    splitter->addWidget(centerTabs_);
+    optionsDock_->hide();
 
-    auto* rightSplitter  = new QSplitter(Qt::Vertical, splitter);
-    auto* quoteContainer = new QWidget(rightSplitter);
+    auto* quoteContainer = new QWidget(this);
     auto* quoteForm      = new QFormLayout(quoteContainer);
     quoteForm->setContentsMargins(12, 12, 12, 12);
     symbolLabel_       = new QLabel(selectedSymbol_, quoteContainer);
@@ -390,18 +486,17 @@ void MainWindow::buildWorkspace() {
     quoteForm->addRow(tr("持仓"), openInterestLabel_);
     quoteForm->addRow(tr("增仓"), oiChangeLabel_);
     quoteForm->addRow(tr("高/低"), highLowLabel_);
-    tapeTable_ = makeTable(rightSplitter, tapeModel_);
-    installColumnMenu(tapeTable_, QStringLiteral("tape"));
-    tapeTable_->setMinimumHeight(120);
-    rightSplitter->addWidget(panel(tr("行情快照"), quoteContainer, rightSplitter));
-    rightSplitter->addWidget(panel(tr("分笔成交"), tapeTable_, rightSplitter));
-    rightSplitter->setSizes({520, 220});
-    splitter->addWidget(rightSplitter);
+    quoteDock_ = addModuleDock(
+        tr("行情快照"), quoteContainer, Qt::RightDockWidgetArea, QStringLiteral("quoteDock"));
+    quoteDock_->setMinimumWidth(260);
 
-    splitter->setStretchFactor(0, 1);
-    splitter->setStretchFactor(1, 6);
-    splitter->setStretchFactor(2, 2);
-    setCentralWidget(splitter);
+    auto* tapePanel = new TablePanel(tapeModel_, this);
+    tapePanel->installColumnMenu(QStringLiteral("tape"));
+    tapeTable_ = tapePanel->view();
+    tapeDock_  = addModuleDock(
+        tr("分笔成交"), tapePanel, Qt::RightDockWidgetArea, QStringLiteral("tapeDock"));
+    splitDockWidget(quoteDock_, tapeDock_, Qt::Vertical);
+    tapeDock_->setMinimumHeight(120);
 }
 
 void MainWindow::buildOrderPanel(QWidget* parent) {
@@ -467,9 +562,9 @@ void MainWindow::buildOrderPanel(QWidget* parent) {
     orderStatus_->setStyleSheet("color: #8b93a3;");
 
     form->addRow(tr("合约"), tradeSymbolEdit_);
-    form->addRow(tr("三键"), buttons);
     form->addRow(tr("价格"), priceBox_);
     form->addRow(tr("数量"), volumeBox_);
+    form->addRow(tr("三键"), buttons);
     form->addRow(orderStatus_);
     connect(buyButton_, &QPushButton::clicked, this, [this] {
         submitOrder(Direction::Buy, Offset::Open);
@@ -498,17 +593,11 @@ void MainWindow::buildOrderPanel(QWidget* parent) {
 }
 
 void MainWindow::buildBottomDock() {
-    auto* dock = new QDockWidget(tr("交易与账户"), this);
-    dock->setAllowedAreas(Qt::BottomDockWidgetArea);
+    auto* tabs = new QTabWidget(this);
 
-    auto* content       = new QWidget(dock);
-    auto* contentLayout = new QHBoxLayout(content);
-    contentLayout->setContentsMargins(0, 0, 0, 0);
-    auto* bottomSplitter = new QSplitter(Qt::Horizontal, content);
-    auto* tabs           = new QTabWidget(bottomSplitter);
-
-    positionTable_ = makeTable(tabs, positionsModel_);
-    installColumnMenu(positionTable_, QStringLiteral("positions"));
+    auto* positionPanel = new TablePanel(positionsModel_, tabs);
+    positionPanel->installColumnMenu(QStringLiteral("positions"));
+    positionTable_ = positionPanel->view();
     connect(positionTable_->selectionModel(),
             &QItemSelectionModel::currentRowChanged,
             this,
@@ -521,7 +610,7 @@ void MainWindow::buildBottomDock() {
                     selectSymbol(symbol);
                 }
             });
-    tabs->addTab(positionTable_, tr("持仓"));
+    tabs->addTab(positionPanel, tr("持仓"));
 
     auto* orderPage   = new QWidget(tabs);
     auto* orderLayout = new QVBoxLayout(orderPage);
@@ -532,18 +621,20 @@ void MainWindow::buildBottomDock() {
     orderBar->addWidget(cancelButton_);
     orderBar->addStretch(1);
     orderLayout->addLayout(orderBar);
-    orderTable_ = makeTable(orderPage, ordersModel_);
-    installColumnMenu(orderTable_, QStringLiteral("orders"));
-    orderLayout->addWidget(orderTable_, 1);
+    auto* orderPanel = new TablePanel(ordersModel_, orderPage);
+    orderPanel->installColumnMenu(QStringLiteral("orders"));
+    orderTable_ = orderPanel->view();
+    orderLayout->addWidget(orderPanel, 1);
     connect(cancelButton_, &QPushButton::clicked, this, [this] { cancelSelectedOrder(); });
     connect(orderTable_->selectionModel(), &QItemSelectionModel::currentRowChanged, this, [this] {
         updateOrderControls();
     });
     tabs->addTab(orderPage, tr("委托"));
 
-    tradeTable_ = makeTable(tabs, tradesModel_);
-    installColumnMenu(tradeTable_, QStringLiteral("trades"));
-    tabs->addTab(tradeTable_, tr("成交"));
+    auto* tradePanel = new TablePanel(tradesModel_, tabs);
+    tradePanel->installColumnMenu(QStringLiteral("trades"));
+    tradeTable_ = tradePanel->view();
+    tabs->addTab(tradePanel, tr("成交"));
 
     auto* accountPage = new QWidget(tabs);
     auto* accountForm = new QFormLayout(accountPage);
@@ -557,17 +648,16 @@ void MainWindow::buildBottomDock() {
     accountForm->addRow(tr("风险度"), accountRisk_);
     tabs->addTab(accountPage, tr("账户"));
 
-    auto* orderBox = new QWidget(bottomSplitter);
-    buildOrderPanel(orderBox);
-    bottomSplitter->addWidget(tabs);
-    bottomSplitter->addWidget(panel(tr("三键下单"), orderBox, bottomSplitter));
-    bottomSplitter->setSizes({920, 360});
-    contentLayout->addWidget(bottomSplitter, 1);
+    tradingDock_ = addModuleDock(
+        tr("持仓 / 委托 / 成交"), tabs, Qt::BottomDockWidgetArea, QStringLiteral("tradingDock"));
+    tradingDock_->setMinimumHeight(220);
 
-    dock->setWidget(content);
-    addDockWidget(Qt::BottomDockWidgetArea, dock);
-    dock->setMinimumHeight(280);
-    dock->setMaximumHeight(360);
+    auto* orderBox = new QWidget(this);
+    buildOrderPanel(orderBox);
+    orderDock_ = addModuleDock(
+        tr("三键下单"), orderBox, Qt::BottomDockWidgetArea, QStringLiteral("orderDock"));
+    splitDockWidget(tradingDock_, orderDock_, Qt::Horizontal);
+    orderDock_->setMinimumWidth(300);
 }
 
 void MainWindow::connectNode() {
@@ -618,8 +708,8 @@ void MainWindow::connectNode() {
                     query.limit   = 3000;
                     nodeClient_->requestCatalog(query);
                     nodeClient_->requestQuotes(watchlist_);
-                    nodeClient_->requestKlineHistory(selectedSymbol_, selectedDurationNs_, 200);
-                    if (centerTabs_ != nullptr && centerTabs_->currentIndex() == 2) {
+                    requestSelectedKlineHistory();
+                    if (optionsDock_ != nullptr && optionsDock_->isVisible()) {
                         requestOptionChain();
                     }
                     nodeClient_->requestAccountSnapshot();
@@ -756,6 +846,8 @@ void MainWindow::addSymbolToWatchlist(const QString& symbol, bool request) {
     if (row < 0) {
         watchlist_.push_back(trimmed);
         watchModel_->setSymbols(watchlist_);
+        QSettings settings;
+        settings.setValue(QStringLiteral("ui/watchlist"), watchlist_);
         row = watchlist_.indexOf(trimmed);
     }
     if (row >= 0 && watchTable_ != nullptr) {
@@ -919,9 +1011,30 @@ void MainWindow::selectSymbol(const QString& symbol) {
         return;
     }
     nodeClient_->requestQuotes({symbol});
-    nodeClient_->requestKlineHistory(symbol, selectedDurationNs_, 200);
-    if (centerTabs_ != nullptr && centerTabs_->currentIndex() == 2) {
+    requestSelectedKlineHistory();
+    if (optionsDock_ != nullptr && optionsDock_->isVisible()) {
         requestOptionChain();
+    }
+}
+
+void MainWindow::requestSelectedKlineHistory() {
+    if (nodeClient_ == nullptr || selectedSymbol_.isEmpty() ||
+        nodeClient_->state() == NodeClient::State::Disconnected) {
+        return;
+    }
+    const QString symbol   = selectedSymbol_;
+    const qint64  duration = selectedDurationNs_;
+    nodeClient_->requestKlineHistory(symbol, duration, 200);
+    for (const int delay : {1200, 4000}) {
+        QTimer::singleShot(delay, this, [this, symbol, duration] {
+            if (selectedSymbol_ != symbol || selectedDurationNs_ != duration ||
+                nodeClient_ == nullptr || nodeClient_->state() == NodeClient::State::Disconnected) {
+                return;
+            }
+            if (marketStore_->bars(symbol, duration).size() < 80) {
+                nodeClient_->requestKlineHistory(symbol, duration, 200);
+            }
+        });
     }
 }
 
@@ -943,7 +1056,7 @@ void MainWindow::setInterval(qint64 durationNs, const QString& label) {
                                QStringLiteral("positions")};
         nodeClient_->setSubscription(subscription);
         if (nodeClient_->state() != NodeClient::State::Disconnected) {
-            nodeClient_->requestKlineHistory(selectedSymbol_, selectedDurationNs_, 200);
+            requestSelectedKlineHistory();
         }
     }
     updateQuotePanel();
@@ -1111,52 +1224,6 @@ const Instrument* MainWindow::findInstrument(const QString& symbol) const {
         }
     }
     return nullptr;
-}
-
-void MainWindow::installColumnMenu(QTableView* view, const QString& key) {
-    if (view == nullptr || view->model() == nullptr || view->horizontalHeader() == nullptr) {
-        return;
-    }
-    auto* header = view->horizontalHeader();
-    header->setContextMenuPolicy(Qt::CustomContextMenu);
-    const auto loadSettings = [view, key] {
-        QSettings settings;
-        for (int i = 0; i < view->model()->columnCount(); ++i) {
-            const QString name = QStringLiteral("ui/columns/%1/%2").arg(key).arg(i);
-            if (settings.contains(name)) {
-                view->setColumnHidden(i, !settings.value(name, true).toBool());
-            }
-        }
-    };
-    loadSettings();
-
-    connect(header,
-            &QWidget::customContextMenuRequested,
-            this,
-            [this, view, key, header](const QPoint& pos) {
-                QMenu    menu(view);
-                QAction* reset = menu.addAction(tr("显示全部列"));
-                menu.addSeparator();
-                for (int i = 0; i < view->model()->columnCount(); ++i) {
-                    const QString title = view->model()->headerData(i, Qt::Horizontal).toString();
-                    QAction* action = menu.addAction(title.isEmpty() ? QString::number(i) : title);
-                    action->setCheckable(true);
-                    action->setChecked(!view->isColumnHidden(i));
-                    connect(action, &QAction::toggled, this, [view, i, key](bool checked) {
-                        view->setColumnHidden(i, !checked);
-                        QSettings settings;
-                        settings.setValue(QStringLiteral("ui/columns/%1/%2").arg(key).arg(i),
-                                          checked);
-                    });
-                }
-                if (menu.exec(header->viewport()->mapToGlobal(pos)) == reset) {
-                    QSettings settings;
-                    for (int i = 0; i < view->model()->columnCount(); ++i) {
-                        view->setColumnHidden(i, false);
-                        settings.setValue(QStringLiteral("ui/columns/%1/%2").arg(key).arg(i), true);
-                    }
-                }
-            });
 }
 
 void MainWindow::requestOptionChain() {

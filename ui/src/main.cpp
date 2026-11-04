@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
 
     tqsdk::ui::HttpWsNodeClient nodeClient;
     tqsdk::ui::MainWindow       window(&nodeClient);
-    window.show();
+    window.showMaximized();
     nodeClient.connectToNode(QUrl(parser.value(nodeUrlOption)));
     return app.exec();
 }

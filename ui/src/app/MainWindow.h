@@ -5,8 +5,10 @@
 #include <QMainWindow>
 #include <QStringList>
 
-class QComboBox;
 class QCompleter;
+class QCloseEvent;
+class QDockWidget;
+class QDialog;
 class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
@@ -42,6 +44,15 @@ private:
     void              buildWorkspace();
     void              buildOrderPanel(QWidget* parent);
     void              buildBottomDock();
+    void              buildViewMenu();
+    QDockWidget*      addModuleDock(const QString&     title,
+                                    QWidget*           content,
+                                    Qt::DockWidgetArea area,
+                                    const QString&     objectName);
+    void              resetWorkspace();
+    void              saveWorkspace();
+    void              closeEvent(QCloseEvent* event) override;
+    void              toggleChartPopout();
     void              connectNode();
     void              selectSymbol(const QString& symbol);
     void              addSymbolToWatchlist(const QString& symbol, bool request = true);
@@ -49,12 +60,12 @@ private:
     QString           resolveSymbol(const QString& input) const;
     void              updateSearchCompletions(const QString& input);
     void              setInterval(qint64 durationNs, const QString& label);
+    void              requestSelectedKlineHistory();
     void              updateQuotePanel();
     void              updateAccountPanel(const Account& account);
     void              updateOrderControls();
     void              submitOrder(Direction direction, Offset offset);
     void              cancelSelectedOrder();
-    void              installColumnMenu(QTableView* view, const QString& key);
     const Instrument* findInstrument(const QString& symbol) const;
     void              requestOptionChain();
     void              applyTheme();
@@ -71,6 +82,8 @@ private:
     TradeTableModel*       tradesModel_    = nullptr;
     TradeTapeModel*        tapeModel_      = nullptr;
     KLineChartWidget*      chart_          = nullptr;
+    QWidget*               chartHost_      = nullptr;
+    QDialog*               chartDialog_    = nullptr;
 
     QTableView*       watchTable_        = nullptr;
     QTableView*       futuresTable_      = nullptr;
@@ -80,7 +93,6 @@ private:
     QTableView*       orderTable_        = nullptr;
     QTableView*       tradeTable_        = nullptr;
     QTableView*       tapeTable_         = nullptr;
-    QTabWidget*       centerTabs_        = nullptr;
     QLineEdit*        search_            = nullptr;
     QLineEdit*        tradeSymbolEdit_   = nullptr;
     QCompleter*       searchCompleter_   = nullptr;
@@ -88,6 +100,15 @@ private:
     QCompleter*       tradeCompleter_    = nullptr;
     QStringListModel* tradeCompletions_  = nullptr;
     QPushButton*      addSymbolButton_   = nullptr;
+    QPushButton*      componentsButton_  = nullptr;
+
+    QDockWidget* watchDock_   = nullptr;
+    QDockWidget* quoteDock_   = nullptr;
+    QDockWidget* tapeDock_    = nullptr;
+    QDockWidget* tradingDock_ = nullptr;
+    QDockWidget* orderDock_   = nullptr;
+    QDockWidget* futuresDock_ = nullptr;
+    QDockWidget* optionsDock_ = nullptr;
 
     QLabel*      connectionLabel_   = nullptr;
     QLabel*      symbolLabel_       = nullptr;
@@ -119,7 +140,7 @@ private:
     QString     selectedSymbol_     = QStringLiteral("SHFE.rb2701");
     qint64      selectedDurationNs_ = 86'400'000'000'000LL;
     QString     selectedInterval_   = QStringLiteral("1d");
-    bool        dark_               = true;
+    bool        dark_               = false;
     bool        nodeReady_          = false;
     bool        accountLoaded_      = false;
 };

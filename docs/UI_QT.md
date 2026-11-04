@@ -381,6 +381,14 @@ Qt6::WebSockets
 - 连接断开、慢行情、异常 JSON、超大合约目录测试；
 - Linux/Windows/macOS Qt 运行时打包。
 
+### 工作区组件化
+
+- 自选、期货、期权、行情快照、分笔、持仓/委托/成交、三键下单全部使用 QDockWidget；
+- 每个 dock 可拖动、浮动、关闭，关闭后从“组件”菜单重新打开；
+- 布局通过 QSaveState/QSettings 持久化，“恢复默认布局”可重置；
+- 表格统一复用 `TablePanel`（选择行为 + 右键列配置 + QSettings）；
+- 图表为中央组件，可从“视图 / 组件 → 图表弹出 / 收回”独立窗口显示。
+
 ## 7. 指标插件
 
 指标插件（DSL 优先、Python sidecar 第二阶段）设计见

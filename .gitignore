@@ -37,3 +37,6 @@ kline_cache.sqlite3-shm
 # 本机 Tq+CTP 启动配置和运行日志
 config/live.local.env
 run/
+
+# 设计参考截图（本机）
+ui-expected.png

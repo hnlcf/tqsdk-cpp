@@ -52,9 +52,7 @@ void KLineChartWidget::setBars(const QVector<KlineBar>& bars) {
     const int oldSize = bars_.size();
     bars_             = bars;
     if (oldSize == 0 || followLatest_) {
-        visibleCount_ =
-            std::min(std::max(visibleCount_, 10), std::max(1, static_cast<int>(bars_.size())));
-        visibleStart_ = std::max(0, static_cast<int>(bars_.size()) - visibleCount_);
+        visibleStart_ = std::max(0, static_cast<int>(bars_.size()) - visibleBarCount());
         followLatest_ = true;
     }
     clampView();
@@ -109,7 +107,7 @@ void KLineChartWidget::clampView() {
         followLatest_ = true;
         return;
     }
-    visibleCount_   = std::clamp(visibleCount_, 1, std::min<int>(bars_.size(), 2000));
+    visibleCount_   = std::clamp(visibleCount_, 1, 2000);
     const int count = visibleBarCount();
     visibleStart_ =
         std::clamp(visibleStart_, 0, std::max(0, static_cast<int>(bars_.size()) - count));
