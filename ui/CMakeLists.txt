@@ -15,8 +15,15 @@ set(TQSDK_UI_SOURCES
     src/main.cpp
     src/app/MainWindow.cpp
     src/app/MainWindow.h
+    src/app/NodeDataController.cpp
+    src/app/NodeDataController.h
+    src/app/SymbolController.cpp
+    src/app/SymbolController.h
+    src/app/Theme.h
     src/app/TradingController.cpp
     src/app/TradingController.h
+    src/app/WorkspaceLayout.cpp
+    src/app/WorkspaceLayout.h
     src/net/NodeClient.cpp
     src/net/NodeClient.h
     src/net/Protocol.cpp
@@ -182,8 +189,15 @@ if(TQSDK_BUILD_UI_TESTS)
         tests/MainWindowTest.cpp
         src/app/MainWindow.cpp
         src/app/MainWindow.h
+        src/app/NodeDataController.cpp
+        src/app/NodeDataController.h
+        src/app/SymbolController.cpp
+        src/app/SymbolController.h
+        src/app/Theme.h
         src/app/TradingController.cpp
         src/app/TradingController.h
+        src/app/WorkspaceLayout.cpp
+        src/app/WorkspaceLayout.h
         src/chart/KLineChartWidget.cpp
         src/chart/KLineChartWidget.h
         src/model/MarketStore.cpp

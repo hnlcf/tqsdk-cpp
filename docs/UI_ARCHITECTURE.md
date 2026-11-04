@@ -200,12 +200,15 @@ WS messages ──► parse ──► pending MarketUpdate
 
 ### 5.1 MainWindow
 
-`ui/src/app/MainWindow.{h,cpp}` 是工作区编排器：
+`ui/src/app/MainWindow.{h,cpp}` 已收敛为装配层（约 500 行以内）：
 
-- 组装 toolbar 和 QDockWidget；
-- 连接 `NodeClient` 信号；
-- 处理合约选择、下单、布局保存；
-- 不直接解析 JSON。
+- 创建模型和 controller；
+- 连接 controller 的语义信号；
+- 处理主题切换、搜索输入转发；
+- 不再创建具体 panel/dock、不做 fuzzy resolve、不构造 OrderRequest、不直接连接 Node 数据信号。
+
+具体职责分别由 `WorkspaceLayout`、`SymbolController`、`NodeDataController`、
+`TradingController` 承担。
 
 主要 dock：
 
@@ -227,7 +230,16 @@ WS messages ──► parse ──► pending MarketUpdate
 所有 dock 均允许关闭、拖动、浮动和重新显示。工具栏“组件”菜单和
 菜单栏“视图 / 组件”可重新打开组件。
 
-### 5.2 KLineChartWidget
+### 5.2 WorkspaceLayout / SymbolController / NodeDataController
+
+- `WorkspaceLayout`：创建所有 panel/dock、图表 popout、默认布局、布局 QSettings；
+- `SymbolController`：watchlist、fuzzy resolve、当前合约/周期、subscription、K线历史请求；
+- `NodeDataController`：quotes/klines/catalog/option/account/orders/trades 应用到模型，维护可见表刷新；
+- `TradingController`：下单校验、OrderRequest、平仓、撤单、按钮状态。
+
+这些 controller 之间通过语义信号/明确接口连接，MainWindow 不直接处理交易或行情字段。
+
+### 5.3 KLineChartWidget
 
 `ui/src/chart/KLineChartWidget.{h,cpp}`：
 
@@ -239,7 +251,7 @@ WS messages ──► parse ──► pending MarketUpdate
 - `visibleCount/visibleStart/followLatest` 可持久化；
 - 只绘制可见区间。
 
-### 5.3 QuoteSnapshotPanel / OrderBookPanel / TradeTapePanel
+### 5.4 QuoteSnapshotPanel / OrderBookPanel / TradeTapePanel
 
 - `QuoteSnapshotPanel`：行情字段展示和红绿格式化，不持有 node/model；
 - `OrderBookPanel`：五档买卖盘口，数据来自 Quote 的 bid/ask price/volume 1..5；
@@ -248,7 +260,7 @@ WS messages ──► parse ──► pending MarketUpdate
 三者是完全独立的 widget，分别放在独立 QDockWidget 中，可以单独关闭、浮动、
 拖动，不再由行情快照或交易表格“代管”。
 
-### 5.4 交易面板拆分
+### 5.5 交易面板拆分
 
 交易区域拆成独立组件：
 
@@ -261,14 +273,14 @@ WS messages ──► parse ──► pending MarketUpdate
 这些组件默认以 tabify 的独立 QDockWidget 显示在底部；三键下单是另一个独立
 dock，位于交易表格 dock 组右侧。MainWindow 只连接它们与模型/NodeClient。
 
-### 5.5 MarketToolBar / TradingController
+### 5.6 MarketToolBar / TradingController
 
 - `MarketToolBar`：搜索/补全、加入自选、组件菜单、周期、连接状态和主题；
 - `TradingController`：下单校验、OrderRequest 构造、平仓方向、撤单和交易按钮状态。
 
 `MainWindow` 现在只负责创建 dock、注入依赖、连接这些 controller 和做最终布局协调。
 
-### 5.6 TablePanel
+### 5.7 TablePanel
 
 `ui/src/widgets/TablePanel.{h,cpp}`：
 

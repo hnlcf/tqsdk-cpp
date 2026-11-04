@@ -4,7 +4,8 @@
 交易数据，**不链接 `tqsdk_core`**。
 
 内部架构、组件与数据流见 [`../docs/UI_ARCHITECTURE.md`](../docs/UI_ARCHITECTURE.md)；
-完整设计见 [`../docs/UI_QT.md`](../docs/UI_QT.md)；指标插件设计见
+内部架构已收敛为 WorkspaceLayout + SymbolController + NodeDataController +
+TradingController；完整设计见 [`../docs/UI_QT.md`](../docs/UI_QT.md)；指标插件设计见
 [`../docs/INDICATOR_PLUGINS.md`](../docs/INDICATOR_PLUGINS.md)。
 
 ## 依赖
