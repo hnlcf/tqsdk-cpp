@@ -25,6 +25,10 @@ public slots:
     void parseCatalogPayload(QByteArray payload);
     void parseKlinePayload(QByteArray payload, QString symbol, qint64 durationNs);
     void parseOptionPayload(QByteArray payload);
+    void parseQuotePayload(QByteArray payload, QString fallbackSymbol);
+    void parseAccountPayload(QByteArray payload);
+    void parseMarketPayload(QByteArray payload);
+    void parseOrderAckPayload(QByteArray payload);
 
 signals:
     void wsSubscribed();
@@ -36,6 +40,9 @@ signals:
                             qint64                              durationNs,
                             const QVector<tqsdk::ui::KlineBar>& bars);
     void optionChainParsed(const tqsdk::ui::OptionChain& chain);
+    void quoteParsed(const tqsdk::ui::Quote& quote, const QString& fallbackSymbol);
+    void accountParsed(const tqsdk::ui::Account& account);
+    void orderAckParsed(const tqsdk::ui::OrderAck& ack);
     void parseError(const QString& error);
 
 private:

@@ -53,14 +53,12 @@ private:
     QUrl apiUrl(const QString& path) const;
     QUrl streamUrl() const;
 
-    using JsonCallback = std::function<void(const QJsonObject&, const QString&)>;
-    using RawCallback  = std::function<void(const QByteArray&, const QString&)>;
-    void getJson(const QUrl& url, JsonCallback callback);
+    using RawCallback = std::function<void(const QByteArray&, const QString&)>;
     void getRawJson(const QUrl& url, RawCallback callback);
-    void sendJson(QNetworkAccessManager::Operation method,
-                  const QUrl&                      url,
-                  const QJsonObject&               body,
-                  JsonCallback                     callback);
+    void sendRawJson(QNetworkAccessManager::Operation method,
+                     const QUrl&                      url,
+                     const QJsonObject&               body,
+                     RawCallback                      callback);
 
     QNetworkAccessManager network_;
     QThread               parserThread_;

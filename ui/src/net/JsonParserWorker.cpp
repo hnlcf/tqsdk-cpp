@@ -97,6 +97,52 @@ void JsonParserWorker::parseOptionPayload(QByteArray payload) {
     }
 }
 
+void JsonParserWorker::parseQuotePayload(QByteArray payload, QString fallbackSymbol) {
+    QString    error;
+    const auto object = parseObject(payload, error);
+    if (!object) {
+        emit parseError(error);
+        return;
+    }
+    if (auto quote = parseQuote(*object)) {
+        emit quoteParsed(*quote, fallbackSymbol);
+    }
+}
+
+void JsonParserWorker::parseAccountPayload(QByteArray payload) {
+    QString    error;
+    const auto object = parseObject(payload, error);
+    if (!object) {
+        emit parseError(error);
+        return;
+    }
+    if (auto account = parseAccount(*object)) {
+        emit accountParsed(*account);
+    }
+}
+
+void JsonParserWorker::parseMarketPayload(QByteArray payload) {
+    QString    error;
+    const auto object = parseObject(payload, error);
+    if (!object) {
+        emit parseError(error);
+        return;
+    }
+    enqueueMarketUpdate(parseMarketData(*object));
+}
+
+void JsonParserWorker::parseOrderAckPayload(QByteArray payload) {
+    QString    error;
+    const auto object = parseObject(payload, error);
+    if (!object) {
+        emit parseError(error);
+        return;
+    }
+    if (auto ack = parseOrderAck(*object)) {
+        emit orderAckParsed(*ack);
+    }
+}
+
 void JsonParserWorker::mergeKlineFrame(KlineFrame& target, const KlineFrame& incoming) {
     if (incoming.reset) {
         target = incoming;

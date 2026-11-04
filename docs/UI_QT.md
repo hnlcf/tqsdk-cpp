@@ -270,8 +270,8 @@ paintEvent:
 ## 4. 线程与对象生命周期
 
 - GUI、QNetworkAccessManager、QWebSocket 在主线程；socket 只负责收包；
-- WebSocket 市场 JSON、目录、K 线历史、期权链由 `JsonParserWorker` 在独立线程解析；
-- 市场增量在 worker 内约 33ms 合帧后回主线程，UI 每帧最多处理一次；
+- WebSocket/Market JSON、目录、K 线历史、期权链、quote/account/order/trade REST 响应全部由 `JsonParserWorker` 在独立线程解析；
+- 市场增量在 worker 内约 33ms 合帧后回主线程，UI 每帧最多处理一次；主线程不做 JSON 解析；
 - futures/options 表格不可见时不刷新，显示时用最新 quote 缓存补齐；
 - InstrumentTableModel 使用 symbol->row 索引，只对变化行发 dataChanged；
 - 所有 `QObject` 父子关系明确：`MainWindow -> AppController -> NodeClient`；

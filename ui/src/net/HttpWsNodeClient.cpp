@@ -5,7 +5,6 @@
 #include <QAbstractSocket>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonParseError>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrlQuery>
@@ -39,6 +38,9 @@ HttpWsNodeClient::HttpWsNodeClient(QObject* parent)
     qRegisterMetaType<OptionChain>("tqsdk::ui::OptionChain");
     qRegisterMetaType<QVector<Instrument>>("QVector<tqsdk::ui::Instrument>");
     qRegisterMetaType<QVector<KlineBar>>("QVector<tqsdk::ui::KlineBar>");
+    qRegisterMetaType<Quote>("tqsdk::ui::Quote");
+    qRegisterMetaType<Account>("tqsdk::ui::Account");
+    qRegisterMetaType<OrderAck>("tqsdk::ui::OrderAck");
 
     parser_ = new JsonParserWorker;
     parser_->moveToThread(&parserThread_);
@@ -252,32 +254,6 @@ QUrl HttpWsNodeClient::streamUrl() const {
     return url;
 }
 
-void HttpWsNodeClient::getJson(const QUrl& url, JsonCallback callback) {
-    QNetworkRequest request(url);
-    request.setRawHeader("Accept", "application/json");
-    auto* reply = network_.get(request);
-
-    connect(
-        reply, &QNetworkReply::finished, this, [reply, callback = std::move(callback)]() mutable {
-            const QByteArray body = reply->readAll();
-            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            const QString error = replyError(reply, status);
-            reply->deleteLater();
-            if (!error.isEmpty()) {
-                callback(QJsonObject{}, error);
-                return;
-            }
-            QJsonParseError parseError;
-            const auto      document = QJsonDocument::fromJson(body, &parseError);
-            if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-                callback(QJsonObject{},
-                         QStringLiteral("invalid node JSON: %1").arg(parseError.errorString()));
-                return;
-            }
-            callback(document.object(), {});
-        });
-}
-
 void HttpWsNodeClient::getRawJson(const QUrl& url, RawCallback callback) {
     QNetworkRequest request(url);
     request.setRawHeader("Accept", "application/json");
@@ -297,10 +273,10 @@ void HttpWsNodeClient::getRawJson(const QUrl& url, RawCallback callback) {
         });
 }
 
-void HttpWsNodeClient::sendJson(QNetworkAccessManager::Operation method,
-                                const QUrl&                      url,
-                                const QJsonObject&               body,
-                                JsonCallback                     callback) {
+void HttpWsNodeClient::sendRawJson(QNetworkAccessManager::Operation method,
+                                   const QUrl&                      url,
+                                   const QJsonObject&               body,
+                                   RawCallback                      callback) {
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setRawHeader("Accept", "application/json");
@@ -313,7 +289,7 @@ void HttpWsNodeClient::sendJson(QNetworkAccessManager::Operation method,
         reply = network_.deleteResource(request);
     } else {
         if (callback) {
-            callback(QJsonObject{}, QStringLiteral("unsupported HTTP operation"));
+            callback({}, QStringLiteral("unsupported HTTP operation"));
         }
         return;
     }
@@ -325,17 +301,10 @@ void HttpWsNodeClient::sendJson(QNetworkAccessManager::Operation method,
             const QString error = replyError(reply, status);
             reply->deleteLater();
             if (!error.isEmpty()) {
-                callback(QJsonObject{}, error);
+                callback({}, error);
                 return;
             }
-            QJsonParseError parseError;
-            const auto      document = QJsonDocument::fromJson(body, &parseError);
-            if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-                callback(QJsonObject{},
-                         QStringLiteral("invalid node JSON: %1").arg(parseError.errorString()));
-                return;
-            }
-            callback(document.object(), {});
+            callback(body, {});
         });
 }
 
@@ -382,19 +351,20 @@ void HttpWsNodeClient::requestQuotes(const QStringList& symbols) {
             continue;
         }
         const QString encoded = QString::fromLatin1(QUrl::toPercentEncoding(symbol));
-        getJson(apiUrl(QStringLiteral("/quote/%1").arg(encoded)),
-                [this, symbol](const QJsonObject& response, const QString& error) {
-                    if (!error.isEmpty()) {
-                        emit errorOccurred(error);
-                        return;
-                    }
-                    if (auto quote = parseQuote(response)) {
-                        if (quote->instrumentId.isEmpty()) {
-                            quote->instrumentId = symbol;
-                        }
-                        emit quotesUpdated({*quote});
-                    }
-                });
+        getRawJson(apiUrl(QStringLiteral("/quote/%1").arg(encoded)),
+                   [this, symbol](const QByteArray& body, const QString& error) {
+                       if (!error.isEmpty()) {
+                           emit errorOccurred(error);
+                           return;
+                       }
+                       if (parser_ != nullptr) {
+                           QMetaObject::invokeMethod(parser_,
+                                                     "parseQuotePayload",
+                                                     Qt::QueuedConnection,
+                                                     Q_ARG(QByteArray, body),
+                                                     Q_ARG(QString, symbol));
+                       }
+                   });
     }
 }
 
@@ -438,95 +408,96 @@ void HttpWsNodeClient::requestKlineHistory(const QString& symbol,
 }
 
 void HttpWsNodeClient::requestAccountSnapshot() {
-    getJson(apiUrl(QStringLiteral("/account")),
-            [this](const QJsonObject& response, const QString& error) {
-                if (!error.isEmpty()) {
-                    emit errorOccurred(error);
-                    return;
-                }
-                if (auto account = parseAccount(response)) {
-                    emit accountUpdated(*account);
-                }
-            });
+    getRawJson(
+        apiUrl(QStringLiteral("/account")), [this](const QByteArray& body, const QString& error) {
+            if (!error.isEmpty()) {
+                emit errorOccurred(error);
+                return;
+            }
+            if (parser_ != nullptr) {
+                QMetaObject::invokeMethod(
+                    parser_, "parseAccountPayload", Qt::QueuedConnection, Q_ARG(QByteArray, body));
+            }
+        });
 }
 
 void HttpWsNodeClient::requestOrders() {
-    getJson(apiUrl(QStringLiteral("/orders")),
-            [this](const QJsonObject& response, const QString& error) {
-                if (!error.isEmpty()) {
-                    emit errorOccurred(error);
-                    return;
-                }
-                auto update = parseMarketData(response);
-                if (!update.orders.isEmpty()) {
-                    emit ordersUpdated(update.orders);
-                }
-            });
+    getRawJson(
+        apiUrl(QStringLiteral("/orders")), [this](const QByteArray& body, const QString& error) {
+            if (!error.isEmpty()) {
+                emit errorOccurred(error);
+                return;
+            }
+            if (parser_ != nullptr) {
+                QMetaObject::invokeMethod(
+                    parser_, "parseMarketPayload", Qt::QueuedConnection, Q_ARG(QByteArray, body));
+            }
+        });
 }
 
 void HttpWsNodeClient::requestPositions() {
-    getJson(apiUrl(QStringLiteral("/positions")),
-            [this](const QJsonObject& response, const QString& error) {
-                if (!error.isEmpty()) {
-                    emit errorOccurred(error);
-                    return;
-                }
-                auto update = parseMarketData(response);
-                if (!update.positions.isEmpty()) {
-                    emit positionsUpdated(update.positions);
-                }
-            });
+    getRawJson(
+        apiUrl(QStringLiteral("/positions")), [this](const QByteArray& body, const QString& error) {
+            if (!error.isEmpty()) {
+                emit errorOccurred(error);
+                return;
+            }
+            if (parser_ != nullptr) {
+                QMetaObject::invokeMethod(
+                    parser_, "parseMarketPayload", Qt::QueuedConnection, Q_ARG(QByteArray, body));
+            }
+        });
 }
 
 void HttpWsNodeClient::requestTrades() {
-    getJson(apiUrl(QStringLiteral("/trades")),
-            [this](const QJsonObject& response, const QString& error) {
-                if (!error.isEmpty()) {
-                    emit errorOccurred(error);
-                    return;
-                }
-                auto update = parseMarketData(response);
-                if (!update.trades.isEmpty()) {
-                    emit tradesUpdated(update.trades);
-                }
-            });
+    getRawJson(
+        apiUrl(QStringLiteral("/trades")), [this](const QByteArray& body, const QString& error) {
+            if (!error.isEmpty()) {
+                emit errorOccurred(error);
+                return;
+            }
+            if (parser_ != nullptr) {
+                QMetaObject::invokeMethod(
+                    parser_, "parseMarketPayload", Qt::QueuedConnection, Q_ARG(QByteArray, body));
+            }
+        });
 }
 
 void HttpWsNodeClient::placeOrder(const OrderRequest& request) {
-    sendJson(QNetworkAccessManager::PostOperation,
-             apiUrl(QStringLiteral("/order")),
-             makeOrder(request),
-             [this](const QJsonObject& response, const QString& error) {
-                 if (!error.isEmpty()) {
-                     emit errorOccurred(error);
-                     return;
-                 }
-                 if (auto ack = parseOrderAck(response)) {
-                     if (!ack->success && !ack->error.isEmpty()) {
-                         emit errorOccurred(ack->error);
-                     }
-                     emit orderAckReceived(*ack);
-                 }
-             });
+    sendRawJson(QNetworkAccessManager::PostOperation,
+                apiUrl(QStringLiteral("/order")),
+                makeOrder(request),
+                [this](const QByteArray& body, const QString& error) {
+                    if (!error.isEmpty()) {
+                        emit errorOccurred(error);
+                        return;
+                    }
+                    if (parser_ != nullptr) {
+                        QMetaObject::invokeMethod(parser_,
+                                                  "parseOrderAckPayload",
+                                                  Qt::QueuedConnection,
+                                                  Q_ARG(QByteArray, body));
+                    }
+                });
 }
 
 void HttpWsNodeClient::cancelOrder(const QString& orderId) {
     const QString encoded = QString::fromLatin1(QUrl::toPercentEncoding(orderId));
-    sendJson(QNetworkAccessManager::DeleteOperation,
-             apiUrl(QStringLiteral("/order/%1").arg(encoded)),
-             {},
-             [this](const QJsonObject& response, const QString& error) {
-                 if (!error.isEmpty()) {
-                     emit errorOccurred(error);
-                     return;
-                 }
-                 if (auto ack = parseOrderAck(response)) {
-                     if (!ack->success && !ack->error.isEmpty()) {
-                         emit errorOccurred(ack->error);
-                     }
-                     emit orderAckReceived(*ack);
-                 }
-             });
+    sendRawJson(QNetworkAccessManager::DeleteOperation,
+                apiUrl(QStringLiteral("/order/%1").arg(encoded)),
+                {},
+                [this](const QByteArray& body, const QString& error) {
+                    if (!error.isEmpty()) {
+                        emit errorOccurred(error);
+                        return;
+                    }
+                    if (parser_ != nullptr) {
+                        QMetaObject::invokeMethod(parser_,
+                                                  "parseOrderAckPayload",
+                                                  Qt::QueuedConnection,
+                                                  Q_ARG(QByteArray, body));
+                    }
+                });
 }
 
 } // namespace tqsdk::ui
