@@ -492,23 +492,33 @@ class Acceptance:
         error_response = self.http.post("/order", error_payload)
         error_evidence: dict[str, Any] = {"submit_response": error_response.body}
         self.record_order("reject", error_payload, error_evidence)
+        reject_passed = False
         if error_response.status != 200 or not isinstance(error_response.body, dict):
             self.check("orders.reject", FAIL, f"错误单 HTTP {error_response.status}", error_evidence)
-            return
-        if not error_response.body.get("success"):
+        elif not error_response.body.get("success"):
+            reject_passed = True
             self.check("orders.reject", PASS, f"错误单被拒绝: {error_response.body.get('error')}", error_evidence)
-            return
-        error_id = str(error_response.body.get("order_id") or "")
-        if error_id:
-            error_order = self.wait_order(error_id, self.args.order_timeout)
-            error_evidence["order_after_submit"] = error_order
-            if error_order is not None and error_order.get("is_error"):
-                self.check("orders.reject", PASS, f"错误单异步拒绝: {error_order.get('last_msg')}", error_evidence)
-                return
-            if error_order is not None and not error_order.get("is_dead"):
-                self.cancel_and_wait(error_id)
-        self.check("orders.reject", FAIL, f"volume=0 未被拒绝: {error_response.body}", error_evidence)
+        else:
+            error_id = str(error_response.body.get("order_id") or "")
+            if error_id:
+                error_order = self.wait_order(error_id, self.args.order_timeout)
+                error_evidence["order_after_submit"] = error_order
+                if error_order is not None and error_order.get("is_error"):
+                    reject_passed = True
+                    self.check(
+                        "orders.reject",
+                        PASS,
+                        f"错误单异步拒绝: {error_order.get('last_msg')}",
+                        error_evidence,
+                    )
+                else:
+                    if error_order is not None and not error_order.get("is_dead"):
+                        self.cancel_and_wait(error_id)
+            if not reject_passed:
+                self.check("orders.reject", FAIL, f"volume=0 未被拒绝: {error_response.body}", error_evidence)
 
+        # 错误单检查通过后仍需继续执行可选的市价/对价检查；不能 return，
+        # 否则 --include-market/--include-counterparty 会被静默跳过。
         if self.args.include_market:
             self.run_optional_market("orders.market", "ANY")
         if self.args.include_counterparty:

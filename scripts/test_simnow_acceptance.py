@@ -139,6 +139,8 @@ class AcceptanceScriptTest(unittest.TestCase):
                         "SHFE.rb2701",
                         "--orders",
                         "--yes",
+                        "--include-market",
+                        "--include-counterparty",
                         "--no-ws",
                         "--timeout",
                         "1",
@@ -161,6 +163,8 @@ class AcceptanceScriptTest(unittest.TestCase):
                 names = {item["name"] for item in report["checks"]}
                 self.assertIn("orders.limit.cancel", names)
                 self.assertIn("orders.reject", names)
+                self.assertIn("orders.market", names)
+                self.assertIn("orders.counterparty", names)
                 self.assertTrue(md_out.exists())
         finally:
             server.shutdown()
