@@ -15,6 +15,8 @@ import math
 # Single source of truth for indicator series colors. Plugins may reference
 # names instead of repeating hex strings in every metadata dictionary.
 COLORS = {
+    "white": "#ffffff",
+    "yellow": "#f0c75e",
     "gold": "#f0c75e",
     "blue": "#53b7ff",
     "orange": "#ffb86b",
@@ -99,7 +101,9 @@ def ema(values, period):
     for i, value in enumerate(values):
         if value is None:
             continue
-        previous = value if previous is None else alpha * value + (1.0 - alpha) * previous
+        previous = (
+            value if previous is None else alpha * value + (1.0 - alpha) * previous
+        )
         result[i] = previous
     return result
 
@@ -122,8 +126,14 @@ def boll(values, period=20, mult=2.0):
     """Return (middle, upper, lower) Bollinger bands."""
     middle = sma(values, period)
     deviation = stdev(values, period)
-    upper = [None if m is None or d is None else m + mult * d for m, d in zip(middle, deviation)]
-    lower = [None if m is None or d is None else m - mult * d for m, d in zip(middle, deviation)]
+    upper = [
+        None if m is None or d is None else m + mult * d
+        for m, d in zip(middle, deviation)
+    ]
+    lower = [
+        None if m is None or d is None else m - mult * d
+        for m, d in zip(middle, deviation)
+    ]
     return middle, upper, lower
 
 
@@ -131,9 +141,14 @@ def macd(values, fast=12, slow=26, signal=9):
     """Return (macd, signal, histogram)."""
     fast_line = ema(values, fast)
     slow_line = ema(values, slow)
-    macd_line = [None if f is None or s is None else f - s for f, s in zip(fast_line, slow_line)]
+    macd_line = [
+        None if f is None or s is None else f - s for f, s in zip(fast_line, slow_line)
+    ]
     signal_line = ema(macd_line, signal)
-    histogram = [None if m is None or s is None else m - s for m, s in zip(macd_line, signal_line)]
+    histogram = [
+        None if m is None or s is None else m - s
+        for m, s in zip(macd_line, signal_line)
+    ]
     return macd_line, signal_line, histogram
 
 
@@ -163,7 +178,9 @@ def rsi(values, period=14):
             continue
         avg_gain = (avg_gain * (period - 1) + gain) / period
         avg_loss = (avg_loss * (period - 1) + loss) / period
-        result[i] = 100.0 if avg_loss == 0 else 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+        result[i] = (
+            100.0 if avg_loss == 0 else 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+        )
     return result
 
 
