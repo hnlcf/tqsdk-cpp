@@ -51,6 +51,20 @@ private slots:
         QCOMPARE(update.quotes.first().volume, qint64(2100));
     }
 
+    void wsMessageCompletionIsAlwaysSignaled() {
+        JsonParserWorker worker;
+        QSignalSpy       finished(&worker, &JsonParserWorker::wsMessageFinished);
+
+        worker.parseWsMessage(
+            QByteArray(R"json({"type":"welcome","protocol":1,"heartbeat_interval_ms":30000})json"));
+        worker.parseWsMessage(
+            QByteArray(R"json({"type":"subscribed","symbols":[],"klines":[],"topics":[]})json"));
+        worker.parseWsMessage(QByteArray(R"json({"type":"diff","data":{}})json"));
+        worker.parseWsMessage(QByteArray("not-json"));
+
+        QCOMPARE(finished.count(), 4);
+    }
+
     void catalogPayloadIsParsedOffModelThread() {
         JsonParserWorker worker;
         QSignalSpy       catalogs(&worker, &JsonParserWorker::catalogParsed);

@@ -65,6 +65,15 @@ HttpWsNodeClient::HttpWsNodeClient(QObject* parent)
         Qt::QueuedConnection);
     connect(
         parser_,
+        &JsonParserWorker::wsMessageFinished,
+        this,
+        [this] {
+            wsInFlight_ = false;
+            dispatchNextWsPayload();
+        },
+        Qt::QueuedConnection);
+    connect(
+        parser_,
         &JsonParserWorker::wsError,
         this,
         [this](const QString& error) { emit errorOccurred(error); },

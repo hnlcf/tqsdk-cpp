@@ -33,6 +33,14 @@ void JsonParserWorker::stop() {
 }
 
 void JsonParserWorker::parseWsMessage(QByteArray payload) {
+    // The bounded WS ingress in HttpWsNodeClient dispatches exactly one
+    // payload at a time. Every return path must signal completion, otherwise
+    // the first message (usually welcome) permanently wedges the queue.
+    struct FinishGuard {
+        JsonParserWorker* worker;
+        ~FinishGuard() { worker->wsMessageFinished(); }
+    } finish{this};
+
     QString    error;
     const auto object = parseObject(payload, error);
     if (!object) {
