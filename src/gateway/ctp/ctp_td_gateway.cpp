@@ -501,7 +501,7 @@ CommandAck CtpTdGateway::send_insert(const InsertOrderReq& req, const OrderId& r
     field.Direction         = ctp_direction(req.direction);
     field.CombOffsetFlag[0] = ctp_offset_for_order(exchange, instrument, req.direction, req.offset);
     field.CombHedgeFlag[0]  = THOST_FTDC_HF_Speculation;
-    field.LimitPrice        = req.price_type == PriceType::LIMIT ? req.limit_price : DBL_MAX;
+    field.LimitPrice        = ctp_limit_price(req.price_type, req.limit_price);
     field.VolumeTotalOriginal = static_cast<int>(req.volume);
     field.TimeCondition       = ctp_time_cond(req.time_cond);
     field.VolumeCondition     = ctp_volume_cond(req.volume_cond);

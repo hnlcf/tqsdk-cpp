@@ -50,7 +50,8 @@ python3 scripts/simnow_acceptance.py \
 - `/quote/{symbol}`；
 - 五档/一档盘口识别；
 - `/metrics`（可选）；
-- WebSocket `/stream` 订阅欢迎、订阅确认和快照（默认启用，可用 `--no-ws` 关闭）。
+- WebSocket `/stream` 订阅欢迎、订阅确认和快照（默认启用，可用 `--no-ws` 关闭）；
+- quote 首次访问会触发新订阅，脚本默认等待 `--quote-timeout 15s`，新合约没有行情时会明确失败而不是立即误报。
 
 ## 3. 限价/撤单/错误单验收
 
@@ -97,7 +98,9 @@ python3 scripts/simnow_acceptance.py \
 - 对价：`price_type=BEST`；
 - 使用 `time_cond=IOC`；
 - 脚本不会自动平掉产生的仓位，需要人工确认；
-- 被柜台拒绝会记录 `WARN`，而不是误报成“下单成功”。
+- 被柜台/交易所拒绝会记录 `WARN`，而不是误报成“下单成功”；
+- 例如 SHFE 的某些合约会返回
+  `79:不被支持的报单类型`，这是交易所/SimNow 支持范围问题，不是脚本超时或字段空值问题。
 
 ## 5. 报告
 

@@ -208,6 +208,11 @@ inline char ctp_price_type(PriceType p) {
     }
 }
 
+/// CTP 对市价/最优价报单要求 LimitPrice=0；DBL_MAX 会被柜台判为字段错误。
+inline double ctp_limit_price(PriceType p, double limit_price) {
+    return p == PriceType::LIMIT ? limit_price : 0.0;
+}
+
 inline char ctp_time_cond(TimeCondition t) {
     switch (t) {
     case TimeCondition::IOC:

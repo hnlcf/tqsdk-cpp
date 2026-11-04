@@ -24,6 +24,7 @@ class FakeState:
     def __init__(self) -> None:
         self.orders: dict[str, dict] = {}
         self.next_id = 1
+        self.quote_requests = 0
 
 
 def fake_quote() -> dict:
@@ -71,6 +72,10 @@ def make_handler(state: FakeState):
             if self.path == "/trades":
                 return self.send_json(200, {"trades": {}})
             if self.path.startswith("/quote/"):
+                state.quote_requests += 1
+                # First two requests model node triggering a new subscription.
+                if state.quote_requests <= 2:
+                    return self.send_json(200, {"instrument_id": "SHFE.rb2701"})
                 return self.send_json(200, fake_quote())
             if self.path == "/metrics":
                 return self.send_json(200, {"ready": True})

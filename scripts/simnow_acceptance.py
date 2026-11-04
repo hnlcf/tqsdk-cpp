@@ -282,24 +282,55 @@ class Acceptance:
             self.check(name, PASS if ok else FAIL, "字段结构正常" if ok else f"响应结构异常: {body}")
 
     def check_quote(self) -> None:
-        response = self.http.get(f"/quote/{self.args.symbol}")
-        if response.status != 200 or not isinstance(response.body, dict):
-            self.check("quote", FAIL, f"HTTP {response.status}: {response.error}")
+        # GET /quote 首次访问才会触发订阅，返回的空占位不是最终行情；
+        # 新合约/新连接必须轮询等待首帧 quote，而不是立即判失败。
+        deadline = time.monotonic() + self.args.quote_timeout
+        last_response: Response | None = None
+        last_body: Any = None
+        while time.monotonic() < deadline:
+            last_response = self.http.get(f"/quote/{self.args.symbol}")
+            last_body = last_response.body
+            if last_response.status == 200 and isinstance(last_body, dict):
+                self.quote = last_body
+                last = finite(last_body.get("last_price"))
+                levels = depth_levels(last_body)
+                if last is not None and levels >= 1:
+                    break
+                if last is not None and levels < 1:
+                    # 有的合约先有最新价，盘口随后到达；继续等到超时。
+                    pass
+            time.sleep(0.5)
+
+        if last_response is None or last_response.status != 200 or not isinstance(last_body, dict):
+            status = last_response.status if last_response else 0
+            error = last_response.error if last_response else "no response"
+            self.check("quote", FAIL, f"HTTP {status}: {error} (waited {self.args.quote_timeout:.0f}s)", last_body)
             return
-        self.quote = response.body
-        last = finite(self.quote.get("last_price"))
-        tick = finite(self.quote.get("price_tick"))
-        levels = depth_levels(self.quote)
+        self.quote = last_body
+        last = finite(last_body.get("last_price"))
+        tick = finite(last_body.get("price_tick"))
+        levels = depth_levels(last_body)
         if last is None:
-            self.check("quote", FAIL, "quote 没有有限 last_price", self.quote)
+            self.check(
+                "quote",
+                FAIL,
+                f"等待 {self.args.quote_timeout:.0f}s 后仍没有有限 last_price；"
+                "合约可能无夜盘/未产生行情或订阅尚未返回",
+                last_body,
+            )
         elif levels < 1:
-            self.check("quote", FAIL, "quote 没有买卖盘口", self.quote)
+            self.check(
+                "quote",
+                FAIL,
+                f"last={last}，但等待 {self.args.quote_timeout:.0f}s 后仍没有买卖盘口",
+                last_body,
+            )
         elif levels < 5:
             self.check(
                 "quote",
                 WARN,
                 f"last={last} tick={tick} 仅 {levels} 个盘口价位；SimNow CTP 预期五档",
-                self.quote,
+                last_body,
             )
         else:
             self.check("quote", PASS, f"last={last} tick={tick} depth_levels={levels}")
@@ -601,6 +632,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--order-volume", type=int, default=1)
     parser.add_argument("--limit-price", type=float, default=None)
     parser.add_argument("--timeout", type=float, default=5.0)
+    parser.add_argument(
+        "--quote-timeout",
+        type=float,
+        default=15.0,
+        help="seconds to wait for the first non-empty quote after triggering subscription",
+    )
     parser.add_argument("--ready-timeout", type=float, default=60.0)
     parser.add_argument("--ws-timeout", type=float, default=8.0)
     parser.add_argument("--order-timeout", type=float, default=8.0)

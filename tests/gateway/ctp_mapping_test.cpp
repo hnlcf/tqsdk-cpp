@@ -53,6 +53,13 @@ TEST(CtpConvert, OrderAndTradeJson) {
     EXPECT_DOUBLE_EQ(tj["price"], 3799.0);
 }
 
+TEST(CtpConvert, MarketAndBestOrdersUseZeroLimitPrice) {
+    EXPECT_DOUBLE_EQ(ctp_limit_price(PriceType::LIMIT, 3800.0), 3800.0);
+    EXPECT_DOUBLE_EQ(ctp_limit_price(PriceType::ANY, 3800.0), 0.0);
+    EXPECT_DOUBLE_EQ(ctp_limit_price(PriceType::BEST, 3800.0), 0.0);
+    EXPECT_DOUBLE_EQ(ctp_limit_price(PriceType::FIVELEVEL, 3800.0), 0.0);
+}
+
 TEST(CtpConvert, SymbolNormalization) {
     EXPECT_EQ(tq_symbol("SHFE", "rb2701"), "SHFE.rb2701");
     EXPECT_EQ(tq_symbol("", "rb2701"), "rb2701");
