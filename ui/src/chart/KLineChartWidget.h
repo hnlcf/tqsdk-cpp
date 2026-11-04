@@ -2,12 +2,14 @@
 
 #include "net/Protocol.h"
 
+#include <QPixmap>
 #include <QPoint>
 #include <QRectF>
 #include <QVector>
 #include <QWidget>
 
 class QPainter;
+class QTimer;
 class QMouseEvent;
 class QPaintEvent;
 class QWheelEvent;
@@ -59,6 +61,9 @@ private:
     void   clampView();
     void   drawHeader(QPainter& painter);
     void   drawEmpty(QPainter& painter);
+    bool   visiblePriceRange(double& minPrice, double& maxPrice) const;
+    void   invalidateCache();
+    void   renderCache();
     void   drawGrid(QPainter& painter, const QRectF& plot, double minPrice, double maxPrice) const;
     void   drawCandles(QPainter&     painter,
                        const QRectF& plot,
@@ -72,10 +77,14 @@ private:
 
     QVector<KlineBar> bars_;
     Quote             quote_;
-    QString           symbol_    = QStringLiteral("—");
-    QString           interval_  = QStringLiteral("1d");
-    bool              dark_      = true;
-    QPoint            crosshair_ = QPoint(-1, -1);
+    QString           symbol_           = QStringLiteral("—");
+    QString           interval_         = QStringLiteral("1d");
+    bool              dark_             = true;
+    QPoint            crosshair_        = QPoint(-1, -1);
+    QPoint            pendingCrosshair_ = QPoint(-1, -1);
+    QTimer*           crosshairTimer_   = nullptr;
+    QPixmap           chartCache_;
+    bool              cacheDirty_ = true;
 
     int  visibleCount_ = 120;
     int  visibleStart_ = 0;

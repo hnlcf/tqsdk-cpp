@@ -47,6 +47,7 @@ private:
     void addSymbolToWatchlist(const QString& symbol, bool request = true);
     void addSymbolFromInput(const QString& input);
     void updateSearchCompletions(const QString& input);
+    void scheduleSymbolSelection(const QString& symbol);
     void applySelectedSymbol(const QString& symbol);
     void applyInterval(qint64 durationNs, const QString& label);
     void queueChartBars(const QString& symbol, qint64 durationNs, const QVector<KlineBar>& bars);
@@ -79,6 +80,8 @@ private:
     TradingController*  tradingController_  = nullptr;
 
     QTimer*           chartRefreshTimer_ = nullptr;
+    QTimer*           selectionTimer_    = nullptr;
+    QString           pendingSelection_;
     QVector<KlineBar> pendingChartBars_;
     QString           pendingChartSymbol_;
     qint64            pendingChartDuration_ = 0;

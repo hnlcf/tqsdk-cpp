@@ -211,6 +211,10 @@ WS messages ──► parse ──► pending MarketUpdate
 - 处理主题切换、搜索输入转发；
 - 不再创建具体 panel/dock、不做 fuzzy resolve、不构造 OrderRequest、不直接连接 Node 数据信号。
 
+- watchlist 连续点击使用 120ms 合并，只对最终选择发订阅/K线请求；
+- SymbolController 的 QSettings 保存延迟 300ms，避免每次点击同步写盘；
+- 合约名称查找走 `rowBySymbol_` 的 O(1) 索引，不在每次 quote 更新时线性扫描目录。
+
 具体职责分别由 `WorkspaceLayout`、`SymbolController`、`NodeDataController`、
 `TradingController` 承担。
 
@@ -255,7 +259,9 @@ WS messages ──► parse ──► pending MarketUpdate
 - `visibleCount/visibleStart/followLatest` 可持久化；
 - 最新 K 线通过 500ms 单次定时器合并刷新，避免每帧行情都重绘实体；
 - 只有最新价/昨结变化才触发图表 quote 重绘，纯成交量 diff 不重绘；
-- 只绘制可见区间。
+- 只绘制可见区间；
+- K 线/网格/成交量缓存为 QPixmap，鼠标移动只重绘十字光标和头部，不重画 K 线；
+- 十字光标以 16ms 单次定时器合并鼠标移动事件。
 
 ### 5.4 QuoteSnapshotPanel / OrderBookPanel / TradeTapePanel
 

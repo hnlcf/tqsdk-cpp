@@ -125,6 +125,14 @@ QString InstrumentTableModel::symbolAt(int row) const {
     return row >= 0 && row < instruments_.size() ? instruments_.at(row).instrumentId : QString{};
 }
 
+const Instrument* InstrumentTableModel::instrument(const QString& symbol) const {
+    const auto it = rowBySymbol_.constFind(symbol);
+    if (it == rowBySymbol_.constEnd() || it.value() < 0 || it.value() >= instruments_.size()) {
+        return nullptr;
+    }
+    return &instruments_.at(it.value());
+}
+
 QVariant InstrumentTableModel::data(const QModelIndex& index, int role) const {
     if (!index.isValid() || index.row() < 0 || index.row() >= instruments_.size() ||
         index.column() < 0 || index.column() >= ColumnCount) {

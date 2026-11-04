@@ -60,7 +60,12 @@ SymbolController::SymbolController(NodeClient*           nodeClient,
       futuresModel_(futuresModel),
       callsModel_(callsModel),
       putsModel_(putsModel),
-      marketStore_(marketStore) {}
+      marketStore_(marketStore) {
+    settingsSaveTimer_ = new QTimer(this);
+    settingsSaveTimer_->setSingleShot(true);
+    settingsSaveTimer_->setInterval(300);
+    connect(settingsSaveTimer_, &QTimer::timeout, this, [this] { saveSettings(); });
+}
 
 void SymbolController::loadSettings() {
     watchlist_ = {QStringLiteral("DCE.i2701"),
@@ -102,6 +107,12 @@ void SymbolController::loadSettings() {
 
     if (watchModel_ != nullptr) {
         watchModel_->setSymbols(watchlist_);
+    }
+}
+
+void SymbolController::scheduleSettingsSave() {
+    if (settingsSaveTimer_ != nullptr) {
+        settingsSaveTimer_->start();
     }
 }
 
@@ -174,24 +185,18 @@ QStringList SymbolController::searchCompletions(const QString& input, int limit)
 }
 
 const Instrument* SymbolController::findInstrument(const QString& symbol) const {
-    const auto findIn = [&symbol](const InstrumentTableModel* model) -> const Instrument* {
-        if (model == nullptr) {
-            return nullptr;
+    // Row lookup is O(1); this function is called on every quote repaint.
+    if (futuresModel_ != nullptr) {
+        if (const auto* instrument = futuresModel_->instrument(symbol)) {
+            return instrument;
         }
-        for (const auto& instrument : model->instruments()) {
-            if (instrument.instrumentId == symbol) {
-                return &instrument;
-            }
+    }
+    if (callsModel_ != nullptr) {
+        if (const auto* instrument = callsModel_->instrument(symbol)) {
+            return instrument;
         }
-        return nullptr;
-    };
-    if (const auto* instrument = findIn(futuresModel_)) {
-        return instrument;
     }
-    if (const auto* instrument = findIn(callsModel_)) {
-        return instrument;
-    }
-    return findIn(putsModel_);
+    return putsModel_ != nullptr ? putsModel_->instrument(symbol) : nullptr;
 }
 
 QString SymbolController::addSymbolFromInput(const QString& input) {
@@ -216,7 +221,7 @@ void SymbolController::addSymbolToWatchlist(const QString& symbol, bool request)
         if (watchModel_ != nullptr) {
             watchModel_->setSymbols(watchlist_);
         }
-        saveSettings();
+        scheduleSettingsSave();
         emit watchlistChanged();
         row = watchlist_.indexOf(trimmed);
     }
@@ -241,7 +246,7 @@ void SymbolController::selectSymbol(const QString& symbol) {
         }
         emit watchlistChanged();
     }
-    saveSettings();
+    scheduleSettingsSave();
 
     if (marketStore_ != nullptr && marketStore_->quote(symbol) == nullptr) {
         const Quote fallback = catalogFallbackQuote(symbol);
@@ -267,7 +272,7 @@ void SymbolController::setInterval(qint64 durationNs, const QString& label) {
     }
     selectedDurationNs_ = durationNs;
     selectedInterval_   = label;
-    saveSettings();
+    scheduleSettingsSave();
     emit intervalChanged(durationNs, label);
     updateSubscription();
     if (nodeClient_ != nullptr && nodeClient_->state() != NodeClient::State::Disconnected) {

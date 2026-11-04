@@ -50,6 +50,7 @@ public:
     void    setInstrumentsIncremental(const QVector<Instrument>& instruments, int chunkSize = 256);
     void    applyQuotes(const QVector<Quote>& quotes);
     QString symbolAt(int row) const;
+    const Instrument*          instrument(const QString& symbol) const;
     const QVector<Instrument>& instruments() const { return instruments_; }
 
 signals:

@@ -5,6 +5,8 @@
 #include <QObject>
 #include <QStringList>
 
+class QTimer;
+
 namespace tqsdk::ui {
 
 class InstrumentTableModel;
@@ -37,8 +39,8 @@ public:
     QString     selectedInterval() const { return selectedInterval_; }
     qint64      selectedDurationNs() const { return selectedDurationNs_; }
 
-    QString resolveSymbol(const QString& input) const;
-    QStringList searchCompletions(const QString& input, int limit = 20) const;
+    QString           resolveSymbol(const QString& input) const;
+    QStringList       searchCompletions(const QString& input, int limit = 20) const;
     const Instrument* findInstrument(const QString& symbol) const;
 
     /// 返回解析后的 symbol；无匹配返回空。调用方负责状态栏提示。
@@ -57,15 +59,17 @@ signals:
     void statusMessage(const QString& message, int timeoutMs);
 
 private:
-    void updateSubscription();
+    void  updateSubscription();
+    void  scheduleSettingsSave();
     Quote catalogFallbackQuote(const QString& symbol) const;
 
-    NodeClient*           nodeClient_ = nullptr;
-    QuoteTableModel*      watchModel_ = nullptr;
-    InstrumentTableModel* futuresModel_ = nullptr;
-    InstrumentTableModel* callsModel_ = nullptr;
-    InstrumentTableModel* putsModel_ = nullptr;
-    MarketStore*          marketStore_ = nullptr;
+    NodeClient*           nodeClient_        = nullptr;
+    QuoteTableModel*      watchModel_        = nullptr;
+    InstrumentTableModel* futuresModel_      = nullptr;
+    InstrumentTableModel* callsModel_        = nullptr;
+    InstrumentTableModel* putsModel_         = nullptr;
+    MarketStore*          marketStore_       = nullptr;
+    QTimer*               settingsSaveTimer_ = nullptr;
 
     QStringList watchlist_;
     QString     selectedSymbol_     = QStringLiteral("SHFE.rb2701");

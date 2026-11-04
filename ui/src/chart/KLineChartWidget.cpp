@@ -5,6 +5,7 @@
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPen>
+#include <QTimer>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -43,6 +44,15 @@ KLineChartWidget::KLineChartWidget(QWidget* parent)
     : QWidget(parent) {
     setMinimumSize(420, 280);
     setMouseTracking(true);
+    crosshairTimer_ = new QTimer(this);
+    crosshairTimer_->setSingleShot(true);
+    crosshairTimer_->setInterval(16);
+    connect(crosshairTimer_, &QTimer::timeout, this, [this] {
+        if (crosshair_ != pendingCrosshair_) {
+            crosshair_ = pendingCrosshair_;
+            update();
+        }
+    });
     setAutoFillBackground(false);
     setToolTip(tr("滚轮缩放，按住左键左右拖动"));
     setCursor(Qt::OpenHandCursor);
@@ -59,7 +69,7 @@ void KLineChartWidget::setBars(const QVector<KlineBar>& bars) {
         visibleStart_ = std::max(0, static_cast<int>(bars_.size()) - visibleBarCount());
     }
     clampView();
-    update();
+    invalidateCache();
 }
 
 void KLineChartWidget::setViewport(int visibleCount, int visibleStart, bool followLatest) {
@@ -71,7 +81,7 @@ void KLineChartWidget::setViewport(int visibleCount, int visibleStart, bool foll
         visibleStart_ = std::max(0, visibleStart);
     }
     clampView();
-    update();
+    invalidateCache();
 }
 
 void KLineChartWidget::setQuote(const Quote& quote) {
@@ -92,7 +102,7 @@ void KLineChartWidget::setTitle(const QString& symbol, const QString& interval) 
 
 void KLineChartWidget::setTheme(bool dark) {
     dark_ = dark;
-    update();
+    invalidateCache();
 }
 
 QSize KLineChartWidget::sizeHint() const {
@@ -134,29 +144,22 @@ void KLineChartWidget::clampView() {
     followLatest_ = visibleStart_ + count >= bars_.size();
 }
 
-void KLineChartWidget::paintEvent(QPaintEvent* event) {
-    Q_UNUSED(event);
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing, true);
+void KLineChartWidget::invalidateCache() {
+    cacheDirty_ = true;
+    update();
+}
 
-    const QColor background = dark_ ? QColor("#0d1117") : QColor("#f7f9fc");
-    painter.fillRect(rect(), background);
-    drawHeader(painter);
-
+bool KLineChartWidget::visiblePriceRange(double& minPrice, double& maxPrice) const {
     if (bars_.isEmpty()) {
-        drawEmpty(painter);
-        return;
+        return false;
     }
-
     const int first = firstVisibleBar();
     const int count = visibleBarCount();
     if (count <= 0) {
-        drawEmpty(painter);
-        return;
+        return false;
     }
-
-    double minPrice = bars_.at(first).low;
-    double maxPrice = bars_.at(first).high;
+    minPrice = bars_.at(first).low;
+    maxPrice = bars_.at(first).high;
     for (int i = first; i < first + count; ++i) {
         const auto& bar = bars_.at(i);
         if (finite(bar.low)) {
@@ -167,8 +170,7 @@ void KLineChartWidget::paintEvent(QPaintEvent* event) {
         }
     }
     if (!finite(minPrice) || !finite(maxPrice)) {
-        drawEmpty(painter);
-        return;
+        return false;
     }
     if (maxPrice <= minPrice) {
         maxPrice = minPrice + 1.0;
@@ -177,13 +179,63 @@ void KLineChartWidget::paintEvent(QPaintEvent* event) {
     const double padding = (maxPrice - minPrice) * 0.05;
     minPrice -= padding;
     maxPrice += padding;
+    return true;
+}
 
-    const QRectF plot = plotArea();
-    const QRectF volumePlot(plot.left(), plot.bottom() + 8.0, plot.width(), 64.0);
-    drawGrid(painter, plot, minPrice, maxPrice);
-    drawCandles(painter, plot, minPrice, maxPrice, first, count);
-    drawVolume(painter, volumePlot, first, count);
-    drawCrosshair(painter, plot, minPrice, maxPrice);
+void KLineChartWidget::renderCache() {
+    if (size().isEmpty()) {
+        return;
+    }
+    const qreal dpr       = devicePixelRatioF();
+    const QSize pixelSize = size() * dpr;
+    QPixmap     pixmap(pixelSize);
+    pixmap.setDevicePixelRatio(dpr);
+    pixmap.fill(dark_ ? QColor("#0d1117") : QColor("#f7f9fc"));
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    double    minPrice = 0.0;
+    double    maxPrice = 0.0;
+    const int first    = firstVisibleBar();
+    const int count    = visibleBarCount();
+    if (!visiblePriceRange(minPrice, maxPrice) || count <= 0) {
+        drawEmpty(painter);
+    } else {
+        const QRectF plot = plotArea();
+        const QRectF volumePlot(plot.left(), plot.bottom() + 8.0, plot.width(), 64.0);
+        drawGrid(painter, plot, minPrice, maxPrice);
+        drawCandles(painter, plot, minPrice, maxPrice, first, count);
+        drawVolume(painter, volumePlot, first, count);
+    }
+
+    chartCache_ = pixmap;
+    cacheDirty_ = false;
+}
+
+void KLineChartWidget::paintEvent(QPaintEvent* event) {
+    Q_UNUSED(event);
+    if (cacheDirty_ || chartCache_.size() != size() * devicePixelRatioF()) {
+        renderCache();
+    }
+
+    QPainter painter(this);
+    if (!chartCache_.isNull()) {
+        painter.drawPixmap(0, 0, chartCache_);
+    }
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    // Header and crosshair are cheap overlays; only candles/grid/volume are
+    // cached. Thus a quote tick repaints text without re-rasterising the chart.
+    drawHeader(painter);
+    if (bars_.isEmpty()) {
+        return;
+    }
+    double minPrice = 0.0;
+    double maxPrice = 0.0;
+    if (!visiblePriceRange(minPrice, maxPrice)) {
+        return;
+    }
+    drawCrosshair(painter, plotArea(), minPrice, maxPrice);
 }
 
 void KLineChartWidget::drawHeader(QPainter& painter) {
@@ -400,13 +452,15 @@ void KLineChartWidget::mouseMoveEvent(QMouseEvent* event) {
         visibleStart_ = dragStart_ - static_cast<int>(std::lround(static_cast<double>(dx) / step));
         clampView();
         followLatest_ = false;
-        update();
+        invalidateCache();
         emit viewportChanged();
         event->accept();
         return;
     }
-    crosshair_ = event->position().toPoint();
-    update();
+    pendingCrosshair_ = event->position().toPoint();
+    if (crosshairTimer_ != nullptr && !crosshairTimer_->isActive()) {
+        crosshairTimer_->start();
+    }
     QWidget::mouseMoveEvent(event);
 }
 
@@ -459,13 +513,17 @@ void KLineChartWidget::wheelEvent(QWheelEvent* event) {
     visibleStart_       = anchor - static_cast<int>(std::lround(ratio * newCount));
     followLatest_       = false;
     clampView();
-    update();
+    invalidateCache();
     emit viewportChanged();
     event->accept();
 }
 
 void KLineChartWidget::leaveEvent(QEvent* event) {
-    crosshair_ = QPoint(-1, -1);
+    if (crosshairTimer_ != nullptr) {
+        crosshairTimer_->stop();
+    }
+    crosshair_        = QPoint(-1, -1);
+    pendingCrosshair_ = QPoint(-1, -1);
     if (!dragging_) {
         setCursor(Qt::OpenHandCursor);
     }

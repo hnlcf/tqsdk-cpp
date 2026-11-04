@@ -104,12 +104,21 @@ void MainWindow::buildUi() {
     chartRefreshTimer_->setInterval(500);
     connect(chartRefreshTimer_, &QTimer::timeout, this, &MainWindow::flushChartBars);
 
-    connect(
-        workspace_, &WorkspaceLayout::watchSymbolActivated, this, [this](const QString& symbol) {
-            if (symbol != symbolController_->selectedSymbol()) {
-                symbolController_->selectSymbol(symbol);
-            }
-        });
+    selectionTimer_ = new QTimer(this);
+    selectionTimer_->setSingleShot(true);
+    selectionTimer_->setInterval(120);
+    connect(selectionTimer_, &QTimer::timeout, this, [this] {
+        const QString symbol = pendingSelection_;
+        pendingSelection_.clear();
+        if (!symbol.isEmpty() && symbol != symbolController_->selectedSymbol()) {
+            symbolController_->selectSymbol(symbol);
+        }
+    });
+
+    connect(workspace_,
+            &WorkspaceLayout::watchSymbolActivated,
+            this,
+            [this](const QString& symbol) { scheduleSymbolSelection(symbol); });
     connect(workspace_,
             &WorkspaceLayout::futuresSymbolActivated,
             this,
@@ -411,7 +420,21 @@ void MainWindow::updateSearchCompletions(const QString& input) {
     }
 }
 
+void MainWindow::scheduleSymbolSelection(const QString& symbol) {
+    if (symbol.isEmpty() || symbol == symbolController_->selectedSymbol()) {
+        return;
+    }
+    pendingSelection_ = symbol;
+    if (selectionTimer_ != nullptr && !selectionTimer_->isActive()) {
+        selectionTimer_->start();
+    }
+}
+
 void MainWindow::applySelectedSymbol(const QString& symbol) {
+    if (selectionTimer_ != nullptr) {
+        selectionTimer_->stop();
+    }
+    pendingSelection_.clear();
     workspace_->orderTicket()->setSymbol(symbol);
     tapeModel_->clear();
     workspace_->quotePanel()->setSymbol(symbol);
