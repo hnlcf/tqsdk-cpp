@@ -59,6 +59,7 @@ signals:
 
 private:
     void applyQuotesToVisibleTables();
+    void applyQuotesToVisibleTables(const QVector<Quote>& quotes);
 
     NodeClient*           nodeClient_     = nullptr;
     MarketStore*          marketStore_    = nullptr;

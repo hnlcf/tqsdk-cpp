@@ -2,10 +2,15 @@
 #include "chart/KLineChartWidget.h"
 #include "net/NodeClient.h"
 
+#include <QElapsedTimer>
 #include <QLabel>
 #include <QSettings>
+#include <QTableView>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QtTest>
+
+#include <algorithm>
 
 using namespace tqsdk::ui;
 
@@ -52,6 +57,7 @@ private slots:
     void closingWindowPersistsChartState();
     void liveQuoteSurvivesCatalogFallback();
     void latestKlineIsBuffered();
+    void eventLoopRemainsResponsiveUnderBurst();
     void cleanup();
 
 private:
@@ -176,6 +182,81 @@ void MainWindowTest::latestKlineIsBuffered() {
     QCOMPARE(chart->barCount(), 0);
     QTest::qWait(550);
     QCOMPARE(chart->barCount(), 1);
+}
+
+void MainWindowTest::eventLoopRemainsResponsiveUnderBurst() {
+    QStringList symbols;
+    for (int i = 0; i < 16; ++i) {
+        symbols.push_back(QStringLiteral("SHFE.rb%1").arg(2701 + i));
+    }
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("ui/watchlist"), symbols);
+    settings.setValue(QStringLiteral("ui/chart/symbol"), symbols.front());
+    settings.setValue(QStringLiteral("ui/chart/durationNs"), qint64(60'000'000'000LL));
+    settings.sync();
+
+    FakeNodeClient client;
+    MainWindow     window(&client);
+    window.resize(1920, 1080);
+    window.show();
+    QTest::qWait(30);
+
+    auto* watch = window.findChild<QTableView*>(QStringLiteral("watchTable"));
+    QVERIFY(watch != nullptr);
+
+    QElapsedTimer loopClock;
+    loopClock.start();
+    qint64 lastProbe = loopClock.elapsed();
+    qint64 maxGap    = 0;
+    QTimer probe;
+    probe.setInterval(10);
+    connect(&probe, &QTimer::timeout, &probe, [&] {
+        const qint64 now = loopClock.elapsed();
+        maxGap           = std::max(maxGap, now - lastProbe - 10);
+        lastProbe        = now;
+    });
+    probe.start();
+
+    int    row = 0;
+    QTimer clicks;
+    clicks.setInterval(70);
+    connect(&clicks, &QTimer::timeout, &clicks, [&] {
+        if (!symbols.isEmpty()) {
+            watch->selectRow(row % symbols.size());
+            ++row;
+        }
+    });
+    clicks.start();
+
+    QTimer quotes;
+    quotes.setInterval(10);
+    int tick = 0;
+    connect(&quotes, &QTimer::timeout, &quotes, [&] {
+        QVector<Quote> batch;
+        batch.reserve(symbols.size());
+        for (const auto& symbol : symbols) {
+            Quote quote;
+            quote.instrumentId  = symbol;
+            quote.lastPrice     = 3000.0 + (tick % 20);
+            quote.bidPrice1     = quote.lastPrice - 1.0;
+            quote.askPrice1     = quote.lastPrice + 1.0;
+            quote.preSettlement = 2990.0;
+            quote.volume        = 1000 + tick;
+            quote.datetime      = 1'793'770'642'000'000'000LL + tick * 1'000'000;
+            batch.push_back(quote);
+        }
+        ++tick;
+        client.publishQuotes(batch);
+    });
+    quotes.start();
+
+    QTest::qWait(2200);
+    quotes.stop();
+    clicks.stop();
+    probe.stop();
+
+    QVERIFY2(maxGap < 500, qPrintable(QStringLiteral("max event loop gap: %1 ms").arg(maxGap)));
 }
 
 void MainWindowTest::cleanup() {

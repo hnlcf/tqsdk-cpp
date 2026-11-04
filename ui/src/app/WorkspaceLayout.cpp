@@ -11,8 +11,8 @@
 #include "widgets/TradeTapePanel.h"
 #include "widgets/TradingPanels.h"
 
-#include <QAction>
 #include <QAbstractItemModel>
+#include <QAction>
 #include <QDialog>
 #include <QDockWidget>
 #include <QEvent>
@@ -94,6 +94,7 @@ void WorkspaceLayout::build() {
     auto* watchPanel = new TablePanel(watchModel_, window_);
     watchPanel->installColumnMenu(QStringLiteral("watchlist"));
     watchTable_ = watchPanel->view();
+    watchTable_->setObjectName(QStringLiteral("watchTable"));
     connect(watchTable_->selectionModel(),
             &QItemSelectionModel::currentRowChanged,
             this,

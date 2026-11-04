@@ -48,9 +48,15 @@ KLineChartWidget::KLineChartWidget(QWidget* parent)
     crosshairTimer_->setSingleShot(true);
     crosshairTimer_->setInterval(16);
     connect(crosshairTimer_, &QTimer::timeout, this, [this] {
-        if (crosshair_ != pendingCrosshair_) {
-            crosshair_ = pendingCrosshair_;
-            update();
+        if (crosshair_ == pendingCrosshair_) {
+            return;
+        }
+        if (crosshair_.x() >= 0) {
+            update(crosshairDamageRect(crosshair_));
+        }
+        crosshair_ = pendingCrosshair_;
+        if (crosshair_.x() >= 0) {
+            update(crosshairDamageRect(crosshair_));
         }
     });
     setAutoFillBackground(false);
@@ -91,13 +97,13 @@ void KLineChartWidget::setQuote(const Quote& quote) {
         return;
     }
     quote_ = quote;
-    update();
+    update(headerDamageRect());
 }
 
 void KLineChartWidget::setTitle(const QString& symbol, const QString& interval) {
     symbol_   = symbol;
     interval_ = interval;
-    update();
+    update(headerDamageRect());
 }
 
 void KLineChartWidget::setTheme(bool dark) {
@@ -144,6 +150,23 @@ void KLineChartWidget::clampView() {
     followLatest_ = visibleStart_ + count >= bars_.size();
 }
 
+QRect KLineChartWidget::headerDamageRect() const {
+    return QRect(0, 0, width(), 56);
+}
+
+QRect KLineChartWidget::crosshairDamageRect(const QPoint& point) const {
+    if (point.x() < 0 || point.y() < 0) {
+        return {};
+    }
+    const QRectF plot = plotArea();
+    QRect        damage(
+        static_cast<int>(plot.left()), point.y() - 10, static_cast<int>(plot.width()) + 84, 20);
+    damage = damage.united(QRect(
+        point.x() - 10, static_cast<int>(plot.top()), 20, static_cast<int>(plot.height()) + 84));
+    damage = damage.united(QRect(point.x() - 60, height() - 24, 120, 24));
+    return damage.adjusted(-2, -2, 2, 2);
+}
+
 void KLineChartWidget::invalidateCache() {
     cacheDirty_ = true;
     update();
@@ -188,11 +211,13 @@ void KLineChartWidget::renderCache() {
     }
     const qreal dpr       = devicePixelRatioF();
     const QSize pixelSize = size() * dpr;
-    QPixmap     pixmap(pixelSize);
-    pixmap.setDevicePixelRatio(dpr);
-    pixmap.fill(dark_ ? QColor("#0d1117") : QColor("#f7f9fc"));
+    if (chartCache_.size() != pixelSize || chartCache_.devicePixelRatio() != dpr) {
+        chartCache_ = QPixmap(pixelSize);
+        chartCache_.setDevicePixelRatio(dpr);
+    }
+    chartCache_.fill(dark_ ? QColor("#0d1117") : QColor("#f7f9fc"));
 
-    QPainter painter(&pixmap);
+    QPainter painter(&chartCache_);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
     double    minPrice = 0.0;
@@ -209,25 +234,28 @@ void KLineChartWidget::renderCache() {
         drawVolume(painter, volumePlot, first, count);
     }
 
-    chartCache_ = pixmap;
     cacheDirty_ = false;
 }
 
 void KLineChartWidget::paintEvent(QPaintEvent* event) {
-    Q_UNUSED(event);
     if (cacheDirty_ || chartCache_.size() != size() * devicePixelRatioF()) {
         renderCache();
     }
 
     QPainter painter(this);
+    painter.setClipRegion(event->region());
     if (!chartCache_.isNull()) {
         painter.drawPixmap(0, 0, chartCache_);
     }
     painter.setRenderHint(QPainter::Antialiasing, true);
     // Header and crosshair are cheap overlays; only candles/grid/volume are
     // cached. Thus a quote tick repaints text without re-rasterising the chart.
-    drawHeader(painter);
-    if (bars_.isEmpty()) {
+    const QRect damaged = event->rect();
+    if (damaged.intersects(headerDamageRect())) {
+        drawHeader(painter);
+    }
+    if (bars_.isEmpty() || crosshair_.x() < 0 ||
+        !damaged.intersects(crosshairDamageRect(crosshair_))) {
         return;
     }
     double minPrice = 0.0;
@@ -522,12 +550,14 @@ void KLineChartWidget::leaveEvent(QEvent* event) {
     if (crosshairTimer_ != nullptr) {
         crosshairTimer_->stop();
     }
+    if (crosshair_.x() >= 0) {
+        update(crosshairDamageRect(crosshair_));
+    }
     crosshair_        = QPoint(-1, -1);
     pendingCrosshair_ = QPoint(-1, -1);
     if (!dragging_) {
         setCursor(Qt::OpenHandCursor);
     }
-    update();
     QWidget::leaveEvent(event);
 }
 

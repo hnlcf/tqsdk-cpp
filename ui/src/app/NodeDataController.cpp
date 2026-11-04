@@ -34,45 +34,50 @@ NodeDataController::NodeDataController(NodeClient*           nodeClient,
         return;
     }
 
-    connect(nodeClient_, &NodeClient::stateChanged, this,
+    connect(nodeClient_,
+            &NodeClient::stateChanged,
+            this,
             [this](NodeClient::State state, const QString& message) {
                 emit stateChanged(state, message);
             });
-    connect(nodeClient_, &NodeClient::errorOccurred, this,
-            &NodeDataController::errorOccurred);
-    connect(nodeClient_, &NodeClient::quotesUpdated, this,
-            [this](const QVector<Quote>& quotes) {
-                for (const auto& quote : quotes) {
-                    if (quote.instrumentId.isEmpty()) {
-                        continue;
-                    }
-                    auto it = latestQuotes_.find(quote.instrumentId);
-                    if (it == latestQuotes_.end()) {
-                        latestQuotes_.insert(quote.instrumentId, quote);
-                    } else {
-                        *it = mergeQuote(*it, quote);
-                    }
-                }
-                if (marketStore_ != nullptr) {
-                    marketStore_->applyQuotes(quotes);
-                }
-                if (watchModel_ != nullptr) {
-                    watchModel_->applyQuotes(quotes);
-                }
-                applyQuotesToVisibleTables();
-                emit quotesApplied();
-            });
-    connect(nodeClient_, &NodeClient::klineUpdated, this,
+    connect(nodeClient_, &NodeClient::errorOccurred, this, &NodeDataController::errorOccurred);
+    connect(nodeClient_, &NodeClient::quotesUpdated, this, [this](const QVector<Quote>& quotes) {
+        for (const auto& quote : quotes) {
+            if (quote.instrumentId.isEmpty()) {
+                continue;
+            }
+            auto it = latestQuotes_.find(quote.instrumentId);
+            if (it == latestQuotes_.end()) {
+                latestQuotes_.insert(quote.instrumentId, quote);
+            } else {
+                *it = mergeQuote(*it, quote);
+            }
+        }
+        if (marketStore_ != nullptr) {
+            marketStore_->applyQuotes(quotes);
+        }
+        if (watchModel_ != nullptr) {
+            watchModel_->applyQuotes(quotes);
+        }
+        applyQuotesToVisibleTables(quotes);
+        emit quotesApplied();
+    });
+    connect(nodeClient_,
+            &NodeClient::klineUpdated,
+            this,
             [this](const QString& symbol, qint64 durationNs, const KlineFrame& frame) {
                 if (marketStore_ != nullptr) {
                     marketStore_->applyKline(symbol, durationNs, frame);
                 }
                 if (symbol == selectedSymbol_ && durationNs == selectedDurationNs_ &&
                     marketStore_ != nullptr) {
-                    emit klineSeriesChanged(symbol, durationNs, marketStore_->bars(symbol, durationNs));
+                    emit klineSeriesChanged(
+                        symbol, durationNs, marketStore_->bars(symbol, durationNs));
                 }
             });
-    connect(nodeClient_, &NodeClient::klineHistoryLoaded, this,
+    connect(nodeClient_,
+            &NodeClient::klineHistoryLoaded,
+            this,
             [this](const QString& symbol, qint64 durationNs, const QVector<KlineBar>& bars) {
                 if (marketStore_ != nullptr) {
                     KlineFrame frame;
@@ -84,7 +89,9 @@ NodeDataController::NodeDataController(NodeClient*           nodeClient,
                     emit klineSeriesChanged(symbol, durationNs, bars);
                 }
             });
-    connect(nodeClient_, &NodeClient::catalogLoaded, this,
+    connect(nodeClient_,
+            &NodeClient::catalogLoaded,
+            this,
             [this](const QVector<Instrument>& instruments) {
                 if (futuresModel_ != nullptr) {
                     futuresModel_->setInstrumentsIncremental(instruments);
@@ -100,31 +107,30 @@ NodeDataController::NodeDataController(NodeClient*           nodeClient,
         }
         emit optionChainLoaded(chain);
     });
-    connect(nodeClient_, &NodeClient::accountUpdated, this,
-            &NodeDataController::accountChanged);
-    connect(nodeClient_, &NodeClient::positionsUpdated, this,
+    connect(nodeClient_, &NodeClient::accountUpdated, this, &NodeDataController::accountChanged);
+    connect(nodeClient_,
+            &NodeClient::positionsUpdated,
+            this,
             [this](const QVector<Position>& positions) {
                 if (positionsModel_ != nullptr) {
                     positionsModel_->applyPositions(positions);
                 }
                 emit positionsChanged();
             });
-    connect(nodeClient_, &NodeClient::ordersUpdated, this,
-            [this](const QVector<Order>& orders) {
-                if (ordersModel_ != nullptr) {
-                    ordersModel_->applyOrders(orders);
-                }
-                emit ordersChanged();
-            });
-    connect(nodeClient_, &NodeClient::tradesUpdated, this,
-            [this](const QVector<Trade>& trades) {
-                if (tradesModel_ != nullptr) {
-                    tradesModel_->applyTrades(trades);
-                }
-                emit tradesChanged();
-            });
-    connect(nodeClient_, &NodeClient::orderAckReceived, this,
-            &NodeDataController::orderAckReceived);
+    connect(nodeClient_, &NodeClient::ordersUpdated, this, [this](const QVector<Order>& orders) {
+        if (ordersModel_ != nullptr) {
+            ordersModel_->applyOrders(orders);
+        }
+        emit ordersChanged();
+    });
+    connect(nodeClient_, &NodeClient::tradesUpdated, this, [this](const QVector<Trade>& trades) {
+        if (tradesModel_ != nullptr) {
+            tradesModel_->applyTrades(trades);
+        }
+        emit tradesChanged();
+    });
+    connect(
+        nodeClient_, &NodeClient::orderAckReceived, this, &NodeDataController::orderAckReceived);
 }
 
 void NodeDataController::setSelectedContract(const QString& symbol, qint64 durationNs) {
@@ -150,7 +156,13 @@ void NodeDataController::applyQuotesToVisibleTables() {
     if (latestQuotes_.isEmpty()) {
         return;
     }
-    const QList<Quote> quotes = latestQuotes_.values();
+    applyQuotesToVisibleTables(latestQuotes_.values());
+}
+
+void NodeDataController::applyQuotesToVisibleTables(const QVector<Quote>& quotes) {
+    if (quotes.isEmpty()) {
+        return;
+    }
     if (futuresVisible_ && futuresModel_ != nullptr) {
         futuresModel_->applyQuotes(quotes);
     }

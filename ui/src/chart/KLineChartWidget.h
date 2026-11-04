@@ -62,6 +62,8 @@ private:
     void   drawHeader(QPainter& painter);
     void   drawEmpty(QPainter& painter);
     bool   visiblePriceRange(double& minPrice, double& maxPrice) const;
+    QRect  headerDamageRect() const;
+    QRect  crosshairDamageRect(const QPoint& point) const;
     void   invalidateCache();
     void   renderCache();
     void   drawGrid(QPainter& painter, const QRectF& plot, double minPrice, double maxPrice) const;
