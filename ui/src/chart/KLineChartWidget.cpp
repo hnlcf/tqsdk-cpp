@@ -64,8 +64,12 @@ void KLineChartWidget::setBars(const QVector<KlineBar>& bars) {
 
 void KLineChartWidget::setViewport(int visibleCount, int visibleStart, bool followLatest) {
     visibleCount_ = std::clamp(visibleCount, 1, 2000);
-    visibleStart_ = std::max(0, visibleStart);
     followLatest_ = followLatest;
+    if (followLatest_) {
+        visibleStart_ = std::max(0, static_cast<int>(bars_.size()) - visibleBarCount());
+    } else {
+        visibleStart_ = std::max(0, visibleStart);
+    }
     clampView();
     update();
 }

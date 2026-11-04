@@ -98,6 +98,8 @@ void TablePanel::installColumnMenu(const QString& settingsKey) {
         header, &QHeaderView::sectionResized, this, [this](int, int, int) { saveColumnState(); });
 }
 
+// 恢复顺序/宽度/隐藏状态。QSignalBlocker + restoring_ 防止恢复过程本身
+// 触发 sectionMoved/sectionResized 再次写入不完整的中间状态。
 void TablePanel::restoreColumnState() {
     if (view_ == nullptr || view_->model() == nullptr || settingsKey_.isEmpty()) {
         return;
@@ -143,6 +145,7 @@ void TablePanel::restoreColumnState() {
     restoring_ = false;
 }
 
+// 列状态以 logical index 保存，因此列顺序变化后宽度/隐藏属性仍跟随原列。
 void TablePanel::saveColumnState() {
     if (view_ == nullptr || view_->model() == nullptr || settingsKey_.isEmpty() || restoring_) {
         return;

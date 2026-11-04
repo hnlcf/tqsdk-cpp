@@ -9,6 +9,11 @@
 
 namespace tqsdk::ui {
 
+/// 合约/期货/期权列表模型。
+///
+/// quotes_ 保存按 symbol 合并后的最新 quote；setInstruments() 建立
+/// symbol -> row 索引，applyQuotes() 只对变化的行发 dataChanged，
+/// 避免 UI 线程每次行情都扫描全表。
 class InstrumentTableModel : public QAbstractTableModel {
     Q_OBJECT
 

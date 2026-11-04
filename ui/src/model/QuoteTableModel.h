@@ -8,6 +8,10 @@
 
 namespace tqsdk::ui {
 
+/// 自选列表模型。
+///
+/// 以用户 watchlist 的行顺序为唯一顺序，quote 数据按 symbol 合并；
+/// 涨跌、涨幅和增仓都在 data() 中由最新快照计算，不依赖服务端额外字段。
 class QuoteTableModel : public QAbstractTableModel {
     Q_OBJECT
 

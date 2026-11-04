@@ -428,7 +428,7 @@ CTP 接入见 [`docs/CTP.md`](./CTP.md)；
 标准合约目录/期权元数据见 [`docs/INSTRUMENTS.md`](./INSTRUMENTS.md)；
 K 线 SQLite 历史缓存见 [`docs/KLINE_CACHE.md`](./KLINE_CACHE.md)；
 架构与代码质量审查见 [`docs/ARCHITECTURE_REVIEW.md`](./ARCHITECTURE_REVIEW.md)；
-Qt 桌面 UI 设计见 [`docs/UI_QT.md`](./UI_QT.md)；
+Qt 桌面 UI 设计见 [`docs/UI_QT.md`](./UI_QT.md)，内部架构/组件/数据流见 [`docs/UI_ARCHITECTURE.md`](./UI_ARCHITECTURE.md)；
 旧的 Web/Tauri 调研仅保留为历史参考 [`docs/WEB_FRONTEND.md`](./WEB_FRONTEND.md)。
 
 ### 源码地图

@@ -206,6 +206,8 @@ MainWindow::MainWindow(NodeClient* nodeClient, QWidget* parent)
     selectSymbol(selectedSymbol_);
 }
 
+// 构建顺序很重要：先建 dock，再建 view menu，最后恢复 QMainWindow state。
+// QDockWidget 必须在 restoreState() 之前存在，否则保存的尺寸/浮动状态无法匹配。
 void MainWindow::buildUi() {
     buildToolbar();
     buildWorkspace();
@@ -217,6 +219,7 @@ void MainWindow::buildUi() {
 
 void MainWindow::buildToolbar() {
     auto* toolbar = addToolBar(tr("主工具栏"));
+    toolbar->setObjectName(QStringLiteral("mainToolBar"));
     toolbar->setMovable(false);
     toolbar->setIconSize(QSize(18, 18));
 
@@ -403,6 +406,10 @@ void MainWindow::restoreWorkspace() {
     }
 }
 
+// 持久化分两类：
+// - saveState()/saveGeometry() 保存 QMainWindow 和 dock 的几何状态；
+// - ui/chart/* 保存中央图表自身的合约、周期和视口。
+// 表格列状态由 TablePanel 自己按 ui/columns/* 保存。
 void MainWindow::saveWorkspace() {
     QSettings settings;
     settings.setValue(QStringLiteral("ui/workspaceState"), saveState());
@@ -842,6 +849,8 @@ void MainWindow::connectNode() {
         }
     });
 
+    // quote/kline 已由 worker 解析并合帧；这里只做 UI 状态应用。
+    // futures/options 不可见时只更新缓存，避免隐藏的大表参与每帧刷新。
     connect(nodeClient_, &NodeClient::quotesUpdated, this, [this](const QVector<Quote>& quotes) {
         for (const auto& quote : quotes) {
             if (quote.instrumentId.isEmpty()) {

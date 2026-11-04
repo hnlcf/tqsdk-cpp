@@ -124,4 +124,76 @@ if(TQSDK_BUILD_UI_TESTS)
     )
     add_test(NAME tqsdk-ui-parser COMMAND tqsdk-ui-parser-tests)
 
+    qt_add_executable(tqsdk-ui-chart-tests
+        tests/ChartWidgetTest.cpp
+        src/chart/KLineChartWidget.cpp
+        src/chart/KLineChartWidget.h
+        src/net/Protocol.cpp
+        src/net/Protocol.h
+    )
+    target_include_directories(tqsdk-ui-chart-tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(tqsdk-ui-chart-tests PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        Qt6::Test
+    )
+    qt_import_plugins(tqsdk-ui-chart-tests INCLUDE Qt6::QOffscreenIntegrationPlugin)
+    add_test(NAME tqsdk-ui-chart COMMAND tqsdk-ui-chart-tests)
+    set_tests_properties(tqsdk-ui-chart PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    qt_add_executable(tqsdk-ui-table-tests
+        tests/TablePanelTest.cpp
+        src/widgets/TablePanel.cpp
+        src/widgets/TablePanel.h
+    )
+    target_include_directories(tqsdk-ui-table-tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(tqsdk-ui-table-tests PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        Qt6::Test
+    )
+    qt_import_plugins(tqsdk-ui-table-tests INCLUDE Qt6::QOffscreenIntegrationPlugin)
+    add_test(NAME tqsdk-ui-table COMMAND tqsdk-ui-table-tests)
+    set_tests_properties(tqsdk-ui-table PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    qt_add_executable(tqsdk-ui-window-tests
+        tests/MainWindowTest.cpp
+        src/app/MainWindow.cpp
+        src/app/MainWindow.h
+        src/chart/KLineChartWidget.cpp
+        src/chart/KLineChartWidget.h
+        src/model/MarketStore.cpp
+        src/model/MarketStore.h
+        src/model/QuoteTableModel.cpp
+        src/model/QuoteTableModel.h
+        src/model/InstrumentTableModel.cpp
+        src/model/InstrumentTableModel.h
+        src/model/TradingModels.cpp
+        src/model/TradingModels.h
+        src/net/NodeClient.cpp
+        src/net/NodeClient.h
+        src/net/Protocol.cpp
+        src/net/Protocol.h
+        src/widgets/TablePanel.cpp
+        src/widgets/TablePanel.h
+    )
+    target_include_directories(tqsdk-ui-window-tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(tqsdk-ui-window-tests PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        Qt6::Test
+    )
+    qt_import_plugins(tqsdk-ui-window-tests INCLUDE Qt6::QOffscreenIntegrationPlugin)
+    add_test(NAME tqsdk-ui-window COMMAND tqsdk-ui-window-tests)
+    set_tests_properties(tqsdk-ui-window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 endif()

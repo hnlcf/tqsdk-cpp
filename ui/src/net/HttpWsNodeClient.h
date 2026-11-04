@@ -20,6 +20,10 @@ namespace tqsdk::ui {
 /// 方案 A 的首个 NodeClient 实现。
 ///
 /// 数据面全部经过 HTTP/WS；UI 不链接 tqsdk_core。
+///
+/// 线程模型：QWebSocket/QNetworkAccessManager 在 GUI 线程收包；收到的
+/// QByteArray 交给 JsonParserWorker（QThread）解析，worker 通过 queued signal
+/// 把强类型快照/增量送回 GUI。GUI 线程不执行入站 JSON 解析。
 class HttpWsNodeClient final : public NodeClient {
     Q_OBJECT
 

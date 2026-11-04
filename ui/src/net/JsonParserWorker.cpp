@@ -170,6 +170,9 @@ void JsonParserWorker::mergeKlineFrame(KlineFrame& target, const KlineFrame& inc
     }
 }
 
+// 同一个 33ms 窗口内的多个 WS/REST 增量在这里合并：
+// quote 按 symbol merge，kline 按 symbol/duration 合并，交易快照追加。
+// UI 线程只会看到一次合并后的 MarketUpdate。
 void JsonParserWorker::enqueueMarketUpdate(const MarketUpdate& update) {
     for (const auto& quote : update.quotes) {
         auto it =

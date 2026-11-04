@@ -20,13 +20,16 @@ public:
     explicit JsonParserWorker(QObject* parent = nullptr);
 
 public slots:
+    /// 停止合并定时器并丢弃 pending 数据，由 HttpWsNodeClient 析构时调用。
     void stop();
+    /// WS 原始文本 -> envelope + market update；市场 update 进入 33ms 合并队列。
     void parseWsMessage(QByteArray payload);
     void parseCatalogPayload(QByteArray payload);
     void parseKlinePayload(QByteArray payload, QString symbol, qint64 durationNs);
     void parseOptionPayload(QByteArray payload);
     void parseQuotePayload(QByteArray payload, QString fallbackSymbol);
     void parseAccountPayload(QByteArray payload);
+    /// REST 交易快照（orders/positions/trades）按 MarketUpdate 合并。
     void parseMarketPayload(QByteArray payload);
     void parseOrderAckPayload(QByteArray payload);
 

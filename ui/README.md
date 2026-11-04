@@ -3,6 +3,7 @@
 独立的 Qt 6 Widgets 桌面前端。它只通过 node 的 REST + WebSocket 获取行情/
 交易数据，**不链接 `tqsdk_core`**。
 
+内部架构、组件与数据流见 [`../docs/UI_ARCHITECTURE.md`](../docs/UI_ARCHITECTURE.md)；
 完整设计见 [`../docs/UI_QT.md`](../docs/UI_QT.md)；指标插件设计见
 [`../docs/INDICATOR_PLUGINS.md`](../docs/INDICATOR_PLUGINS.md)。
 

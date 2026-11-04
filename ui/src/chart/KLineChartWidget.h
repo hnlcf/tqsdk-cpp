@@ -17,6 +17,8 @@ namespace tqsdk::ui {
 /// 轻量 QPainter K 线控件。
 ///
 /// 支持滚轮缩放、按住左键左右拖动；头部显示最新价/涨跌/涨跌幅。
+/// 视口由 visibleCount_ / visibleStart_ / followLatest_ 描述，并通过
+/// setViewport()/viewportChanged() 与 MainWindow 的 QSettings 持久化配合。
 class KLineChartWidget : public QWidget {
     Q_OBJECT
 
@@ -27,6 +29,9 @@ public:
     void setQuote(const Quote& quote);
     void setTitle(const QString& symbol, const QString& interval = QStringLiteral("1d"));
     void setTheme(bool dark);
+
+    QString symbol() const { return symbol_; }
+    QString interval() const { return interval_; }
 
     int  visibleCount() const { return visibleCount_; }
     int  visibleStartIndex() const { return visibleStart_; }

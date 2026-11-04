@@ -9,6 +9,7 @@
 
 namespace tqsdk::ui {
 
+/// 持仓/委托/成交为交易快照模型；TradeTapeModel 为最新优先的有界分笔队列。
 class PositionTableModel final : public QAbstractTableModel {
     Q_OBJECT
 

@@ -33,6 +33,15 @@ class QuoteTableModel;
 class TradeTableModel;
 class TradeTapeModel;
 
+/// 主窗口是 UI 工作区的编排器，而不是数据源。
+///
+/// 职责：
+/// - 组装 QDockWidget 工作区和工具栏；
+/// - 连接 NodeClient 的强类型信号到模型/图表；
+/// - 处理选中合约、交易入口和布局持久化。
+///
+/// 线程约束：本类所有函数都运行在 GUI 线程；网络 JSON 解析由
+/// HttpWsNodeClient 内部的 JsonParserWorker 线程完成。
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -41,23 +50,26 @@ public:
     ~MainWindow() override = default;
 
 private:
-    void              buildUi();
-    void              buildToolbar();
-    void              buildWorkspace();
-    void              buildOrderPanel(QWidget* parent);
-    void              buildBottomDock();
-    void              buildViewMenu();
-    QDockWidget*      addModuleDock(const QString&     title,
-                                    QWidget*           content,
-                                    Qt::DockWidgetArea area,
-                                    const QString&     objectName);
-    void              resetWorkspace();
-    void              restoreWorkspace();
-    void              saveWorkspace();
-    void              scheduleWorkspaceSave();
-    void              closeEvent(QCloseEvent* event) override;
-    bool              eventFilter(QObject* watched, QEvent* event) override;
-    void              toggleChartPopout();
+    // ---- UI 构建与工作区 ----
+    void         buildUi();
+    void         buildToolbar();
+    void         buildWorkspace();
+    void         buildOrderPanel(QWidget* parent);
+    void         buildBottomDock();
+    void         buildViewMenu();
+    QDockWidget* addModuleDock(const QString&     title,
+                               QWidget*           content,
+                               Qt::DockWidgetArea area,
+                               const QString&     objectName);
+    // ---- 布局/图表状态持久化 ----
+    void resetWorkspace();
+    void restoreWorkspace();
+    void saveWorkspace();
+    void scheduleWorkspaceSave();
+    void closeEvent(QCloseEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
+    void toggleChartPopout();
+    // ---- 数据/交易事件 ----
     void              connectNode();
     void              selectSymbol(const QString& symbol);
     void              addSymbolToWatchlist(const QString& symbol, bool request = true);
@@ -75,6 +87,7 @@ private:
     void              requestOptionChain();
     void              applyTheme();
 
+    // 网络抽象与 UI 侧数据缓存；不包含后端 core 对象。
     NodeClient*            nodeClient_         = nullptr;
     MarketStore*           marketStore_        = nullptr;
     QuoteTableModel*       watchModel_         = nullptr;

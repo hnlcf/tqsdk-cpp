@@ -415,3 +415,9 @@ Qt6::WebSockets
 - **REST 轮询代替 WS**：高频行情延迟和请求量不可接受；
 - **把所有合约一次性订阅**：node 和 UI 都会被推送打满；
 - **QML 作为第一阶段主框架**：图表/表格交互成本高，先 Widgets 稳定落地。
+
+
+## 10. 内部架构与测试
+
+各组件、线程模型、数据流、持久化键和测试 target 见
+[`UI_ARCHITECTURE.md`](./UI_ARCHITECTURE.md)。
