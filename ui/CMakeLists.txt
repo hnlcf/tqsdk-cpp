@@ -40,8 +40,12 @@ set(TQSDK_UI_SOURCES
     src/widgets/QuoteSnapshotPanel.h
     src/widgets/OrderTicketPanel.cpp
     src/widgets/OrderTicketPanel.h
-    src/widgets/TradingTablesPanel.cpp
-    src/widgets/TradingTablesPanel.h
+    src/widgets/TradeTapePanel.cpp
+    src/widgets/TradeTapePanel.h
+    src/widgets/OrderBookPanel.cpp
+    src/widgets/OrderBookPanel.h
+    src/widgets/TradingPanels.cpp
+    src/widgets/TradingPanels.h
 )
 
 qt_add_executable(tqsdk-ui ${TQSDK_UI_SOURCES})
@@ -195,8 +199,12 @@ if(TQSDK_BUILD_UI_TESTS)
         src/widgets/QuoteSnapshotPanel.h
         src/widgets/OrderTicketPanel.cpp
         src/widgets/OrderTicketPanel.h
-        src/widgets/TradingTablesPanel.cpp
-        src/widgets/TradingTablesPanel.h
+        src/widgets/TradeTapePanel.cpp
+        src/widgets/TradeTapePanel.h
+        src/widgets/OrderBookPanel.cpp
+        src/widgets/OrderBookPanel.h
+        src/widgets/TradingPanels.cpp
+        src/widgets/TradingPanels.h
     )
     target_include_directories(tqsdk-ui-window-tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -217,8 +225,12 @@ if(TQSDK_BUILD_UI_TESTS)
         src/widgets/QuoteSnapshotPanel.h
         src/widgets/OrderTicketPanel.cpp
         src/widgets/OrderTicketPanel.h
-        src/widgets/TradingTablesPanel.cpp
-        src/widgets/TradingTablesPanel.h
+        src/widgets/TradingPanels.cpp
+        src/widgets/TradingPanels.h
+        src/widgets/OrderBookPanel.cpp
+        src/widgets/OrderBookPanel.h
+        src/widgets/TradeTapePanel.cpp
+        src/widgets/TradeTapePanel.h
         src/widgets/TablePanel.cpp
         src/widgets/TablePanel.h
         src/model/TradingModels.cpp

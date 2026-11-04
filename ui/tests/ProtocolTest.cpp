@@ -31,7 +31,7 @@ QJsonObject objectFrom(const char* text) {
 void ProtocolTest::parsesMarketData() {
     const auto data = objectFrom(R"({
       "quotes": {
-        "SHFE.rb2701": {"last_price":"2991.5","pre_settlement":2980,"bid_price1":2991,"ask_price1":2992,
+        "SHFE.rb2701": {"last_price":"2991.5","pre_settlement":2980,"bid_price1":2991,"ask_price1":2992,"bid_price2":2990,"ask_price2":2993,"bid_volume1":10,"ask_volume1":20,"bid_volume2":30,"ask_volume2":40,
                          "volume":702802,"open_interest":1878506,"pre_open_interest":1878000,
                          "highest":2999,"lowest":2970,"upper_limit":3100,"lower_limit":2900}
       },
@@ -64,6 +64,10 @@ void ProtocolTest::parsesMarketData() {
     QVERIFY(qFuzzyCompare(update.quotes[0].high, 2999.0));
     QVERIFY(qFuzzyCompare(update.quotes[0].low, 2970.0));
     QVERIFY(qFuzzyCompare(update.quotes[0].upperLimit, 3100.0));
+    QVERIFY(qFuzzyCompare(update.quotes[0].bidPrice2, 2990.0));
+    QVERIFY(qFuzzyCompare(update.quotes[0].askPrice2, 2993.0));
+    QVERIFY(update.quotes[0].bidVolume2 == 30);
+    QVERIFY(update.quotes[0].askVolume2 == 40);
     QVERIFY(qFuzzyCompare(update.quotes[0].lowerLimit, 2900.0));
     QVERIFY(update.quotes[0].volume == 702802);
     QVERIFY(update.klines.size() == 1);

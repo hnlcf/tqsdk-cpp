@@ -20,10 +20,16 @@ class QTimer;
 
 namespace tqsdk::ui {
 
+class AccountPanel;
 class InstrumentTableModel;
+class OrderBookPanel;
+class OrderDetailPanel;
 class OrderTicketPanel;
+class OrdersPanel;
+class PositionsPanel;
 class QuoteSnapshotPanel;
-class TradingTablesPanel;
+class TradeTapePanel;
+class TradesPanel;
 class KLineChartWidget;
 class MarketStore;
 class NodeClient;
@@ -54,7 +60,6 @@ private:
     void         buildUi();
     void         buildToolbar();
     void         buildWorkspace();
-    void         buildOrderPanel(QWidget* parent);
     void         buildBottomDock();
     void         buildViewMenu();
     QDockWidget* addModuleDock(const QString&     title,
@@ -81,6 +86,7 @@ private:
     void              updateQuotePanel();
     void              updateAccountPanel(const Account& account);
     void              updateOrderControls();
+    void              updateOrderDetail();
     void              submitOrder(Direction direction, Offset offset);
     void              cancelSelectedOrder();
     const Instrument* findInstrument(const QString& symbol) const;
@@ -109,23 +115,33 @@ private:
     QTableView*         futuresTable_      = nullptr;
     QTableView*         callsTable_        = nullptr;
     QTableView*         putsTable_         = nullptr;
-    QTableView*         tapeTable_         = nullptr;
     QLineEdit*          search_            = nullptr;
     QCompleter*         searchCompleter_   = nullptr;
     QStringListModel*   searchCompletions_ = nullptr;
     QPushButton*        addSymbolButton_   = nullptr;
     QPushButton*        componentsButton_  = nullptr;
     QuoteSnapshotPanel* quotePanel_        = nullptr;
+    OrderBookPanel*     orderBookPanel_    = nullptr;
+    TradeTapePanel*     tradeTapePanel_    = nullptr;
     OrderTicketPanel*   orderTicket_       = nullptr;
-    TradingTablesPanel* tradingTables_     = nullptr;
+    PositionsPanel*     positionsPanel_    = nullptr;
+    OrdersPanel*        ordersPanel_       = nullptr;
+    TradesPanel*        tradesPanel_       = nullptr;
+    AccountPanel*       accountPanel_      = nullptr;
+    OrderDetailPanel*   orderDetailPanel_  = nullptr;
 
-    QDockWidget* watchDock_   = nullptr;
-    QDockWidget* quoteDock_   = nullptr;
-    QDockWidget* tapeDock_    = nullptr;
-    QDockWidget* tradingDock_ = nullptr;
-    QDockWidget* orderDock_   = nullptr;
-    QDockWidget* futuresDock_ = nullptr;
-    QDockWidget* optionsDock_ = nullptr;
+    QDockWidget* watchDock_     = nullptr;
+    QDockWidget* quoteDock_     = nullptr;
+    QDockWidget* orderBookDock_ = nullptr;
+    QDockWidget* tapeDock_      = nullptr;
+    QDockWidget* positionsDock_ = nullptr;
+    QDockWidget* ordersDock_    = nullptr;
+    QDockWidget* tradesDock_    = nullptr;
+    QDockWidget* accountDock_   = nullptr;
+    QDockWidget* detailDock_    = nullptr;
+    QDockWidget* orderDock_     = nullptr;
+    QDockWidget* futuresDock_   = nullptr;
+    QDockWidget* optionsDock_   = nullptr;
 
     QLabel*      connectionLabel_ = nullptr;
     QLabel*      futuresStatus_   = nullptr;

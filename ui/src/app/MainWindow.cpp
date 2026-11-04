@@ -7,10 +7,12 @@
 #include "model/QuoteTableModel.h"
 #include "model/TradingModels.h"
 #include "net/NodeClient.h"
+#include "widgets/OrderBookPanel.h"
 #include "widgets/OrderTicketPanel.h"
 #include "widgets/QuoteSnapshotPanel.h"
 #include "widgets/TablePanel.h"
-#include "widgets/TradingTablesPanel.h"
+#include "widgets/TradeTapePanel.h"
+#include "widgets/TradingPanels.h"
 
 #include <QAbstractItemView>
 #include <QAction>
@@ -46,6 +48,10 @@
 
 namespace tqsdk::ui {
 namespace {
+
+// 工作区布局版本：dock 组件集合变化时 bump，避免旧 saveState() 把新 dock
+// 恢复到不合理的拆分位置。表格列/图表状态有独立 key，不受此版本影响。
+constexpr int kWorkspaceVersion = 3;
 
 QString themeStyle(bool dark) {
     const QString bg       = dark ? "#0d1117" : "#f5f7fb";
@@ -315,9 +321,14 @@ void MainWindow::buildViewMenu() {
     addToggle(watchDock_);
     addToggle(futuresDock_);
     addToggle(quoteDock_);
+    addToggle(orderBookDock_);
     addToggle(tapeDock_);
+    addToggle(positionsDock_);
+    addToggle(ordersDock_);
+    addToggle(tradesDock_);
+    addToggle(accountDock_);
+    addToggle(detailDock_);
     addToggle(optionsDock_);
-    addToggle(tradingDock_);
     addToggle(orderDock_);
     viewMenu->addSeparator();
     QAction* chartPopout = viewMenu->addAction(tr("图表弹出 / 收回"));
@@ -328,9 +339,14 @@ void MainWindow::buildViewMenu() {
     for (QDockWidget* dock : {watchDock_,
                               futuresDock_,
                               quoteDock_,
+                              orderBookDock_,
                               tapeDock_,
+                              positionsDock_,
+                              ordersDock_,
+                              tradesDock_,
+                              accountDock_,
+                              detailDock_,
                               optionsDock_,
-                              tradingDock_,
                               orderDock_}) {
         if (dock == nullptr) {
             continue;
@@ -344,11 +360,23 @@ void MainWindow::buildViewMenu() {
 void MainWindow::resetWorkspace() {
     QSettings settings;
     settings.remove(QStringLiteral("ui/workspaceState"));
-    for (QDockWidget* dock : {watchDock_, quoteDock_, tapeDock_, tradingDock_, orderDock_}) {
+    for (QDockWidget* dock : {watchDock_,
+                              quoteDock_,
+                              orderBookDock_,
+                              tapeDock_,
+                              positionsDock_,
+                              ordersDock_,
+                              tradesDock_,
+                              accountDock_,
+                              detailDock_,
+                              orderDock_}) {
         if (dock != nullptr) {
             dock->setFloating(false);
             dock->show();
         }
+    }
+    if (positionsDock_ != nullptr) {
+        positionsDock_->raise();
     }
     if (futuresDock_ != nullptr) {
         futuresDock_->hide();
@@ -362,16 +390,19 @@ void MainWindow::resetWorkspace() {
     setCentralWidget(chartHost_);
     resizeDocks({watchDock_}, {360}, Qt::Horizontal);
     resizeDocks({quoteDock_}, {300}, Qt::Horizontal);
-    resizeDocks({tapeDock_}, {200}, Qt::Vertical);
-    resizeDocks({tradingDock_, orderDock_}, {1000, 300}, Qt::Horizontal);
+    resizeDocks({quoteDock_, orderBookDock_, tapeDock_}, {220, 260, 180}, Qt::Vertical);
+    resizeDocks({positionsDock_, orderDock_}, {1000, 300}, Qt::Horizontal);
 }
 
 void MainWindow::restoreWorkspace() {
     QSettings        settings;
     bool             restored = false;
+    const int        version  = settings.value(QStringLiteral("ui/workspaceVersion"), 0).toInt();
     const QByteArray state    = settings.value(QStringLiteral("ui/workspaceState")).toByteArray();
-    if (!state.isEmpty()) {
+    if (version == kWorkspaceVersion && !state.isEmpty()) {
         restored = restoreState(state);
+    } else {
+        settings.remove(QStringLiteral("ui/workspaceState"));
     }
     const QByteArray geometry = settings.value(QStringLiteral("ui/windowGeometry")).toByteArray();
     if (!geometry.isEmpty()) {
@@ -381,8 +412,8 @@ void MainWindow::restoreWorkspace() {
         QTimer::singleShot(0, this, [this] {
             resizeDocks({watchDock_}, {360}, Qt::Horizontal);
             resizeDocks({quoteDock_}, {300}, Qt::Horizontal);
-            resizeDocks({tapeDock_}, {200}, Qt::Vertical);
-            resizeDocks({tradingDock_, orderDock_}, {1000, 300}, Qt::Horizontal);
+            resizeDocks({quoteDock_, orderBookDock_, tapeDock_}, {220, 260, 180}, Qt::Vertical);
+            resizeDocks({positionsDock_, orderDock_}, {1000, 300}, Qt::Horizontal);
         });
     }
 }
@@ -393,6 +424,7 @@ void MainWindow::restoreWorkspace() {
 // 表格列状态由 TablePanel 自己按 ui/columns/* 保存。
 void MainWindow::saveWorkspace() {
     QSettings settings;
+    settings.setValue(QStringLiteral("ui/workspaceVersion"), kWorkspaceVersion);
     settings.setValue(QStringLiteral("ui/workspaceState"), saveState());
     settings.setValue(QStringLiteral("ui/windowGeometry"), saveGeometry());
     settings.setValue(QStringLiteral("ui/chart/symbol"), selectedSymbol_);
@@ -417,11 +449,6 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     }
     if (qobject_cast<QDockWidget*>(watched) != nullptr && event->type() == QEvent::Resize) {
         scheduleWorkspaceSave();
-    }
-    if (tapeTable_ != nullptr && watched == tapeTable_->viewport() &&
-        event->type() == QEvent::Resize && tapeModel_ != nullptr) {
-        const int rowHeight = std::max(1, tapeTable_->verticalHeader()->defaultSectionSize());
-        tapeModel_->setMaxRows(std::max(1, tapeTable_->viewport()->height() / rowHeight - 1));
     }
     return QMainWindow::eventFilter(watched, event);
 }
@@ -550,35 +577,29 @@ void MainWindow::buildWorkspace() {
     quoteDock_ = addModuleDock(
         tr("行情快照"), quotePanel_, Qt::RightDockWidgetArea, QStringLiteral("quoteDock"));
 
-    auto* tapePanel = new TablePanel(tapeModel_, this);
-    tapePanel->installColumnMenu(QStringLiteral("tape"));
-    tapeTable_ = tapePanel->view();
-    tapeDock_  = addModuleDock(
-        tr("分笔成交"), tapePanel, Qt::RightDockWidgetArea, QStringLiteral("tapeDock"));
-    splitDockWidget(quoteDock_, tapeDock_, Qt::Vertical);
+    orderBookPanel_ = new OrderBookPanel(this);
+    orderBookPanel_->setSymbol(selectedSymbol_);
+    orderBookDock_ = addModuleDock(
+        tr("订单簿"), orderBookPanel_, Qt::RightDockWidgetArea, QStringLiteral("orderBookDock"));
+    splitDockWidget(quoteDock_, orderBookDock_, Qt::Vertical);
+
+    tradeTapePanel_ = new TradeTapePanel(tapeModel_, this);
+    tapeDock_       = addModuleDock(
+        tr("分笔成交"), tradeTapePanel_, Qt::RightDockWidgetArea, QStringLiteral("tapeDock"));
+    splitDockWidget(orderBookDock_, tapeDock_, Qt::Vertical);
 }
 
 void MainWindow::buildBottomDock() {
-    tradingTables_ = new TradingTablesPanel(positionsModel_, ordersModel_, tradesModel_, this);
-    connect(tradingTables_,
-            &TradingTablesPanel::positionActivated,
-            this,
-            [this](const QString& symbol) {
-                if (!symbol.isEmpty() && symbol != selectedSymbol_) {
-                    selectSymbol(symbol);
-                }
-            });
-    connect(tradingTables_, &TradingTablesPanel::orderSelectionChanged, this, [this] {
-        updateOrderControls();
-    });
-    connect(tradingTables_, &TradingTablesPanel::cancelRequested, this, [this] {
-        cancelSelectedOrder();
-    });
+    positionsPanel_   = new PositionsPanel(positionsModel_, this);
+    ordersPanel_      = new OrdersPanel(ordersModel_, this);
+    tradesPanel_      = new TradesPanel(tradesModel_, this);
+    accountPanel_     = new AccountPanel(this);
+    orderDetailPanel_ = new OrderDetailPanel(this);
 
-    tradingDock_ = addModuleDock(tr("持仓 / 委托 / 成交"),
-                                 tradingTables_,
-                                 Qt::BottomDockWidgetArea,
-                                 QStringLiteral("tradingDock"));
+    // 持仓/委托/成交/账户/明细：先建主区域，再 tabify，保持一个紧凑的
+    // 交易表格 dock 组。三键下单单独 split 到右侧，作为独立下单面板。
+    positionsDock_ = addModuleDock(
+        tr("持仓"), positionsPanel_, Qt::BottomDockWidgetArea, QStringLiteral("positionsDock"));
 
     orderTicket_ = new OrderTicketPanel(this);
     orderTicket_->setSymbol(selectedSymbol_);
@@ -618,7 +639,33 @@ void MainWindow::buildBottomDock() {
 
     orderDock_ = addModuleDock(
         tr("三键下单"), orderTicket_, Qt::BottomDockWidgetArea, QStringLiteral("orderDock"));
-    splitDockWidget(tradingDock_, orderDock_, Qt::Horizontal);
+    splitDockWidget(positionsDock_, orderDock_, Qt::Horizontal);
+
+    ordersDock_ = addModuleDock(
+        tr("委托"), ordersPanel_, Qt::BottomDockWidgetArea, QStringLiteral("ordersDock"));
+    tradesDock_ = addModuleDock(
+        tr("成交"), tradesPanel_, Qt::BottomDockWidgetArea, QStringLiteral("tradesDock"));
+    accountDock_ = addModuleDock(
+        tr("账户"), accountPanel_, Qt::BottomDockWidgetArea, QStringLiteral("accountDock"));
+    detailDock_ = addModuleDock(
+        tr("明细"), orderDetailPanel_, Qt::BottomDockWidgetArea, QStringLiteral("detailDock"));
+    tabifyDockWidget(positionsDock_, ordersDock_);
+    tabifyDockWidget(ordersDock_, tradesDock_);
+    tabifyDockWidget(tradesDock_, accountDock_);
+    tabifyDockWidget(accountDock_, detailDock_);
+    positionsDock_->raise();
+
+    connect(
+        positionsPanel_, &PositionsPanel::positionActivated, this, [this](const QString& symbol) {
+            if (!symbol.isEmpty() && symbol != selectedSymbol_) {
+                selectSymbol(symbol);
+            }
+        });
+    connect(ordersPanel_, &OrdersPanel::selectionChanged, this, [this](const QString&) {
+        updateOrderControls();
+        updateOrderDetail();
+    });
+    connect(ordersPanel_, &OrdersPanel::cancelRequested, this, [this] { cancelSelectedOrder(); });
 
     const auto refreshCachedQuotes = [this] {
         if (latestQuotes_.isEmpty()) {
@@ -823,6 +870,7 @@ void MainWindow::connectNode() {
     connect(nodeClient_, &NodeClient::ordersUpdated, this, [this](const QVector<Order>& orders) {
         ordersModel_->applyOrders(orders);
         updateOrderControls();
+        updateOrderDetail();
     });
     connect(nodeClient_, &NodeClient::tradesUpdated, this, [this](const QVector<Trade>& trades) {
         tradesModel_->applyTrades(trades);
@@ -998,6 +1046,9 @@ void MainWindow::selectSymbol(const QString& symbol) {
     if (quotePanel_ != nullptr) {
         quotePanel_->setSymbol(symbol);
     }
+    if (orderBookPanel_ != nullptr) {
+        orderBookPanel_->setSymbol(symbol);
+    }
     chart_->setTitle(symbol, selectedInterval_);
     chart_->setBars(marketStore_->bars(symbol, selectedDurationNs_));
     updateQuotePanel();
@@ -1080,6 +1131,10 @@ void MainWindow::updateQuotePanel() {
 
     quotePanel_->setSymbol(selectedSymbol_);
     quotePanel_->setQuote(quote, instrument != nullptr ? instrument->name : QString{});
+    if (orderBookPanel_ != nullptr) {
+        orderBookPanel_->setSymbol(selectedSymbol_);
+        orderBookPanel_->setQuote(quote);
+    }
     chart_->setQuote(quote != nullptr ? *quote : Quote{});
     if (quote != nullptr && tapeModel_ != nullptr) {
         tapeModel_->applyQuote(*quote);
@@ -1092,8 +1147,8 @@ void MainWindow::updateQuotePanel() {
 
 void MainWindow::updateAccountPanel(const Account& account) {
     accountLoaded_ = true;
-    if (tradingTables_ != nullptr) {
-        tradingTables_->setAccount(account);
+    if (accountPanel_ != nullptr) {
+        accountPanel_->setAccount(account);
     }
     updateOrderControls();
 }
@@ -1115,11 +1170,23 @@ void MainWindow::updateOrderControls() {
     }
     orderTicket_->setCloseEnabled(canSubmit && (longVolume > 0 || shortVolume > 0));
 
-    if (tradingTables_ != nullptr) {
-        const auto current = tradingTables_->orderTable()->currentIndex();
-        tradingTables_->setCancelEnabled(current.isValid() &&
-                                         ordersModel_->isOrderAlive(current.row()));
+    if (ordersPanel_ != nullptr) {
+        const auto current = ordersPanel_->view()->currentIndex();
+        ordersPanel_->setCancelEnabled(current.isValid() &&
+                                       ordersModel_->isOrderAlive(current.row()));
     }
+}
+
+void MainWindow::updateOrderDetail() {
+    if (orderDetailPanel_ == nullptr || ordersPanel_ == nullptr) {
+        return;
+    }
+    const auto current = ordersPanel_->view()->currentIndex();
+    if (!current.isValid() || current.row() >= ordersModel_->orders().size()) {
+        orderDetailPanel_->clear();
+        return;
+    }
+    orderDetailPanel_->setOrder(&ordersModel_->orders().at(current.row()));
 }
 
 void MainWindow::submitOrder(Direction direction, Offset offset) {
@@ -1151,10 +1218,10 @@ void MainWindow::submitOrder(Direction direction, Offset offset) {
 }
 
 void MainWindow::cancelSelectedOrder() {
-    if (nodeClient_ == nullptr || tradingTables_ == nullptr) {
+    if (nodeClient_ == nullptr || ordersPanel_ == nullptr) {
         return;
     }
-    const auto current = tradingTables_->orderTable()->currentIndex();
+    const auto current = ordersPanel_->view()->currentIndex();
     if (!current.isValid() || !ordersModel_->isOrderAlive(current.row())) {
         return;
     }

@@ -75,6 +75,24 @@ std::optional<Quote> parseQuote(const QJsonObject& object) {
     q.lastPrice       = numberValue(object.value("last_price"));
     q.bidPrice1       = numberValue(object.value("bid_price1"));
     q.askPrice1       = numberValue(object.value("ask_price1"));
+    q.bidPrice2       = numberValue(object.value("bid_price2"));
+    q.askPrice2       = numberValue(object.value("ask_price2"));
+    q.bidPrice3       = numberValue(object.value("bid_price3"));
+    q.askPrice3       = numberValue(object.value("ask_price3"));
+    q.bidPrice4       = numberValue(object.value("bid_price4"));
+    q.askPrice4       = numberValue(object.value("ask_price4"));
+    q.bidPrice5       = numberValue(object.value("bid_price5"));
+    q.askPrice5       = numberValue(object.value("ask_price5"));
+    q.bidVolume1      = static_cast<quint64>(integerValue(object.value("bid_volume1")));
+    q.askVolume1      = static_cast<quint64>(integerValue(object.value("ask_volume1")));
+    q.bidVolume2      = static_cast<quint64>(integerValue(object.value("bid_volume2")));
+    q.askVolume2      = static_cast<quint64>(integerValue(object.value("ask_volume2")));
+    q.bidVolume3      = static_cast<quint64>(integerValue(object.value("bid_volume3")));
+    q.askVolume3      = static_cast<quint64>(integerValue(object.value("ask_volume3")));
+    q.bidVolume4      = static_cast<quint64>(integerValue(object.value("bid_volume4")));
+    q.askVolume4      = static_cast<quint64>(integerValue(object.value("ask_volume4")));
+    q.bidVolume5      = static_cast<quint64>(integerValue(object.value("bid_volume5")));
+    q.askVolume5      = static_cast<quint64>(integerValue(object.value("ask_volume5")));
     q.preSettlement   = numberValue(object.value("pre_settlement"));
     q.preOpenInterest = numberValue(object.value("pre_open_interest"));
     q.openInterest    = numberValue(object.value("open_interest"));
@@ -102,6 +120,14 @@ Quote mergeQuote(const Quote& previous, const Quote& patch) {
     mergeValue(merged.lastPrice, patch.lastPrice);
     mergeValue(merged.bidPrice1, patch.bidPrice1);
     mergeValue(merged.askPrice1, patch.askPrice1);
+    mergeValue(merged.bidPrice2, patch.bidPrice2);
+    mergeValue(merged.askPrice2, patch.askPrice2);
+    mergeValue(merged.bidPrice3, patch.bidPrice3);
+    mergeValue(merged.askPrice3, patch.askPrice3);
+    mergeValue(merged.bidPrice4, patch.bidPrice4);
+    mergeValue(merged.askPrice4, patch.askPrice4);
+    mergeValue(merged.bidPrice5, patch.bidPrice5);
+    mergeValue(merged.askPrice5, patch.askPrice5);
     mergeValue(merged.preSettlement, patch.preSettlement);
     mergeValue(merged.preOpenInterest, patch.preOpenInterest);
     mergeValue(merged.openInterest, patch.openInterest);
@@ -111,6 +137,21 @@ Quote mergeQuote(const Quote& previous, const Quote& patch) {
     mergeValue(merged.low, patch.low);
     mergeValue(merged.upperLimit, patch.upperLimit);
     mergeValue(merged.lowerLimit, patch.lowerLimit);
+    const auto mergeVolume = [](quint64& target, quint64 value) {
+        if (value > 0) {
+            target = value;
+        }
+    };
+    mergeVolume(merged.bidVolume1, patch.bidVolume1);
+    mergeVolume(merged.askVolume1, patch.askVolume1);
+    mergeVolume(merged.bidVolume2, patch.bidVolume2);
+    mergeVolume(merged.askVolume2, patch.askVolume2);
+    mergeVolume(merged.bidVolume3, patch.bidVolume3);
+    mergeVolume(merged.askVolume3, patch.askVolume3);
+    mergeVolume(merged.bidVolume4, patch.bidVolume4);
+    mergeVolume(merged.askVolume4, patch.askVolume4);
+    mergeVolume(merged.bidVolume5, patch.bidVolume5);
+    mergeVolume(merged.askVolume5, patch.askVolume5);
     if (patch.volume > 0) {
         merged.volume = patch.volume;
     }

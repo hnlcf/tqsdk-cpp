@@ -1,11 +1,14 @@
 #include "model/TradingModels.h"
+#include "widgets/OrderBookPanel.h"
 #include "widgets/OrderTicketPanel.h"
 #include "widgets/QuoteSnapshotPanel.h"
-#include "widgets/TradingTablesPanel.h"
+#include "widgets/TradeTapePanel.h"
+#include "widgets/TradingPanels.h"
 
 #include <QLabel>
 #include <QPushButton>
 #include <QSignalSpy>
+#include <QTableView>
 #include <QtTest>
 
 using namespace tqsdk::ui;
@@ -16,7 +19,11 @@ class WidgetsTest : public QObject {
 private slots:
     void quotePanelFormatsAndClears();
     void orderTicketEmitsActions();
-    void tradingPanelShowsAccount();
+    void accountPanelShowsAccount();
+    void orderBookShowsFiveLevels();
+    void orderDetailShowsSelectedOrder();
+    void tradingPanelsRemainIndependent();
+    void tradeTapePanelOwnsBoundedView();
 };
 
 void WidgetsTest::quotePanelFormatsAndClears() {
@@ -34,9 +41,9 @@ void WidgetsTest::quotePanelFormatsAndClears() {
     quote.low           = 2990.0;
     panel.setQuote(&quote, QStringLiteral("螺纹钢2701"));
 
-    auto* last = panel.findChild<QLabel*>(QStringLiteral("quoteLast"));
+    auto* last   = panel.findChild<QLabel*>(QStringLiteral("quoteLast"));
     auto* change = panel.findChild<QLabel*>(QStringLiteral("quoteChange"));
-    auto* pct = panel.findChild<QLabel*>(QStringLiteral("quoteChangePct"));
+    auto* pct    = panel.findChild<QLabel*>(QStringLiteral("quoteChangePct"));
     QVERIFY(last != nullptr);
     QVERIFY(change != nullptr);
     QVERIFY(pct != nullptr);
@@ -73,20 +80,15 @@ void WidgetsTest::orderTicketEmitsActions() {
     QCOMPARE(close.count(), 1);
 }
 
-void WidgetsTest::tradingPanelShowsAccount() {
-    PositionTableModel positions;
-    OrderTableModel    orders;
-    TradeTableModel    trades;
-    TradingTablesPanel panel(&positions, &orders, &trades);
-    panel.setAccount(Account{.balance = 1000000.0,
-                             .available = 800000.0,
-                             .margin = 200000.0,
-                             .riskRatio = 0.2});
+void WidgetsTest::accountPanelShowsAccount() {
+    AccountPanel panel;
+    panel.setAccount(
+        Account{.balance = 1000000.0, .available = 800000.0, .margin = 200000.0, .riskRatio = 0.2});
 
-    auto* balance = panel.findChild<QLabel*>(QStringLiteral("accountBalance"));
+    auto* balance   = panel.findChild<QLabel*>(QStringLiteral("accountBalance"));
     auto* available = panel.findChild<QLabel*>(QStringLiteral("accountAvailable"));
-    auto* margin = panel.findChild<QLabel*>(QStringLiteral("accountMargin"));
-    auto* risk = panel.findChild<QLabel*>(QStringLiteral("accountRisk"));
+    auto* margin    = panel.findChild<QLabel*>(QStringLiteral("accountMargin"));
+    auto* risk      = panel.findChild<QLabel*>(QStringLiteral("accountRisk"));
     QVERIFY(balance != nullptr);
     QVERIFY(available != nullptr);
     QVERIFY(margin != nullptr);
@@ -95,6 +97,87 @@ void WidgetsTest::tradingPanelShowsAccount() {
     QCOMPARE(available->text(), QStringLiteral("800000.00"));
     QCOMPARE(margin->text(), QStringLiteral("200000.00"));
     QCOMPARE(risk->text(), QStringLiteral("20.00%"));
+}
+
+void WidgetsTest::orderBookShowsFiveLevels() {
+    OrderBookPanel panel;
+    Quote          quote;
+    quote.bidPrice1     = 2999.0;
+    quote.askPrice1     = 3001.0;
+    quote.bidPrice2     = 2998.0;
+    quote.askPrice2     = 3002.0;
+    quote.bidVolume1    = 11;
+    quote.askVolume1    = 12;
+    quote.bidVolume2    = 21;
+    quote.askVolume2    = 22;
+    quote.lastPrice     = 3000.0;
+    quote.preSettlement = 2995.0;
+    panel.setQuote(&quote);
+
+    QCOMPARE(panel.findChild<QLabel*>(QStringLiteral("bookBidPrice1"))->text(),
+             QStringLiteral("2999.00"));
+    QCOMPARE(panel.findChild<QLabel*>(QStringLiteral("bookAskPrice1"))->text(),
+             QStringLiteral("3001.00"));
+    QCOMPARE(panel.findChild<QLabel*>(QStringLiteral("bookBidVolume2"))->text(),
+             QStringLiteral("21"));
+    QCOMPARE(panel.findChild<QLabel*>(QStringLiteral("bookAskVolume2"))->text(),
+             QStringLiteral("22"));
+    QCOMPARE(panel.findChild<QLabel*>(QStringLiteral("bookLast"))->text(),
+             QStringLiteral("3000.00"));
+}
+
+void WidgetsTest::orderDetailShowsSelectedOrder() {
+    OrderDetailPanel panel;
+    Order            order;
+    order.orderId      = QStringLiteral("42");
+    order.instrumentId = QStringLiteral("SHFE.rb2701");
+    order.direction    = QStringLiteral("BUY");
+    order.offset       = QStringLiteral("OPEN");
+    order.limitPrice   = 3000.0;
+    order.volumeOrigin = 2;
+    order.volumeLeft   = 1;
+    order.status       = QStringLiteral("ALIVE");
+    panel.setOrder(&order);
+    QCOMPARE(panel.findChild<QLabel*>(QStringLiteral("orderDetailId"))->text(),
+             QStringLiteral("42"));
+    panel.clear();
+}
+
+void WidgetsTest::tradingPanelsRemainIndependent() {
+    PositionTableModel positions;
+    OrderTableModel    orders;
+    TradeTableModel    trades;
+
+    Position position;
+    position.instrumentId = QStringLiteral("SHFE.rb2701");
+    position.volumeLong   = 1;
+    positions.applyPositions({position});
+
+    Order order;
+    order.orderId      = QStringLiteral("1001");
+    order.instrumentId = QStringLiteral("SHFE.rb2701");
+    order.direction    = QStringLiteral("BUY");
+    order.offset       = QStringLiteral("OPEN");
+    order.status       = QStringLiteral("ALIVE");
+    orders.applyOrders({order});
+
+    PositionsPanel positionsPanel(&positions);
+    OrdersPanel    ordersPanel(&orders);
+    TradesPanel    tradesPanel(&trades);
+    QVERIFY(positionsPanel.view() != nullptr);
+    QVERIFY(ordersPanel.view() != nullptr);
+    QVERIFY(tradesPanel.view() != nullptr);
+
+    ordersPanel.view()->selectRow(0);
+    QCOMPARE(ordersPanel.selectedOrderId(), QStringLiteral("1001"));
+}
+
+void WidgetsTest::tradeTapePanelOwnsBoundedView() {
+    TradeTapeModel model;
+    TradeTapePanel panel(&model);
+    QVERIFY(panel.view() != nullptr);
+    QCOMPARE(panel.view()->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOff);
+    QCOMPARE(panel.view()->selectionMode(), QAbstractItemView::NoSelection);
 }
 
 QTEST_MAIN(WidgetsTest)

@@ -215,8 +215,13 @@ WS messages ──► parse ──► pending MarketUpdate
 | `futuresDock` | 期货/合约列表 | 左侧 tab |
 | `optionsDock` | 期权链 | 右 |
 | `quoteDock` | 行情快照 | 右 |
+| `orderBookDock` | 五档订单簿 | 右中 |
 | `tapeDock` | 分笔成交 | 右下 |
-| `tradingDock` | 持仓/委托/成交/账户 | 下 |
+| `positionsDock` | 持仓 | 下左 |
+| `ordersDock` | 委托 | 下左 tab |
+| `tradesDock` | 成交 | 下左 tab |
+| `accountDock` | 账户 | 下左 tab |
+| `detailDock` | 委托明细 | 下左 tab |
 | `orderDock` | 三键下单 | 下右 |
 
 所有 dock 均允许关闭、拖动、浮动和重新显示。工具栏“组件”菜单和
@@ -234,19 +239,29 @@ WS messages ──► parse ──► pending MarketUpdate
 - `visibleCount/visibleStart/followLatest` 可持久化；
 - 只绘制可见区间。
 
-### 5.3 QuoteSnapshotPanel / OrderTicketPanel / TradingTablesPanel
-
-这三个面板从 MainWindow 拆出，分别负责：
+### 5.3 QuoteSnapshotPanel / OrderBookPanel / TradeTapePanel
 
 - `QuoteSnapshotPanel`：行情字段展示和红绿格式化，不持有 node/model；
-- `OrderTicketPanel`：三键下单输入、模糊补全入口和按钮信号，不直接下 order；
-- `TradingTablesPanel`：持仓/委托/成交/账户页签、撤单入口和账户字段展示。
+- `OrderBookPanel`：五档买卖盘口，数据来自 Quote 的 bid/ask price/volume 1..5；
+- `TradeTapePanel`：最新优先的有界分笔队列，容量随自身视口高度变化。
 
-MainWindow 只做这些组件与模型/NodeClient 之间的连接。交易方向、OrderRequest
-构造和是否允许平仓仍由 MainWindow 的交易协调逻辑决定，但具体控件不再写在
-MainWindow 里。
+三者是完全独立的 widget，分别放在独立 QDockWidget 中，可以单独关闭、浮动、
+拖动，不再由行情快照或交易表格“代管”。
 
-### 5.4 TablePanel
+### 5.4 交易面板拆分
+
+交易区域拆成独立组件：
+
+- `PositionsPanel`：持仓表；
+- `OrdersPanel`：委托表 + 撤单按钮 + 选中委托信号；
+- `TradesPanel`：成交表；
+- `AccountPanel`：权益/可用/保证金/风险度；
+- `OrderDetailPanel`：选中委托的明细字段。
+
+这些组件默认以 tabify 的独立 QDockWidget 显示在底部；三键下单是另一个独立
+dock，位于交易表格 dock 组右侧。MainWindow 只连接它们与模型/NodeClient。
+
+### 5.5 TablePanel
 
 `ui/src/widgets/TablePanel.{h,cpp}`：
 
@@ -327,6 +342,7 @@ KlineFrame{reset=true, bars}
 QSettings key：
 
 ```text
+ui/workspaceVersion     工作区布局版本（组件集合变化时重置旧布局）
 ui/workspaceState       QMainWindow::saveState()
 ui/windowGeometry       QMainWindow::saveGeometry()
 ui/watchlist            自选合约列表
@@ -361,7 +377,7 @@ tqsdk-ui-parser-tests    worker parse, burst coalescing
 tqsdk-ui-chart-tests     chart viewport, drag, wheel, paint smoke test
 tqsdk-ui-table-tests     TablePanel column order/width/hidden persistence
 tqsdk-ui-window-tests    MainWindow chart/selection integration + QSettings restore
-tqsdk-ui-panel-tests     Quote/order/trading panels formatting and actions
+tqsdk-ui-panel-tests     Quote/orderbook/trading panels formatting and actions
 ```
 
 运行：

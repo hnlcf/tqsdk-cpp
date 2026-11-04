@@ -61,10 +61,11 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
 
-    void    setOrders(const QVector<Order>& orders);
-    void    applyOrders(const QVector<Order>& orders);
-    QString orderIdAt(int row) const;
-    bool    isOrderAlive(int row) const;
+    void                  setOrders(const QVector<Order>& orders);
+    void                  applyOrders(const QVector<Order>& orders);
+    QString               orderIdAt(int row) const;
+    bool                  isOrderAlive(int row) const;
+    const QVector<Order>& orders() const { return orders_; }
 
 private:
     QVector<Order>      orders_;
