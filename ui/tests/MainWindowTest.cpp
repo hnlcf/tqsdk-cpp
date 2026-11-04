@@ -41,6 +41,7 @@ public:
     void publishKline(const QString& symbol, qint64 durationNs, const KlineFrame& frame) {
         emit klineUpdated(symbol, durationNs, frame);
     }
+    void publishOrderAck(const OrderAck& ack) { emit orderAckReceived(ack); }
 
 private:
     Subscription subscription_;
@@ -58,6 +59,7 @@ private slots:
     void liveQuoteSurvivesCatalogFallback();
     void latestKlineIsBuffered();
     void eventLoopRemainsResponsiveUnderBurst();
+    void orderFailureShowsToast();
     void cleanup();
 
 private:
@@ -257,6 +259,30 @@ void MainWindowTest::eventLoopRemainsResponsiveUnderBurst() {
     probe.stop();
 
     QVERIFY2(maxGap < 500, qPrintable(QStringLiteral("max event loop gap: %1 ms").arg(maxGap)));
+}
+
+void MainWindowTest::orderFailureShowsToast() {
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("ui/chart/symbol"), QStringLiteral("SHFE.rb2701"));
+    settings.sync();
+
+    FakeNodeClient client;
+    MainWindow     window(&client);
+    window.show();
+    QTest::qWait(30);
+
+    OrderAck ack;
+    ack.success = false;
+    ack.orderId = QStringLiteral("r1");
+    ack.error   = QStringLiteral("CTP 31: 平仓量超过持仓量");
+    client.publishOrderAck(ack);
+    QTest::qWait(30);
+
+    auto* toast = window.findChild<QLabel*>(QStringLiteral("toastMessage"));
+    QVERIFY(toast != nullptr);
+    QVERIFY(toast->isVisible());
+    QVERIFY(toast->text().contains(QStringLiteral("CTP 31")));
 }
 
 void MainWindowTest::cleanup() {

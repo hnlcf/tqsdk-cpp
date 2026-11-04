@@ -287,6 +287,7 @@ std::optional<Order> parseOrder(const QJsonObject& object) {
     o.volumeOrigin = integerValue(object.value("volume_orign"));
     o.volumeLeft   = integerValue(object.value("volume_left"));
     o.isDead       = boolValue(object.value("is_dead"), false);
+    o.isError      = boolValue(object.value("is_error"), false);
     return o;
 }
 
@@ -508,8 +509,15 @@ QString offsetText(Offset offset) {
 }
 
 QString priceTypeText(PriceType priceType) {
-    (void)priceType;
-    return "LIMIT";
+    switch (priceType) {
+    case PriceType::Market:
+        return QStringLiteral("ANY");
+    case PriceType::Best:
+        return QStringLiteral("BEST");
+    case PriceType::Limit:
+    default:
+        return QStringLiteral("LIMIT");
+    }
 }
 
 } // namespace tqsdk::ui

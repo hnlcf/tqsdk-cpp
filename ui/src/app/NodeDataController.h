@@ -5,6 +5,7 @@
 
 #include <QHash>
 #include <QObject>
+#include <QSet>
 #include <QString>
 
 namespace tqsdk::ui {
@@ -56,6 +57,7 @@ signals:
     void ordersChanged();
     void tradesChanged();
     void orderAckReceived(const tqsdk::ui::OrderAck& ack);
+    void orderFailed(const QString& orderId, const QString& message);
 
 private:
     void applyQuotesToVisibleTables();
@@ -77,6 +79,8 @@ private:
     qint64                selectedDurationNs_ = 0;
     bool                  futuresVisible_     = false;
     bool                  optionsVisible_     = false;
+    bool                  ordersInitialized_  = false;
+    QSet<QString>         notifiedOrderErrors_;
 };
 
 } // namespace tqsdk::ui

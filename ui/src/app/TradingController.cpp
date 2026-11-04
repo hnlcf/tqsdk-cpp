@@ -62,8 +62,7 @@ void TradingController::updateControls() {
 
     if (ordersPanel_ != nullptr && orders_ != nullptr) {
         const auto current = ordersPanel_->view()->currentIndex();
-        ordersPanel_->setCancelEnabled(
-            current.isValid() && orders_->isOrderAlive(current.row()));
+        ordersPanel_->setCancelEnabled(current.isValid() && orders_->isOrderAlive(current.row()));
     }
 }
 
@@ -75,8 +74,18 @@ void TradingController::submit(Direction direction, Offset offset) {
         ticket_->setStatus(tr("交易未就绪"), true);
         return;
     }
-    if (ticket_->price() <= 0.0 || ticket_->volume() <= 0) {
-        ticket_->setStatus(tr("价格/数量无效"), true);
+    if (ticket_->volume() <= 0) {
+        ticket_->setStatus(tr("数量无效"), true);
+        return;
+    }
+
+    PriceType priceType = PriceType::Limit;
+    if (ticket_->marketOrder()) {
+        priceType = PriceType::Market;
+    } else if (ticket_->counterpartyOrder()) {
+        priceType = PriceType::Best;
+    } else if (ticket_->price() <= 0.0) {
+        ticket_->setStatus(tr("限价单价格无效"), true);
         return;
     }
 
@@ -84,14 +93,18 @@ void TradingController::submit(Direction direction, Offset offset) {
     request.instrumentId = selectedSymbol_;
     request.direction    = direction;
     request.offset       = offset;
-    request.priceType    = PriceType::Limit;
-    request.limitPrice   = ticket_->price();
+    request.priceType    = priceType;
+    request.limitPrice   = priceType == PriceType::Limit ? ticket_->price() : 0.0;
     request.volume       = ticket_->volume();
     nodeClient_->placeOrder(request);
-    ticket_->setStatus(tr("已提交 %1 %2 手 @ %3")
-                           .arg(selectedSymbol_)
-                           .arg(request.volume)
-                           .arg(priceText(request.limitPrice)));
+    ticket_->setStatus(
+        tr("已提交 %1 %2 手 %3")
+            .arg(selectedSymbol_)
+            .arg(request.volume)
+            .arg(
+                priceType == PriceType::Market
+                    ? tr("市价")
+                    : (priceType == PriceType::Best ? tr("对价") : priceText(request.limitPrice))));
     updateControls();
 }
 

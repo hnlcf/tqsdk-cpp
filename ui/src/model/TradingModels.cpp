@@ -55,6 +55,8 @@ QVariant displayText(int column, const Order& order) {
         return order.status.isEmpty()
                    ? (order.isDead ? QStringLiteral("DEAD") : QStringLiteral("ALIVE"))
                    : order.status;
+    case OrderTableModel::Message:
+        return order.message.isEmpty() ? QStringLiteral("—") : order.message;
     default:
         return {};
     }

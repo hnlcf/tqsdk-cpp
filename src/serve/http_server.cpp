@@ -218,10 +218,11 @@ void HttpServer::setup_routes() {
         // body 自动反序列化为 InsertOrderReq（见 trading_gateway.h 的 from_json）。
         {http::verb::post, "/order", make_entry([this](InsertOrderReq r) -> asio::awaitable<json> {
              // co_await 网关 ack；期间 io_context 继续处理行情/其它请求。
-             Order* order = co_await api_->insert_order(r);
-             co_return json{{"success", true},
+             Order*     order   = co_await api_->insert_order(r);
+             const bool success = order != nullptr && !order->is_error;
+             co_return json{{"success", success},
                             {"order_id", order ? order->order_id : std::string{}},
-                            {"error", ""}};
+                            {"error", order ? order->last_msg : std::string{"order rejected"}}};
          })},
         {http::verb::delete_,
          "/order/{id}",

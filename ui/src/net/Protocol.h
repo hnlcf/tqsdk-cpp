@@ -123,6 +123,7 @@ struct Order {
     qint64  volumeOrigin = 0;
     qint64  volumeLeft   = 0;
     bool    isDead       = false;
+    bool    isError      = false;
 };
 
 struct Trade {
@@ -168,7 +169,9 @@ enum class Offset {
     CloseToday
 };
 enum class PriceType {
-    Limit
+    Limit,
+    Market,
+    Best,
 };
 
 struct OrderRequest {

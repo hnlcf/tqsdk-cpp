@@ -38,6 +38,11 @@ QString timeText(qint64 nanoseconds) {
         .toString(QStringLiteral("MM-dd HH:mm"));
 }
 
+constexpr double kHeaderHeight = 56.0;
+constexpr double kAxisGap      = 28.0;
+constexpr double kVolumeHeight = 86.0;
+constexpr double kBottomMargin = 8.0;
+
 } // namespace
 
 KLineChartWidget::KLineChartWidget(QWidget* parent)
@@ -123,9 +128,11 @@ QSize KLineChartWidget::sizeHint() const {
 
 QRectF KLineChartWidget::plotArea() const {
     return QRectF(14.0,
-                  56.0,
+                  kHeaderHeight,
                   std::max(20.0, static_cast<double>(width()) - 92.0),
-                  std::max(20.0, static_cast<double>(height()) - 148.0));
+                  std::max(20.0,
+                           static_cast<double>(height()) - kHeaderHeight - kAxisGap -
+                               kVolumeHeight - kBottomMargin));
 }
 
 int KLineChartWidget::visibleBarCount() const {
@@ -234,7 +241,7 @@ void KLineChartWidget::renderCache() {
         drawEmpty(painter);
     } else {
         const QRectF plot = plotArea();
-        const QRectF volumePlot(plot.left(), plot.bottom() + 8.0, plot.width(), 64.0);
+        const QRectF volumePlot(plot.left(), plot.bottom() + kAxisGap, plot.width(), kVolumeHeight);
         drawGrid(painter, plot, minPrice, maxPrice);
         drawCandles(painter, plot, minPrice, maxPrice, first, count);
         drawVolume(painter, volumePlot, first, count);
@@ -275,11 +282,11 @@ void KLineChartWidget::paintEvent(QPaintEvent* event) {
 void KLineChartWidget::drawHeader(QPainter& painter) {
     painter.setFont(titleFont_);
     painter.setPen(dark_ ? QColor("#f0f0f0") : QColor("#2a2a2a"));
-    painter.drawText(QRect(14, 7, width() - 320, 28), Qt::AlignLeft | Qt::AlignVCenter, symbol_);
+    painter.drawText(QRect(14, 7, 260, 28), Qt::AlignLeft | Qt::AlignVCenter, symbol_);
 
     painter.setFont(font());
     painter.setPen(dark_ ? QColor("#8f8f8f") : QColor("#6f675f"));
-    painter.drawText(QRect(14, 31, 150, 20), Qt::AlignLeft | Qt::AlignVCenter, interval_);
+    painter.drawText(QRect(14, 31, 220, 20), Qt::AlignLeft | Qt::AlignVCenter, interval_);
 
     double last = quote_.lastPrice;
     if (!finite(last) && !bars_.isEmpty()) {
@@ -298,10 +305,16 @@ void KLineChartWidget::drawHeader(QPainter& painter) {
     const QColor valueColor = !finite(change) ? (dark_ ? QColor("#8f8f8f") : QColor("#6f675f"))
                                               : (change >= 0.0 ? upColor(dark_) : downColor(dark_));
 
+    const QFontMetrics titleMetrics(titleFont_);
+    const QFontMetrics normalMetrics(font());
+    const int          leftWidth = std::max(titleMetrics.horizontalAdvance(symbol_),
+                                            normalMetrics.horizontalAdvance(interval_));
+    const int          priceX    = std::max(170, 14 + leftWidth + 24);
+    const QString      lastText  = priceText(last);
+
     painter.setFont(valueFont_);
     painter.setPen(valueColor);
-    painter.drawText(
-        QRect(width() - 300, 3, 286, 34), Qt::AlignRight | Qt::AlignVCenter, priceText(last));
+    painter.drawText(QRect(priceX, 3, 150, 34), Qt::AlignLeft | Qt::AlignVCenter, lastText);
 
     painter.setFont(font());
     const QString delta = finite(change) ? QStringLiteral("%1%2  %3%4%")
@@ -310,7 +323,10 @@ void KLineChartWidget::drawHeader(QPainter& painter) {
                                                .arg(finite(percent) && percent >= 0.0 ? "+" : "")
                                                .arg(percent, 0, 'f', 2)
                                          : QStringLiteral("涨跌 —  —%");
-    painter.drawText(QRect(width() - 360, 35, 346, 18), Qt::AlignRight | Qt::AlignVCenter, delta);
+    const int     deltaX =
+        priceX + std::max(80, QFontMetrics(valueFont_).horizontalAdvance(lastText)) + 18;
+    painter.setPen(valueColor);
+    painter.drawText(QRect(deltaX, 7, 260, 26), Qt::AlignLeft | Qt::AlignVCenter, delta);
 }
 
 void KLineChartWidget::drawEmpty(QPainter& painter) {

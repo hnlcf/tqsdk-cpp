@@ -6,6 +6,7 @@
 #include "widgets/TradeTapePanel.h"
 #include "widgets/TradingPanels.h"
 
+#include <QCheckBox>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -21,6 +22,7 @@ class WidgetsTest : public QObject {
 private slots:
     void quotePanelFormatsAndClears();
     void orderTicketEmitsActions();
+    void orderTicketTracksSymbolAndPriceMode();
     void accountPanelShowsAccount();
     void orderBookShowsFiveLevels();
     void positionDetailShowsSelectedPosition();
@@ -87,6 +89,31 @@ void WidgetsTest::orderTicketEmitsActions() {
     QCOMPARE(buy.count(), 1);
     QCOMPARE(sell.count(), 1);
     QCOMPARE(close.count(), 1);
+}
+
+void WidgetsTest::orderTicketTracksSymbolAndPriceMode() {
+    OrderTicketPanel panel;
+    panel.setSymbol(QStringLiteral("SHFE.rb2701"));
+    panel.setPriceIfEmpty(3000.0);
+    QCOMPARE(panel.price(), 3000.0);
+
+    panel.setSymbol(QStringLiteral("DCE.i2701"));
+    QCOMPARE(panel.price(), 0.0);
+    panel.setPriceIfEmpty(800.0);
+    QCOMPARE(panel.price(), 800.0);
+
+    auto* market       = panel.findChild<QCheckBox*>(QStringLiteral("orderMarket"));
+    auto* counterparty = panel.findChild<QCheckBox*>(QStringLiteral("orderCounterparty"));
+    QVERIFY(market != nullptr);
+    QVERIFY(counterparty != nullptr);
+
+    market->setChecked(true);
+    QVERIFY(panel.marketOrder());
+    QVERIFY(!panel.counterpartyOrder());
+
+    counterparty->setChecked(true);
+    QVERIFY(!panel.marketOrder());
+    QVERIFY(panel.counterpartyOrder());
 }
 
 void WidgetsTest::accountPanelShowsAccount() {

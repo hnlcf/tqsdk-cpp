@@ -121,6 +121,27 @@ NodeDataController::NodeDataController(NodeClient*           nodeClient,
         if (ordersModel_ != nullptr) {
             ordersModel_->applyOrders(orders);
         }
+        for (const auto& order : orders) {
+            if (order.orderId.isEmpty()) {
+                continue;
+            }
+            if (!order.isError) {
+                continue;
+            }
+            if (!ordersInitialized_) {
+                // The first snapshot may contain historical errors. Do not
+                // pop up old messages when the UI starts.
+                notifiedOrderErrors_.insert(order.orderId);
+                continue;
+            }
+            if (notifiedOrderErrors_.contains(order.orderId)) {
+                continue;
+            }
+            notifiedOrderErrors_.insert(order.orderId);
+            emit orderFailed(order.orderId,
+                             order.message.isEmpty() ? tr("委托被柜台拒绝") : order.message);
+        }
+        ordersInitialized_ = true;
         emit ordersChanged();
     });
     connect(nodeClient_, &NodeClient::tradesUpdated, this, [this](const QVector<Trade>& trades) {

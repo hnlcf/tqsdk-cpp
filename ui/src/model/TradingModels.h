@@ -53,6 +53,7 @@ public:
         Price,
         VolumeLeft,
         Status,
+        Message,
         ColumnCount,
     };
 

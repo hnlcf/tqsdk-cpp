@@ -639,9 +639,10 @@ void CtpTdGateway::handle_order_insert(const CThostFtdcInputOrderField& input,
     (void)request_id;
     (void)is_last;
     if (info != nullptr && info->ErrorID != 0) {
-        SPDLOG_WARN(
-            "[CtpTd] insert rejected ref={} err={}", cstr(input.OrderRef), cstr(info->ErrorMsg));
-        reject_order(cstr(input.OrderRef), cstr(info->ErrorMsg));
+        const std::string message =
+            "CTP " + std::to_string(info->ErrorID) + ": " + cstr(info->ErrorMsg);
+        SPDLOG_WARN("[CtpTd] insert rejected ref={} err={}", cstr(input.OrderRef), message);
+        reject_order(cstr(input.OrderRef), message);
     }
 }
 
@@ -662,7 +663,8 @@ void CtpTdGateway::handle_order_action(const CThostFtdcInputOrderActionField& in
 
 void CtpTdGateway::handle_err_order_insert(const CThostFtdcInputOrderField& input,
                                            const CThostFtdcRspInfoField&    info) {
-    reject_order(cstr(input.OrderRef), cstr(info.ErrorMsg));
+    reject_order(cstr(input.OrderRef),
+                 "CTP " + std::to_string(info.ErrorID) + ": " + cstr(info.ErrorMsg));
 }
 
 void CtpTdGateway::handle_err_order_action(const CThostFtdcOrderActionField& action,

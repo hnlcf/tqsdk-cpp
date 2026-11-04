@@ -1,5 +1,6 @@
 #include "widgets/OrderTicketPanel.h"
 
+#include <QCheckBox>
 #include <QCompleter>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -49,6 +50,35 @@ OrderTicketPanel::OrderTicketPanel(QWidget* parent)
     volumeBox_->setObjectName(QStringLiteral("orderVolume"));
     volumeBox_->setRange(1, 1000);
     volumeBox_->setValue(1);
+
+    auto* priceMode       = new QWidget(this);
+    auto* priceModeLayout = new QHBoxLayout(priceMode);
+    priceModeLayout->setContentsMargins(0, 0, 0, 0);
+    marketCheck_   = new QCheckBox(tr("市价"), priceMode);
+    opponentCheck_ = new QCheckBox(tr("对价"), priceMode);
+    marketCheck_->setObjectName(QStringLiteral("orderMarket"));
+    opponentCheck_->setObjectName(QStringLiteral("orderCounterparty"));
+    priceModeLayout->addWidget(marketCheck_);
+    priceModeLayout->addWidget(opponentCheck_);
+    priceModeLayout->addStretch(1);
+
+    auto syncPriceMode = [this] {
+        const bool market   = marketCheck_->isChecked();
+        const bool opponent = opponentCheck_->isChecked();
+        priceBox_->setEnabled(!market && !opponent);
+    };
+    connect(marketCheck_, &QCheckBox::toggled, this, [this, syncPriceMode](bool checked) {
+        if (checked && opponentCheck_->isChecked()) {
+            opponentCheck_->setChecked(false);
+        }
+        syncPriceMode();
+    });
+    connect(opponentCheck_, &QCheckBox::toggled, this, [this, syncPriceMode](bool checked) {
+        if (checked && marketCheck_->isChecked()) {
+            marketCheck_->setChecked(false);
+        }
+        syncPriceMode();
+    });
 
     auto* buttons      = new QWidget(this);
     auto* buttonLayout = new QHBoxLayout(buttons);
@@ -107,6 +137,7 @@ OrderTicketPanel::OrderTicketPanel(QWidget* parent)
 
     form->addRow(tr("合约"), symbolEdit_);
     form->addRow(tr("价格"), priceBox_);
+    form->addRow(tr("价格类型"), priceMode);
     form->addRow(tr("数量"), volumeBox_);
     form->addRow(tr("三键"), buttons);
     form->addRow(status_);
@@ -117,7 +148,12 @@ OrderTicketPanel::OrderTicketPanel(QWidget* parent)
 }
 
 void OrderTicketPanel::setSymbol(const QString& symbol) {
+    if (symbolEdit_->text() == symbol) {
+        return;
+    }
     symbolEdit_->setText(symbol);
+    // A symbol switch must not keep the previous contract's limit price.
+    priceBox_->setValue(0.0);
 }
 
 void OrderTicketPanel::setCompletions(const QStringList& completions) {
@@ -143,6 +179,9 @@ void OrderTicketPanel::setStatus(const QString& text, bool error) {
 }
 
 void OrderTicketPanel::setPriceIfEmpty(double price) {
+    if (marketOrder() || counterpartyOrder()) {
+        return;
+    }
     if (priceBox_->value() <= 0.0 && std::isfinite(price)) {
         priceBox_->setValue(price);
     }
@@ -158,6 +197,14 @@ double OrderTicketPanel::price() const {
 
 int OrderTicketPanel::volume() const {
     return volumeBox_->value();
+}
+
+bool OrderTicketPanel::marketOrder() const {
+    return marketCheck_ != nullptr && marketCheck_->isChecked();
+}
+
+bool OrderTicketPanel::counterpartyOrder() const {
+    return opponentCheck_ != nullptr && opponentCheck_->isChecked();
 }
 
 } // namespace tqsdk::ui

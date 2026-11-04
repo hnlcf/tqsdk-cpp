@@ -2,6 +2,7 @@
 
 #include <QWidget>
 
+class QCheckBox;
 class QCompleter;
 class QDoubleSpinBox;
 class QLabel;
@@ -32,6 +33,8 @@ public:
     QString symbolText() const;
     double  price() const;
     int     volume() const;
+    bool    marketOrder() const;
+    bool    counterpartyOrder() const;
 
 signals:
     void symbolSubmitted(const QString& input);
@@ -40,15 +43,17 @@ signals:
     void closeRequested();
 
 private:
-    QLineEdit*        symbolEdit_   = nullptr;
-    QCompleter*       completer_    = nullptr;
-    QStringListModel* completions_  = nullptr;
-    QDoubleSpinBox*   priceBox_     = nullptr;
-    QSpinBox*         volumeBox_    = nullptr;
-    QPushButton*      buyButton_    = nullptr;
-    QPushButton*      sellButton_   = nullptr;
-    QPushButton*      closeButton_  = nullptr;
-    QLabel*           status_       = nullptr;
+    QLineEdit*        symbolEdit_    = nullptr;
+    QCompleter*       completer_     = nullptr;
+    QStringListModel* completions_   = nullptr;
+    QDoubleSpinBox*   priceBox_      = nullptr;
+    QSpinBox*         volumeBox_     = nullptr;
+    QPushButton*      buyButton_     = nullptr;
+    QPushButton*      sellButton_    = nullptr;
+    QPushButton*      closeButton_   = nullptr;
+    QCheckBox*        marketCheck_   = nullptr;
+    QCheckBox*        opponentCheck_ = nullptr;
+    QLabel*           status_        = nullptr;
 };
 
 } // namespace tqsdk::ui

@@ -16,6 +16,7 @@
 #include "widgets/OrderBookPanel.h"
 #include "widgets/OrderTicketPanel.h"
 #include "widgets/QuoteSnapshotPanel.h"
+#include "widgets/Toast.h"
 #include "widgets/TradingPanels.h"
 
 #include <QApplication>
@@ -100,6 +101,8 @@ void MainWindow::buildUi() {
                                      tradesModel_,
                                      tapeModel_,
                                      this);
+
+    toast_ = new Toast(this);
 
     chartRefreshTimer_ = new QTimer(this);
     chartRefreshTimer_->setSingleShot(true);
@@ -382,8 +385,23 @@ void MainWindow::connectNode() {
             &NodeDataController::orderAckReceived,
             this,
             [this](const OrderAck& ack) {
+                if (!ack.success && toast_ != nullptr) {
+                    toast_->showMessage(tr("下单失败: %1").arg(ack.error), true);
+                }
                 if (tradingController_ != nullptr) {
                     tradingController_->handleOrderAck(ack);
+                }
+            });
+    connect(nodeDataController_,
+            &NodeDataController::orderFailed,
+            this,
+            [this](const QString& orderId, const QString& message) {
+                const QString text = tr("委托 %1 失败: %2").arg(orderId, message);
+                if (toast_ != nullptr) {
+                    toast_->showMessage(text, true);
+                }
+                if (workspace_ != nullptr && workspace_->orderTicket() != nullptr) {
+                    workspace_->orderTicket()->setStatus(text, true);
                 }
             });
 }

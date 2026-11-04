@@ -244,7 +244,9 @@ WS messages ──► parse ──► pending MarketUpdate
 - `WorkspaceLayout`：创建所有 panel/dock、图表 popout、默认布局、布局 QSettings；
 - `SymbolController`：watchlist、fuzzy resolve、当前合约/周期、subscription、K线历史请求；
 - `NodeDataController`：quotes/klines/catalog/option/account/orders/trades 应用到模型，维护可见表刷新；
-- `TradingController`：下单校验、OrderRequest、平仓、撤单、按钮状态。
+- `TradingController`：下单校验、限价/市价/对价 OrderRequest、平仓、撤单、按钮状态；
+- `Toast`：下单失败或 CTP 异步拒单时在窗口顶部显示错误码和描述，3.5 秒后自动淡出；
+- 委托表增加“回报信息”列，展示 CTP `last_msg`。
 
 这些 controller 之间通过语义信号/明确接口连接，MainWindow 不直接处理交易或行情字段。
 
@@ -253,7 +255,8 @@ WS messages ──► parse ──► pending MarketUpdate
 `ui/src/chart/KLineChartWidget.{h,cpp}`：
 
 - 自绘蜡烛、成交量、网格、十字光标；上涨红 K 为空心，下跌绿 K 为实心；
-- 头部显示最新价、涨跌、涨跌幅；
+- 头部左侧横排显示合约/周期/最新价/涨跌，右侧只保留纵轴刻度，避免互相覆盖；
+- 成交量图与 K 线横轴之间保留 28px 标签区，成交量高度 86px；
 - 滚轮缩放；
 - 左键拖动平移；
 - 十字光标下方显示对应 bar 的起始时间；

@@ -23,6 +23,7 @@ class SymbolController;
 class TradeTableModel;
 class TradeTapeModel;
 class TradingController;
+class Toast;
 class WorkspaceLayout;
 
 /// 主窗口 = 工作区根对象 + controller 注入点。
@@ -78,6 +79,7 @@ private:
     SymbolController*   symbolController_   = nullptr;
     NodeDataController* nodeDataController_ = nullptr;
     TradingController*  tradingController_  = nullptr;
+    Toast*              toast_              = nullptr;
 
     QTimer*           chartRefreshTimer_ = nullptr;
     QTimer*           selectionTimer_    = nullptr;

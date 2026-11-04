@@ -45,6 +45,8 @@ set(TQSDK_UI_SOURCES
     src/chart/KLineChartWidget.h
     src/widgets/TablePanel.cpp
     src/widgets/TablePanel.h
+    src/widgets/Toast.cpp
+    src/widgets/Toast.h
     src/widgets/QuoteSnapshotPanel.cpp
     src/widgets/QuoteSnapshotPanel.h
     src/widgets/OrderTicketPanel.cpp
@@ -221,6 +223,8 @@ if(TQSDK_BUILD_UI_TESTS)
         src/net/Protocol.h
         src/widgets/TablePanel.cpp
         src/widgets/TablePanel.h
+        src/widgets/Toast.cpp
+        src/widgets/Toast.h
         src/widgets/MarketToolBar.cpp
         src/widgets/MarketToolBar.h
         src/widgets/QuoteSnapshotPanel.cpp
