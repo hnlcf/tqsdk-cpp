@@ -251,7 +251,7 @@ if(TQSDK_BUILD_UI_TESTS)
         src/chart/KLineChartWidget.h
         src/model/MarketStore.cpp
         src/model/MarketStore.h
-    src/model/Formatting.h
+        src/model/Formatting.h
         src/model/QuoteTableModel.cpp
         src/model/QuoteTableModel.h
         src/model/InstrumentTableModel.cpp

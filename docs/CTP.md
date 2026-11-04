@@ -301,3 +301,22 @@ Market Front: tcp://182.254.243.31:30012
 
 > 注：`brokers.json` 中 SimNow 行情端口记录为 `30011`，实测该端口不可用；
 > 本次使用 SimNow 官方当前标准环境 `30012`。
+
+## 8. SimNow 自动化验收
+
+启动 `run_live.sh --no-ui` 后，可运行：
+
+```bash
+python3 scripts/simnow_acceptance.py --symbol SHFE.rb2701 --metrics
+python3 scripts/simnow_acceptance.py --symbol SHFE.rb2701 --orders --yes
+```
+
+默认只读；`--orders` 必须配合 `--yes`，避免误写真实 SimNow 账户。完整检查项、
+安全策略、市价/对价可选测试和报告格式见
+[`SIMNOW_ACCEPTANCE.md`](./SIMNOW_ACCEPTANCE.md)。
+
+脚本自测（本地 fake node，不连接 SimNow）：
+
+```bash
+python3 scripts/test_simnow_acceptance.py
+```
