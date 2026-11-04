@@ -33,6 +33,7 @@ public:
     QString symbol() const { return symbol_; }
     QString interval() const { return interval_; }
 
+    int  barCount() const { return bars_.size(); }
     int  visibleCount() const { return visibleCount_; }
     int  visibleStartIndex() const { return visibleStart_; }
     bool followLatest() const { return followLatest_; }

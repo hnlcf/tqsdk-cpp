@@ -75,6 +75,11 @@ void KLineChartWidget::setViewport(int visibleCount, int visibleStart, bool foll
 }
 
 void KLineChartWidget::setQuote(const Quote& quote) {
+    // Only last price / pre-settlement affect chart painting. Volume-only quote
+    // frames must not force the whole chart to repaint.
+    if (quote.lastPrice == quote_.lastPrice && quote.preSettlement == quote_.preSettlement) {
+        return;
+    }
     quote_ = quote;
     update();
 }

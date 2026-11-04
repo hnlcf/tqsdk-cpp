@@ -35,8 +35,9 @@ QuoteSnapshotPanel::QuoteSnapshotPanel(QWidget* parent)
     auto* form = new QFormLayout(this);
     form->setContentsMargins(12, 12, 12, 12);
 
-    symbol_       = new QLabel(QStringLiteral("—"), this);
-    name_         = new QLabel(QStringLiteral("—"), this);
+    symbol_ = new QLabel(QStringLiteral("—"), this);
+    name_   = new QLabel(QStringLiteral("—"), this);
+    name_->setObjectName(QStringLiteral("quoteName"));
     last_         = new QLabel(QStringLiteral("—"), this);
     change_       = new QLabel(QStringLiteral("—"), this);
     changePct_    = new QLabel(QStringLiteral("—"), this);
@@ -67,11 +68,20 @@ QuoteSnapshotPanel::QuoteSnapshotPanel(QWidget* parent)
 }
 
 void QuoteSnapshotPanel::setSymbol(const QString& symbol) {
-    setTextIfChanged(symbol_, symbol.isEmpty() ? QStringLiteral("—") : symbol);
+    const QString display = symbol.isEmpty() ? QStringLiteral("—") : symbol;
+    if (symbol_->text() != display) {
+        symbol_->setText(display);
+        // Do not carry the previous contract's name across a symbol switch.
+        setTextIfChanged(name_, QStringLiteral("—"));
+    }
 }
 
 void QuoteSnapshotPanel::setQuote(const Quote* quote, const QString& instrumentName) {
-    setTextIfChanged(name_, instrumentName.isEmpty() ? QStringLiteral("—") : instrumentName);
+    // Catalog loading can temporarily make findInstrument() return null. Keep
+    // the last known name instead of flashing "—" on every quote update.
+    if (!instrumentName.isEmpty()) {
+        setTextIfChanged(name_, instrumentName);
+    }
 
     if (quote == nullptr) {
         setMuted(last_, QStringLiteral("—"));

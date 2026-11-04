@@ -123,6 +123,7 @@ WS messages ──► parse ──► pending MarketUpdate
 `ui/src/net/NodeClient.h` 定义：
 
 - 连接状态：`Disconnected / Connecting / Connected / Ready / Reconnecting`；
+  Ready 的重复状态（已订阅/已同步快照）不重复写底部状态栏；
 - 订阅：symbols、klines、topics；
 - 一次性请求：catalog、quote、option chain、kline history、account、orders、
   positions、trades；
@@ -252,11 +253,14 @@ WS messages ──► parse ──► pending MarketUpdate
 - 左键拖动平移；
 - 十字光标下方显示对应 bar 的起始时间；
 - `visibleCount/visibleStart/followLatest` 可持久化；
+- 最新 K 线通过 500ms 单次定时器合并刷新，避免每帧行情都重绘实体；
+- 只有最新价/昨结变化才触发图表 quote 重绘，纯成交量 diff 不重绘；
 - 只绘制可见区间。
 
 ### 5.4 QuoteSnapshotPanel / OrderBookPanel / TradeTapePanel
 
 - `QuoteSnapshotPanel`：行情字段展示和红绿格式化，不持有 node/model；
+  catalog 暂时查不到名称时保留上一个名称，避免名称与 `—` 交替闪烁；
 - `OrderBookPanel`：五档买卖盘口，数据来自 Quote 的 bid/ask price/volume 1..5；
 - `TradeTapePanel`：最新优先的有界分笔队列，容量随自身视口高度变化。
 

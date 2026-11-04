@@ -7,10 +7,10 @@
 #include "widgets/TradingPanels.h"
 
 #include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QTableView>
-#include <QLineEdit>
 #include <QtTest>
 
 using namespace tqsdk::ui;
@@ -45,16 +45,22 @@ void WidgetsTest::quotePanelFormatsAndClears() {
     panel.setQuote(&quote, QStringLiteral("螺纹钢2701"));
 
     auto* last   = panel.findChild<QLabel*>(QStringLiteral("quoteLast"));
+    auto* name   = panel.findChild<QLabel*>(QStringLiteral("quoteName"));
     auto* change = panel.findChild<QLabel*>(QStringLiteral("quoteChange"));
     auto* pct    = panel.findChild<QLabel*>(QStringLiteral("quoteChangePct"));
     QVERIFY(last != nullptr);
+    QVERIFY(name != nullptr);
     QVERIFY(change != nullptr);
     QVERIFY(pct != nullptr);
+    QCOMPARE(name->text(), QStringLiteral("螺纹钢2701"));
     QCOMPARE(last->text(), QStringLiteral("3010.50"));
     QCOMPARE(change->text(), QStringLiteral("+10.50"));
     QCOMPARE(pct->text(), QStringLiteral("+0.35%"));
 
+    panel.setQuote(&quote, QString{});
+    QCOMPARE(name->text(), QStringLiteral("螺纹钢2701"));
     panel.setQuote(nullptr, QString{});
+    QCOMPARE(name->text(), QStringLiteral("螺纹钢2701"));
     QCOMPARE(last->text(), QStringLiteral("—"));
     QCOMPARE(change->text(), QStringLiteral("—"));
 }

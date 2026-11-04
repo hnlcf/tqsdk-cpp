@@ -5,6 +5,7 @@
 #include <QMainWindow>
 
 class QCloseEvent;
+class QTimer;
 class QLabel;
 class QSortFilterProxyModel;
 
@@ -48,6 +49,8 @@ private:
     void updateSearchCompletions(const QString& input);
     void applySelectedSymbol(const QString& symbol);
     void applyInterval(qint64 durationNs, const QString& label);
+    void queueChartBars(const QString& symbol, qint64 durationNs, const QVector<KlineBar>& bars);
+    void flushChartBars();
 
     void updateQuotePanel();
     void updateAccountPanel(const Account& account);
@@ -74,6 +77,12 @@ private:
     SymbolController*   symbolController_   = nullptr;
     NodeDataController* nodeDataController_ = nullptr;
     TradingController*  tradingController_  = nullptr;
+
+    QTimer*           chartRefreshTimer_ = nullptr;
+    QVector<KlineBar> pendingChartBars_;
+    QString           pendingChartSymbol_;
+    qint64            pendingChartDuration_ = 0;
+    int               lastNodeState_        = -1;
 
     bool dark_ = false;
 };

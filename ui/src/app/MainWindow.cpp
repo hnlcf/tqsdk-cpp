@@ -26,6 +26,7 @@
 #include <QSortFilterProxyModel>
 #include <QStatusBar>
 #include <QTableView>
+#include <QTimer>
 
 namespace tqsdk::ui {
 
@@ -97,6 +98,11 @@ void MainWindow::buildUi() {
                                      tradesModel_,
                                      tapeModel_,
                                      this);
+
+    chartRefreshTimer_ = new QTimer(this);
+    chartRefreshTimer_->setSingleShot(true);
+    chartRefreshTimer_->setInterval(500);
+    connect(chartRefreshTimer_, &QTimer::timeout, this, &MainWindow::flushChartBars);
 
     connect(
         workspace_, &WorkspaceLayout::watchSymbolActivated, this, [this](const QString& symbol) {
@@ -243,6 +249,9 @@ void MainWindow::connectNode() {
             &NodeDataController::stateChanged,
             this,
             [this](NodeClient::State state, const QString& message) {
+                const bool stateChanged = lastNodeState_ != static_cast<int>(state);
+                lastNodeState_          = static_cast<int>(state);
+
                 QString text;
                 QString color;
                 switch (state) {
@@ -270,8 +279,9 @@ void MainWindow::connectNode() {
                 if (tradingController_ != nullptr) {
                     tradingController_->setNodeReady(state == NodeClient::State::Ready);
                 }
-                if (!message.isEmpty()) {
-                    statusBar()->showMessage(message);
+                if (stateChanged) {
+                    statusBar()->showMessage(state == NodeClient::State::Ready ? tr("行情就绪")
+                                                                               : message);
                 }
                 marketToolBar_->setConnectionState(text, color);
                 if (state == NodeClient::State::Connected || state == NodeClient::State::Ready) {
@@ -295,8 +305,8 @@ void MainWindow::connectNode() {
     connect(nodeDataController_,
             &NodeDataController::klineSeriesChanged,
             this,
-            [this](const QString&, qint64, const QVector<KlineBar>& bars) {
-                workspace_->chart()->setBars(bars);
+            [this](const QString& symbol, qint64 durationNs, const QVector<KlineBar>& bars) {
+                queueChartBars(symbol, durationNs, bars);
             });
     connect(nodeDataController_,
             &NodeDataController::catalogLoaded,
@@ -413,6 +423,10 @@ void MainWindow::applySelectedSymbol(const QString& symbol) {
         nodeDataController_->setSelectedContract(symbol, symbolController_->selectedDurationNs());
     }
     workspace_->chart()->setTitle(symbol, symbolController_->selectedInterval());
+    if (chartRefreshTimer_ != nullptr) {
+        chartRefreshTimer_->stop();
+    }
+    pendingChartBars_.clear();
     workspace_->chart()->setBars(
         marketStore_->bars(symbol, symbolController_->selectedDurationNs()));
     updateQuotePanel();
@@ -425,9 +439,41 @@ void MainWindow::applyInterval(qint64 durationNs, const QString& label) {
         nodeDataController_->setSelectedContract(symbolController_->selectedSymbol(),
                                                  symbolController_->selectedDurationNs());
     }
+    if (chartRefreshTimer_ != nullptr) {
+        chartRefreshTimer_->stop();
+    }
+    pendingChartBars_.clear();
     workspace_->chart()->setBars(marketStore_->bars(symbolController_->selectedSymbol(),
                                                     symbolController_->selectedDurationNs()));
     updateQuotePanel();
+}
+
+void MainWindow::queueChartBars(const QString&           symbol,
+                                qint64                   durationNs,
+                                const QVector<KlineBar>& bars) {
+    if (symbolController_ == nullptr || symbol != symbolController_->selectedSymbol() ||
+        durationNs != symbolController_->selectedDurationNs()) {
+        return;
+    }
+    pendingChartSymbol_   = symbol;
+    pendingChartDuration_ = durationNs;
+    pendingChartBars_     = bars;
+    if (chartRefreshTimer_ != nullptr && !chartRefreshTimer_->isActive()) {
+        chartRefreshTimer_->start();
+    }
+}
+
+void MainWindow::flushChartBars() {
+    if (symbolController_ == nullptr || pendingChartBars_.isEmpty()) {
+        return;
+    }
+    if (pendingChartSymbol_ != symbolController_->selectedSymbol() ||
+        pendingChartDuration_ != symbolController_->selectedDurationNs()) {
+        pendingChartBars_.clear();
+        return;
+    }
+    workspace_->chart()->setBars(pendingChartBars_);
+    pendingChartBars_.clear();
 }
 
 void MainWindow::updateQuotePanel() {

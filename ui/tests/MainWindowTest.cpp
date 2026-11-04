@@ -33,6 +33,9 @@ public:
 
     void publishQuotes(const QVector<Quote>& quotes) { emit quotesUpdated(quotes); }
     void publishCatalog(const QVector<Instrument>& instruments) { emit catalogLoaded(instruments); }
+    void publishKline(const QString& symbol, qint64 durationNs, const KlineFrame& frame) {
+        emit klineUpdated(symbol, durationNs, frame);
+    }
 
 private:
     Subscription subscription_;
@@ -48,6 +51,7 @@ private slots:
     void chartStateAndSelectionAreRestored();
     void closingWindowPersistsChartState();
     void liveQuoteSurvivesCatalogFallback();
+    void latestKlineIsBuffered();
     void cleanup();
 
 private:
@@ -139,6 +143,39 @@ void MainWindowTest::liveQuoteSurvivesCatalogFallback() {
     QTest::qWait(30);
 
     QCOMPARE(last->text(), QStringLiteral("990.00"));
+}
+
+void MainWindowTest::latestKlineIsBuffered() {
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("ui/watchlist"), QStringList{QStringLiteral("CZCE.SA701")});
+    settings.setValue(QStringLiteral("ui/chart/symbol"), QStringLiteral("CZCE.SA701"));
+    settings.setValue(QStringLiteral("ui/chart/interval"), QStringLiteral("1m"));
+    settings.setValue(QStringLiteral("ui/chart/durationNs"), qint64(60'000'000'000LL));
+    settings.sync();
+
+    FakeNodeClient client;
+    MainWindow     window(&client);
+    window.show();
+    QTest::qWait(30);
+
+    auto* chart = window.findChild<KLineChartWidget*>();
+    QVERIFY(chart != nullptr);
+    QCOMPARE(chart->barCount(), 0);
+
+    KlineFrame frame;
+    frame.reset = true;
+    KlineBar bar;
+    bar.datetime = 1'793'770'620'000'000'000LL;
+    bar.open = bar.high = bar.low = bar.close = 990.0;
+    bar.volume                                = 1;
+    frame.bars.push_back(bar);
+    client.publishKline(QStringLiteral("CZCE.SA701"), 60'000'000'000LL, frame);
+
+    QTest::qWait(100);
+    QCOMPARE(chart->barCount(), 0);
+    QTest::qWait(550);
+    QCOMPARE(chart->barCount(), 1);
 }
 
 void MainWindowTest::cleanup() {
