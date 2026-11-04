@@ -18,6 +18,7 @@ private slots:
     void tradeTapeFromQuoteDeltas();
     void quoteMergeRetainsSnapshotFields();
     void incrementalInstrumentLoad();
+    void quoteModelReordersSymbols();
 };
 
 void ModelTest::marketStoreQuotesAndKlines() {
@@ -225,16 +226,29 @@ void ModelTest::instrumentModelFormatsRows() {
 void ModelTest::incrementalInstrumentLoad() {
     InstrumentTableModel model;
     QVector<Instrument>  instruments;
-    for (int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < 20000; ++i) {
         Instrument instrument;
         instrument.instrumentId = QStringLiteral("SHFE.rb%1").arg(2700 + i);
         instruments.push_back(instrument);
     }
     QSignalSpy loaded(&model, &InstrumentTableModel::instrumentsLoaded);
-    model.setInstrumentsIncremental(instruments, 64);
-    QTRY_COMPARE_WITH_TIMEOUT(model.rowCount(), 1000, 2000);
+    model.setInstrumentsIncremental(instruments, 512);
+    QTRY_COMPARE_WITH_TIMEOUT(model.rowCount(), 20000, 5000);
     QCOMPARE(loaded.count(), 1);
-    QCOMPARE(model.symbolAt(999), QStringLiteral("SHFE.rb3699"));
+    QCOMPARE(model.symbolAt(19999), QStringLiteral("SHFE.rb22699"));
+}
+
+void ModelTest::quoteModelReordersSymbols() {
+    QuoteTableModel model;
+    model.setSymbols({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+    QSignalSpy       reordered(&model, &QuoteTableModel::symbolsReordered);
+    const QMimeData* mime = model.mimeData({model.index(2, 0)});
+    QVERIFY(mime != nullptr);
+    QVERIFY(model.dropMimeData(mime, Qt::MoveAction, 0, 0, {}));
+    delete mime;
+    QCOMPARE(reordered.count(), 1);
+    QCOMPARE(model.symbols(),
+             (QStringList{QStringLiteral("C"), QStringLiteral("A"), QStringLiteral("B")}));
 }
 
 QTEST_GUILESS_MAIN(ModelTest)

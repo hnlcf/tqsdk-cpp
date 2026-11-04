@@ -46,6 +46,9 @@ public:
     /// 返回解析后的 symbol；无匹配返回空。调用方负责状态栏提示。
     QString addSymbolFromInput(const QString& input);
     void    addSymbolToWatchlist(const QString& symbol, bool request = true);
+    bool    removeFromWatchlist(const QString& symbol);
+    bool    moveWatchlistSymbol(const QString& symbol, int delta);
+    void    setWatchlistOrder(const QStringList& symbols);
     void    selectSymbol(const QString& symbol);
     void    setInterval(qint64 durationNs, const QString& label);
     void    requestSelectedKlineHistory();
@@ -61,6 +64,8 @@ signals:
 private:
     void  updateSubscription();
     void  scheduleSettingsSave();
+    void  saveIntervalForSymbol(const QString& symbol) const;
+    void  loadIntervalForSymbol(const QString& symbol);
     Quote catalogFallbackQuote(const QString& symbol) const;
 
     NodeClient*           nodeClient_        = nullptr;

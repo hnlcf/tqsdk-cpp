@@ -4,6 +4,7 @@
 
 #include <QWidget>
 
+class QEvent;
 class QLabel;
 
 namespace tqsdk::ui {
@@ -21,6 +22,12 @@ public:
     void setSymbol(const QString& symbol);
     /// quote 为空时清空数值；instrumentName 可来自 catalog。
     void setQuote(const Quote* quote, const QString& instrumentName);
+
+signals:
+    void priceClicked(double price);
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     QLabel* symbol_       = nullptr;

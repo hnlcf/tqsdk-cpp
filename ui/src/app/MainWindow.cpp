@@ -29,6 +29,7 @@
 #include <QStatusBar>
 #include <QTableView>
 #include <QTimer>
+#include <utility>
 
 namespace tqsdk::ui {
 
@@ -125,6 +126,26 @@ void MainWindow::buildUi() {
             this,
             [this](const QString& symbol) { scheduleSymbolSelection(symbol); });
     connect(workspace_,
+            &WorkspaceLayout::watchRemoveRequested,
+            this,
+            [this](const QString& symbol) { symbolController_->removeFromWatchlist(symbol); });
+    connect(workspace_,
+            &WorkspaceLayout::watchMoveRequested,
+            this,
+            [this](const QString& symbol, int delta) {
+                symbolController_->moveWatchlistSymbol(symbol, delta);
+            });
+    connect(symbolController_, &SymbolController::watchlistChanged, this, [this] {
+        const int row = symbolController_->watchRow(symbolController_->selectedSymbol());
+        if (row >= 0 && workspace_ != nullptr) {
+            workspace_->watchTable()->selectRow(row);
+        }
+    });
+    connect(watchModel_,
+            &QuoteTableModel::symbolsReordered,
+            symbolController_,
+            &SymbolController::setWatchlistOrder);
+    connect(workspace_,
             &WorkspaceLayout::futuresSymbolActivated,
             this,
             [this](const QString& symbol) { addSymbolToWatchlist(symbol); });
@@ -140,6 +161,11 @@ void MainWindow::buildUi() {
     });
     connect(workspace_, &WorkspaceLayout::orderSelectionChanged, this, [this] {
         updateOrderControls();
+    });
+    connect(workspace_, &WorkspaceLayout::orderSelected, this, [this](const QString& orderId) {
+        if (workspace_ != nullptr && workspace_->tradesPanel() != nullptr) {
+            workspace_->tradesPanel()->selectOrder(orderId);
+        }
     });
     connect(workspace_, &WorkspaceLayout::cancelRequested, this, [this] {
         if (tradingController_ != nullptr) {
@@ -162,6 +188,7 @@ void MainWindow::buildUi() {
 
     buildTradingController();
     buildViewMenu();
+    buildTradingShortcuts();
     workspace_->restoreLayout();
     workspace_->chart()->setTitle(symbolController_->selectedSymbol(),
                                   symbolController_->selectedInterval());
@@ -202,6 +229,44 @@ void MainWindow::buildViewMenu() {
     QAction* reset = viewMenu->addAction(tr("恢复默认布局"));
     connect(reset, &QAction::triggered, this, [this] { workspace_->resetLayout(); });
     marketToolBar_->setComponentsMenu(viewMenu);
+}
+
+void MainWindow::buildTradingShortcuts() {
+    auto*      tradeMenu = menuBar()->addMenu(tr("交易"));
+    const auto addAction =
+        [this, tradeMenu](const QString& text, const QKeySequence& key, auto&& callback) {
+            auto* action = new QAction(text, this);
+            action->setShortcut(key);
+            action->setShortcutContext(Qt::WindowShortcut);
+            connect(action, &QAction::triggered, this, std::forward<decltype(callback)>(callback));
+            this->addAction(action);
+            tradeMenu->addAction(action);
+        };
+
+    addAction(tr("买开"), QKeySequence(QStringLiteral("Alt+B")), [this] {
+        if (tradingController_ != nullptr) {
+            tradingController_->submit(Direction::Buy, Offset::Open);
+        }
+    });
+    addAction(tr("卖开"), QKeySequence(QStringLiteral("Alt+S")), [this] {
+        if (tradingController_ != nullptr) {
+            tradingController_->submit(Direction::Sell, Offset::Open);
+        }
+    });
+    addAction(tr("平仓"), QKeySequence(QStringLiteral("Alt+C")), [this] {
+        if (tradingController_ != nullptr) {
+            tradingController_->closePosition();
+        }
+    });
+    addAction(tr("撤销选中委托"), QKeySequence(QStringLiteral("Alt+X")), [this] {
+        if (tradingController_ != nullptr) {
+            tradingController_->cancelSelectedOrder();
+        }
+    });
+    tradeMenu->addSeparator();
+    auto* hint =
+        tradeMenu->addAction(tr("快捷键：Alt+B 买开 / Alt+S 卖开 / Alt+C 平仓 / Alt+X 撤单"));
+    hint->setEnabled(false);
 }
 
 void MainWindow::buildTradingController() {
@@ -456,6 +521,10 @@ void MainWindow::applySelectedSymbol(const QString& symbol) {
     }
     pendingSelection_.clear();
     workspace_->orderTicket()->setSymbol(symbol);
+    const int watchRow = symbolController_->watchRow(symbol);
+    if (watchRow >= 0 && workspace_->watchTable()->currentIndex().row() != watchRow) {
+        workspace_->watchTable()->selectRow(watchRow);
+    }
     tapeModel_->clear();
     workspace_->quotePanel()->setSymbol(symbol);
     workspace_->orderBookPanel()->setSymbol(symbol);
@@ -465,6 +534,7 @@ void MainWindow::applySelectedSymbol(const QString& symbol) {
     if (nodeDataController_ != nullptr) {
         nodeDataController_->setSelectedContract(symbol, symbolController_->selectedDurationNs());
     }
+    workspace_->setChartSymbol(symbol);
     workspace_->chart()->setTitle(symbol, symbolController_->selectedInterval());
     if (chartRefreshTimer_ != nullptr) {
         chartRefreshTimer_->stop();

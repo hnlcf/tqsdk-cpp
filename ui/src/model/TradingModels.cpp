@@ -249,6 +249,9 @@ QVariant OrderTableModel::data(const QModelIndex& index, int role) const {
     }
     if (role == Qt::ForegroundRole && index.column() == Status) {
         const auto& order = orders_.at(index.row());
+        if (order.isError) {
+            return QColor("#e04a4a");
+        }
         return order.isDead ? QColor("#8f8f8f") : QColor("#43d17c");
     }
     if (role == Qt::DisplayRole) {
@@ -437,6 +440,10 @@ void TradeTableModel::applyTrades(const QVector<Trade>& trades) {
     if (!trades_.isEmpty()) {
         emit dataChanged(index(0, 0), index(trades_.size() - 1, ColumnCount - 1));
     }
+}
+
+QString TradeTableModel::orderIdAt(int row) const {
+    return row >= 0 && row < trades_.size() ? trades_.at(row).orderId : QString{};
 }
 
 QVariant TradeTableModel::data(const QModelIndex& index, int role) const {

@@ -29,6 +29,7 @@ public:
     void setCloseEnabled(bool enabled);
     void setStatus(const QString& text, bool error = false);
     void setPriceIfEmpty(double price);
+    void setPrice(double price);
 
     QString symbolText() const;
     double  price() const;

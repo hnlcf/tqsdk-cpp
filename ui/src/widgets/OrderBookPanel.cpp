@@ -2,9 +2,11 @@
 
 #include "model/Formatting.h"
 
+#include <QEvent>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMouseEvent>
 
 namespace tqsdk::ui {
 namespace {
@@ -59,6 +61,8 @@ OrderBookPanel::OrderBookPanel(QWidget* parent)
         askPrice_[level]->setObjectName(QStringLiteral("bookAskPrice%1").arg(level + 1));
         askVolume_[level]->setObjectName(QStringLiteral("bookAskVolume%1").arg(level + 1));
         askPrice_[level]->setStyleSheet(QStringLiteral("color: %1;").arg(kAskColor));
+        askPrice_[level]->setCursor(Qt::PointingHandCursor);
+        askPrice_[level]->installEventFilter(this);
         grid->addWidget(levelLabel, display + 1, 0);
         grid->addWidget(askPrice_[level], display + 1, 1);
         grid->addWidget(askVolume_[level], display + 1, 2);
@@ -73,6 +77,8 @@ OrderBookPanel::OrderBookPanel(QWidget* parent)
     last_->setObjectName(QStringLiteral("bookLast"));
     last_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     last_->setStyleSheet(QStringLiteral("font-size: 20px; font-weight: 700;"));
+    last_->setCursor(Qt::PointingHandCursor);
+    last_->installEventFilter(this);
     lastLayout->addWidget(symbol_);
     lastLayout->addStretch(1);
     lastLayout->addWidget(last_);
@@ -87,11 +93,36 @@ OrderBookPanel::OrderBookPanel(QWidget* parent)
         bidPrice_[level]->setObjectName(QStringLiteral("bookBidPrice%1").arg(level + 1));
         bidVolume_[level]->setObjectName(QStringLiteral("bookBidVolume%1").arg(level + 1));
         bidPrice_[level]->setStyleSheet(QStringLiteral("color: %1;").arg(kBidColor));
+        bidPrice_[level]->setCursor(Qt::PointingHandCursor);
+        bidPrice_[level]->installEventFilter(this);
         grid->addWidget(levelLabel, level + 7, 0);
         grid->addWidget(bidPrice_[level], level + 7, 1);
         grid->addWidget(bidVolume_[level], level + 7, 2);
     }
     grid->setRowStretch(12, 1);
+}
+
+bool OrderBookPanel::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::MouseButtonRelease) {
+        auto* mouse = static_cast<QMouseEvent*>(event);
+        if (mouse->button() == Qt::LeftButton) {
+            bool isPrice = watched == last_;
+            for (int level = 0; level < 5 && !isPrice; ++level) {
+                isPrice = watched == askPrice_[level] || watched == bidPrice_[level];
+            }
+            if (isPrice) {
+                if (auto* label = qobject_cast<QLabel*>(watched)) {
+                    bool         ok    = false;
+                    const double price = label->text().toDouble(&ok);
+                    if (ok && price > 0.0) {
+                        emit priceClicked(price);
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void OrderBookPanel::setSymbol(const QString& symbol) {

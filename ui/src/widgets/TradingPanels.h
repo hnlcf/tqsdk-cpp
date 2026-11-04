@@ -56,9 +56,11 @@ class TradesPanel final : public QWidget {
 public:
     explicit TradesPanel(TradeTableModel* model, QWidget* parent = nullptr);
     QTableView* view() const { return view_; }
+    void        selectOrder(const QString& orderId);
 
 private:
-    QTableView* view_ = nullptr;
+    TradeTableModel* model_ = nullptr;
+    QTableView*      view_  = nullptr;
 };
 
 /// 账户权益/可用/保证金/风险度。

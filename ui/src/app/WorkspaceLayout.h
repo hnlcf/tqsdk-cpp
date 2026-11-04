@@ -57,6 +57,7 @@ public:
     void resetLayout();
     void addDockActions(QMenu* menu) const;
     void toggleChartPopout();
+    void setChartSymbol(const QString& symbol);
 
     KLineChartWidget*    chart() const { return chart_; }
     QWidget*             chartHost() const { return chartHost_; }
@@ -80,10 +81,13 @@ public:
 
 signals:
     void watchSymbolActivated(const QString& symbol);
+    void watchRemoveRequested(const QString& symbol);
+    void watchMoveRequested(const QString& symbol, int delta);
     void futuresSymbolActivated(const QString& symbol);
     void optionSymbolActivated(const QString& symbol);
     void positionActivated(const QString& symbol);
     void orderSelectionChanged();
+    void orderSelected(const QString& orderId);
     void cancelRequested();
     void futuresVisibilityChanged(bool visible);
     void optionsVisibilityChanged(bool visible);
@@ -139,6 +143,10 @@ private:
     QDockWidget* orderDock_     = nullptr;
 
     QTimer* saveTimer_ = nullptr;
+    QString chartSymbol_;
+
+    void saveChartViewFor(const QString& symbol) const;
+    void loadChartViewFor(const QString& symbol);
 };
 
 } // namespace tqsdk::ui

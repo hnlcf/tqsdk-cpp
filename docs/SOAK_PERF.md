@@ -156,3 +156,31 @@ python3 scripts/soak_two_process.py --duration 30 \
 python3 scripts/soak_two_process.py --duration 86400 \
   --gw-bin ./build-release/tqsdk-gw --node-bin ./build-release/tqsdk-node
 ```
+
+
+### 2026-11-04 P1/P2 回归（debug build）
+
+15s，8 HTTP 线程，1s 报单/撤单，5s 重启 gw，使用 `build-ui`：
+
+```json
+{
+  "duration_s": 15.0,
+  "http_ok": 124500,
+  "http_err": 0,
+  "order_ok": 12,
+  "order_err": 2,
+  "ws_messages": 17938,
+  "ws_err": 0,
+  "reconnects": 2,
+  "node_max_rss_kb": 26896,
+  "node_max_fds": 19,
+  "node_max_threads": 4,
+  "gw_max_rss_kb": 26048,
+  "gw_max_fds": 10,
+  "gw_max_threads": 4,
+  "fatal": ""
+}
+```
+
+`order_err=2` 集中在 gw 重启窗口，进程、HTTP、WS 均无 fatal，FD/线程数稳定。
+该次为 P1/P2 功能回归短时验证；24h soak 仍按本文件上面的命令作为发布前任务。

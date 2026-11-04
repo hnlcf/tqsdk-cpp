@@ -128,6 +128,7 @@ struct Order {
 
 struct Trade {
     QString tradeId;
+    QString orderId;
     QString instrumentId;
     QString direction;
     QString offset;

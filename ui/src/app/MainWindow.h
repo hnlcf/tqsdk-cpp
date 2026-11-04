@@ -42,6 +42,7 @@ private:
     void buildUi();
     void buildToolbar();
     void buildViewMenu();
+    void buildTradingShortcuts();
     void buildTradingController();
     void connectNode();
 

@@ -242,7 +242,8 @@ WS messages ──► parse ──► pending MarketUpdate
 ### 5.2 WorkspaceLayout / SymbolController / NodeDataController
 
 - `WorkspaceLayout`：创建所有 panel/dock、图表 popout、默认布局、布局 QSettings；
-- `SymbolController`：watchlist、fuzzy resolve、当前合约/周期、subscription、K线历史请求；
+- `SymbolController`：watchlist（增删、上下移动、拖拽排序）、fuzzy resolve、当前合约/周期、
+  subscription、K线历史请求；每个合约独立保存周期；
 - `NodeDataController`：quotes/klines/catalog/option/account/orders/trades 应用到模型，维护可见表刷新；
 - `TradingController`：下单校验、限价/市价/对价 OrderRequest、平仓、撤单、按钮状态；
 - `Toast`：下单失败或 CTP 异步拒单时在窗口顶部显示错误码和描述，3.5 秒后自动淡出；
@@ -261,6 +262,7 @@ WS messages ──► parse ──► pending MarketUpdate
 - 左键拖动平移；
 - 十字光标下方显示对应 bar 的起始时间；
 - `visibleCount/visibleStart/followLatest` 可持久化；
+- 每个合约独立保存 `ui/chart/symbols/<encoded>/...` 的周期、缩放和视口；
 - 最新 K 线通过 500ms 单次定时器合并刷新，避免每帧行情都重绘实体；
 - 只有最新价/昨结变化才触发图表 quote 重绘，纯成交量 diff 不重绘；
 - 只绘制可见区间；
@@ -285,6 +287,7 @@ targeted stylesheet。压测对比：
 - `QuoteSnapshotPanel`：行情字段展示和红绿格式化，不持有 node/model；
   catalog 暂时查不到名称时保留上一个名称，避免名称与 `—` 交替闪烁；
 - `OrderBookPanel`：五档买卖盘口，数据来自 Quote 的 bid/ask price/volume 1..5；
+  点击买/卖/最新价会通过 `priceClicked` 把价格写入三键下单板；
 - `TradeTapePanel`：最新优先的有界分笔队列，容量随自身视口高度变化。
 
 三者是完全独立的 widget，分别放在独立 QDockWidget 中，可以单独关闭、浮动、
@@ -306,7 +309,9 @@ dock，位于交易表格 dock 组右侧。MainWindow 只连接它们与模型/N
 ### 5.6 MarketToolBar / TradingController
 
 - `MarketToolBar`：搜索/补全、加入自选、组件菜单、周期、连接状态和主题；
-- `TradingController`：下单校验、OrderRequest 构造、平仓方向、撤单和交易按钮状态。
+- `TradingController`：下单校验、限价/市价/对价 OrderRequest、平仓方向、撤单和交易按钮状态；
+- 快捷键：`Alt+B` 买开、`Alt+S` 卖开、`Alt+C` 平仓、`Alt+X` 撤销选中委托；
+- 委托选中会联动高亮成交表中同 order id 的成交。
 
 `MainWindow` 现在只负责创建 dock、注入依赖、连接这些 controller 和做最终布局协调。
 
@@ -437,8 +442,9 @@ ctest --test-dir build-ui --output-on-failure
 ```
 
 GUI 组件测试使用 offscreen platform；MainWindow 集成测试使用 FakeNodeClient，
-验证恢复图表合约/周期/视口和关闭时写回 QSettings。P2 还增加了 2000 条行情
-突发合帧测试和 1000 条合约增量加载测试。
+验证恢复图表合约/周期/视口和关闭时写回 QSettings。P2 还增加了 2000 条行情突发合帧、20000 条合约增量加载、
+4K offscreen 高频行情/鼠标/快速切换压力测试、非法 WS 帧后继续处理测试。
+4K stress 测试本机最大 event-loop gap 约 9ms。
 
 ```text
 QT_QPA_PLATFORM=offscreen
@@ -448,7 +454,7 @@ QT_QPA_PLATFORM=offscreen
 
 - 分笔当前是 quote volume 增量，不是交易所逐笔；
 - 图表指标插件尚未实现；设计见 `docs/INDICATOR_PLUGINS.md`；
-- 超大 catalog/option chain 的模型 reset 仍会占用一次 GUI 时间，后续可做
-  增量/分页模型；
+- 超大 catalog/option chain 的增量加载已分批；后续可把模型 reset 进一步改成
+  分页/虚拟模型，避免一次 reset；
 - 若 node 增加 view_width 参数，K 线历史请求可以一次拿更深历史；
 - `NodeClient` 的传输层可替换，不影响 Qt widget 和模型。

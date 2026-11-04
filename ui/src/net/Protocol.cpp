@@ -297,6 +297,7 @@ std::optional<Trade> parseTrade(const QJsonObject& object) {
     }
     Trade t;
     t.tradeId       = stringValue(object.value("trade_id"));
+    t.orderId       = stringValue(object.value("order_id"));
     t.instrumentId  = stringValue(object.value("instrument_id"));
     t.direction     = stringValue(object.value("direction"));
     t.offset        = stringValue(object.value("offset"));

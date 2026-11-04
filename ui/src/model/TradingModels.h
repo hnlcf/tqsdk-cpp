@@ -133,8 +133,9 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
 
-    void setTrades(const QVector<Trade>& trades);
-    void applyTrades(const QVector<Trade>& trades);
+    void    setTrades(const QVector<Trade>& trades);
+    void    applyTrades(const QVector<Trade>& trades);
+    QString orderIdAt(int row) const;
 
 private:
     QVector<Trade> trades_;

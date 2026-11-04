@@ -74,13 +74,28 @@ void OrdersPanel::setCancelEnabled(bool enabled) {
 }
 
 TradesPanel::TradesPanel(TradeTableModel* model, QWidget* parent)
-    : QWidget(parent) {
+    : QWidget(parent),
+      model_(model) {
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     auto* panel = new TablePanel(model, this);
     panel->installColumnMenu(QStringLiteral("trades"));
     view_ = panel->view();
     layout->addWidget(panel);
+}
+
+void TradesPanel::selectOrder(const QString& orderId) {
+    if (view_ == nullptr || model_ == nullptr) {
+        return;
+    }
+    for (int row = 0; row < model_->rowCount(); ++row) {
+        if (model_->orderIdAt(row) == orderId) {
+            view_->selectRow(row);
+            view_->scrollTo(model_->index(row, 0));
+            return;
+        }
+    }
+    view_->clearSelection();
 }
 
 AccountPanel::AccountPanel(QWidget* parent)

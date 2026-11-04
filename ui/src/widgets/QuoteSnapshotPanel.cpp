@@ -2,8 +2,10 @@
 
 #include "model/Formatting.h"
 
+#include <QEvent>
 #include <QFormLayout>
 #include <QLabel>
+#include <QMouseEvent>
 
 #include <cmath>
 #include <limits>
@@ -54,6 +56,8 @@ QuoteSnapshotPanel::QuoteSnapshotPanel(QWidget* parent)
     oiChange_->setObjectName(QStringLiteral("quoteOiChange"));
 
     last_->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 700;"));
+    last_->setCursor(Qt::PointingHandCursor);
+    last_->installEventFilter(this);
 
     form->addRow(tr("合约"), symbol_);
     form->addRow(tr("名称"), name_);
@@ -65,6 +69,21 @@ QuoteSnapshotPanel::QuoteSnapshotPanel(QWidget* parent)
     form->addRow(tr("持仓"), openInterest_);
     form->addRow(tr("增仓"), oiChange_);
     form->addRow(tr("高/低"), highLow_);
+}
+
+bool QuoteSnapshotPanel::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == last_ && event->type() == QEvent::MouseButtonRelease) {
+        auto* mouse = static_cast<QMouseEvent*>(event);
+        if (mouse->button() == Qt::LeftButton) {
+            bool         ok    = false;
+            const double price = last_->text().toDouble(&ok);
+            if (ok && price > 0.0) {
+                emit priceClicked(price);
+                return true;
+            }
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void QuoteSnapshotPanel::setSymbol(const QString& symbol) {

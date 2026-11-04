@@ -1,5 +1,8 @@
 #include "app/MainWindow.h"
+#include "app/SymbolController.h"
 #include "chart/KLineChartWidget.h"
+#include "model/InstrumentTableModel.h"
+#include "model/QuoteTableModel.h"
 #include "net/NodeClient.h"
 
 #include <QElapsedTimer>
@@ -8,6 +11,7 @@
 #include <QTableView>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QUrl>
 #include <QtTest>
 
 #include <algorithm>
@@ -60,6 +64,8 @@ private slots:
     void latestKlineIsBuffered();
     void eventLoopRemainsResponsiveUnderBurst();
     void orderFailureShowsToast();
+    void watchlistCanRemoveAndReorder();
+    void perSymbolChartStateIsRestored();
     void cleanup();
 
 private:
@@ -200,12 +206,14 @@ void MainWindowTest::eventLoopRemainsResponsiveUnderBurst() {
 
     FakeNodeClient client;
     MainWindow     window(&client);
-    window.resize(1920, 1080);
+    window.resize(3840, 2160);
     window.show();
     QTest::qWait(30);
 
     auto* watch = window.findChild<QTableView*>(QStringLiteral("watchTable"));
+    auto* chart = window.findChild<KLineChartWidget*>();
     QVERIFY(watch != nullptr);
+    QVERIFY(chart != nullptr);
 
     QElapsedTimer loopClock;
     loopClock.start();
@@ -253,7 +261,19 @@ void MainWindowTest::eventLoopRemainsResponsiveUnderBurst() {
     });
     quotes.start();
 
+    QTimer mouse;
+    mouse.setInterval(16);
+    int mouseTick = 0;
+    connect(&mouse, &QTimer::timeout, &mouse, [&, chart] {
+        const int x = 120 + (mouseTick * 13) % std::max(200, chart->width() - 240);
+        const int y = 140 + (mouseTick * 7) % std::max(160, chart->height() - 280);
+        QTest::mouseMove(chart, QPoint(x, y));
+        ++mouseTick;
+    });
+    mouse.start();
+
     QTest::qWait(2200);
+    mouse.stop();
     quotes.stop();
     clicks.stop();
     probe.stop();
@@ -283,6 +303,61 @@ void MainWindowTest::orderFailureShowsToast() {
     QVERIFY(toast != nullptr);
     QVERIFY(toast->isVisible());
     QVERIFY(toast->text().contains(QStringLiteral("CTP 31")));
+}
+
+void MainWindowTest::watchlistCanRemoveAndReorder() {
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("ui/watchlist"),
+                      QStringList{QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+    settings.sync();
+
+    QuoteTableModel      watch;
+    InstrumentTableModel futures;
+    InstrumentTableModel calls;
+    InstrumentTableModel puts;
+    SymbolController     controller(nullptr, &watch, &futures, &calls, &puts, nullptr);
+    controller.loadSettings();
+    QCOMPARE(controller.watchlist(), (QStringList{"A", "B", "C"}));
+
+    QVERIFY(controller.moveWatchlistSymbol(QStringLiteral("C"), -1));
+    QCOMPARE(controller.watchlist(), (QStringList{"A", "C", "B"}));
+    QVERIFY(controller.removeFromWatchlist(QStringLiteral("C")));
+    QCOMPARE(controller.watchlist(), (QStringList{"A", "B"}));
+}
+
+void MainWindowTest::perSymbolChartStateIsRestored() {
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("ui/watchlist"),
+                      QStringList{QStringLiteral("A"), QStringLiteral("B")});
+    settings.setValue(QStringLiteral("ui/chart/symbol"), QStringLiteral("A"));
+    settings.setValue(QStringLiteral("ui/chart/interval"), QStringLiteral("1d"));
+    settings.setValue(QStringLiteral("ui/chart/durationNs"), qint64(86'400'000'000'000LL));
+    const QString prefix = QStringLiteral("ui/chart/symbols/%1/")
+                               .arg(QString::fromLatin1(QUrl::toPercentEncoding("B")));
+    settings.setValue(prefix + QStringLiteral("durationNs"), qint64(60'000'000'000LL));
+    settings.setValue(prefix + QStringLiteral("interval"), QStringLiteral("1m"));
+    settings.setValue(prefix + QStringLiteral("visibleCount"), 40);
+    settings.setValue(prefix + QStringLiteral("visibleStart"), 5);
+    settings.setValue(prefix + QStringLiteral("followLatest"), false);
+    settings.sync();
+
+    FakeNodeClient client;
+    MainWindow     window(&client);
+    window.show();
+    QTest::qWait(30);
+    auto* watch = window.findChild<QTableView*>(QStringLiteral("watchTable"));
+    auto* chart = window.findChild<KLineChartWidget*>();
+    QVERIFY(watch != nullptr);
+    QVERIFY(chart != nullptr);
+    watch->selectRow(1);
+    QTest::qWait(250);
+
+    QCOMPARE(chart->interval(), QStringLiteral("1m"));
+    QCOMPARE(chart->visibleCount(), 40);
+    QCOMPARE(chart->visibleStartIndex(), 5);
+    QVERIFY(!chart->followLatest());
 }
 
 void MainWindowTest::cleanup() {

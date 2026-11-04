@@ -99,6 +99,33 @@ private slots:
         client.disconnectFromNode();
     }
 
+    void invalidFrameDoesNotWedgeWsQueue() {
+        QWebSocketServer server(QStringLiteral("tqsdk-ui-invalid-test"),
+                                QWebSocketServer::NonSecureMode);
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+
+        HttpWsNodeClient client;
+        int              count = 0;
+        connect(
+            &client, &NodeClient::quotesUpdated, &client, [&](const QVector<Quote>&) { ++count; });
+        client.connectToNode(QUrl(QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort())));
+        QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 2000);
+        QWebSocket* peer = server.nextPendingConnection();
+        QVERIFY(peer != nullptr);
+        QTRY_COMPARE_WITH_TIMEOUT(peer->state(), QAbstractSocket::ConnectedState, 2000);
+
+        peer->sendTextMessage(QStringLiteral(
+            R"json({"type":"welcome","protocol":1,"heartbeat_interval_ms":30000})json"));
+        QTest::qWait(30);
+        peer->sendTextMessage(QStringLiteral("{not-json"));
+        QTest::qWait(30);
+        peer->sendTextMessage(QStringLiteral(
+            R"json({"type":"diff","data":{"quotes":{"SHFE.rb2701":{"instrument_id":"SHFE.rb2701","last_price":3000.0}}}})json"));
+
+        QTRY_COMPARE_WITH_TIMEOUT(count, 1, 2000);
+        client.disconnectFromNode();
+    }
+
     void catalogPayloadIsParsedOffModelThread() {
         JsonParserWorker worker;
         QSignalSpy       catalogs(&worker, &JsonParserWorker::catalogParsed);

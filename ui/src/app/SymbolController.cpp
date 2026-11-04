@@ -8,6 +8,7 @@
 #include <QRegularExpression>
 #include <QSettings>
 #include <QTimer>
+#include <QUrl>
 
 #include <algorithm>
 
@@ -43,6 +44,11 @@ int fuzzyScore(const QString& query, const QString& text) {
         return -1;
     }
     return 100 - std::min(gaps, 90);
+}
+
+QString symbolChartPrefix(const QString& symbol) {
+    return QStringLiteral("ui/chart/symbols/%1/")
+        .arg(QString::fromLatin1(QUrl::toPercentEncoding(symbol)));
 }
 
 } // namespace
@@ -104,6 +110,7 @@ void SymbolController::loadSettings() {
         selectedDurationNs_ = 86'400'000'000'000LL;
         selectedInterval_   = QStringLiteral("1d");
     }
+    loadIntervalForSymbol(selectedSymbol_);
 
     if (watchModel_ != nullptr) {
         watchModel_->setSymbols(watchlist_);
@@ -122,6 +129,37 @@ void SymbolController::saveSettings() const {
     settings.setValue(QStringLiteral("ui/chart/symbol"), selectedSymbol_);
     settings.setValue(QStringLiteral("ui/chart/interval"), selectedInterval_);
     settings.setValue(QStringLiteral("ui/chart/durationNs"), selectedDurationNs_);
+    saveIntervalForSymbol(selectedSymbol_);
+}
+
+void SymbolController::saveIntervalForSymbol(const QString& symbol) const {
+    if (symbol.isEmpty()) {
+        return;
+    }
+    QSettings     settings;
+    const QString prefix = symbolChartPrefix(symbol);
+    settings.setValue(prefix + QStringLiteral("interval"), selectedInterval_);
+    settings.setValue(prefix + QStringLiteral("durationNs"), selectedDurationNs_);
+}
+
+void SymbolController::loadIntervalForSymbol(const QString& symbol) {
+    if (symbol.isEmpty()) {
+        return;
+    }
+    QSettings     settings;
+    const QString prefix   = symbolChartPrefix(symbol);
+    const qint64  duration = settings.value(prefix + QStringLiteral("durationNs"), 0).toLongLong();
+    if (duration <= 0) {
+        return;
+    }
+    const QString interval =
+        settings.value(prefix + QStringLiteral("interval"), selectedInterval_).toString();
+    if (duration == selectedDurationNs_ && interval == selectedInterval_) {
+        return;
+    }
+    selectedDurationNs_ = duration;
+    selectedInterval_   = interval;
+    emit intervalChanged(selectedDurationNs_, selectedInterval_);
 }
 
 QString SymbolController::resolveSymbol(const QString& input) const {
@@ -234,11 +272,73 @@ void SymbolController::addSymbolToWatchlist(const QString& symbol, bool request)
     Q_UNUSED(row);
 }
 
+bool SymbolController::removeFromWatchlist(const QString& symbol) {
+    const int index = watchlist_.indexOf(symbol);
+    if (index < 0) {
+        return false;
+    }
+    watchlist_.removeAt(index);
+    if (watchModel_ != nullptr) {
+        watchModel_->setSymbols(watchlist_);
+    }
+    scheduleSettingsSave();
+    emit watchlistChanged();
+    emit statusMessage(tr("已从自选移除: %1").arg(symbol), 2500);
+
+    if (symbol == selectedSymbol_ && !watchlist_.isEmpty()) {
+        const int next = std::min(index, static_cast<int>(watchlist_.size()) - 1);
+        selectSymbol(watchlist_.at(next));
+    } else {
+        updateSubscription();
+    }
+    return true;
+}
+
+bool SymbolController::moveWatchlistSymbol(const QString& symbol, int delta) {
+    const int from = watchlist_.indexOf(symbol);
+    if (from < 0 || delta == 0) {
+        return false;
+    }
+    const int to = std::clamp(from + delta, 0, static_cast<int>(watchlist_.size()) - 1);
+    if (to == from) {
+        return false;
+    }
+    watchlist_.move(from, to);
+    if (watchModel_ != nullptr) {
+        watchModel_->setSymbols(watchlist_);
+    }
+    scheduleSettingsSave();
+    emit watchlistChanged();
+    emit statusMessage(tr("已调整自选顺序: %1").arg(symbol), 2000);
+    return true;
+}
+
+void SymbolController::setWatchlistOrder(const QStringList& symbols) {
+    if (symbols == watchlist_ || symbols.size() != watchlist_.size()) {
+        return;
+    }
+    QStringList sortedOld = watchlist_;
+    QStringList sortedNew = symbols;
+    sortedOld.sort();
+    sortedNew.sort();
+    if (sortedOld != sortedNew) {
+        return;
+    }
+    watchlist_ = symbols;
+    if (watchModel_ != nullptr) {
+        watchModel_->setSymbols(watchlist_);
+    }
+    scheduleSettingsSave();
+    emit watchlistChanged();
+}
+
 void SymbolController::selectSymbol(const QString& symbol) {
     if (symbol.isEmpty()) {
         return;
     }
+    saveIntervalForSymbol(selectedSymbol_);
     selectedSymbol_ = symbol;
+    loadIntervalForSymbol(symbol);
     if (!watchlist_.contains(symbol)) {
         watchlist_.push_back(symbol);
         if (watchModel_ != nullptr) {
@@ -272,6 +372,7 @@ void SymbolController::setInterval(qint64 durationNs, const QString& label) {
     }
     selectedDurationNs_ = durationNs;
     selectedInterval_   = label;
+    saveIntervalForSymbol(selectedSymbol_);
     scheduleSettingsSave();
     emit intervalChanged(durationNs, label);
     updateSubscription();

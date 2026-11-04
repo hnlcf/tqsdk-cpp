@@ -3,6 +3,7 @@
 #include <QBrush>
 #include <QColor>
 #include <QFont>
+#include <QMimeData>
 #include <QSet>
 #include <QString>
 
@@ -51,6 +52,71 @@ void QuoteTableModel::setSymbols(const QStringList& symbols) {
     beginResetModel();
     symbols_ = symbols;
     endResetModel();
+}
+
+Qt::ItemFlags QuoteTableModel::flags(const QModelIndex& index) const {
+    Qt::ItemFlags flags = QAbstractTableModel::flags(index);
+    if (index.isValid()) {
+        flags |= Qt::ItemIsDragEnabled;
+    }
+    flags |= Qt::ItemIsDropEnabled;
+    return flags;
+}
+
+Qt::DropActions QuoteTableModel::supportedDropActions() const {
+    return Qt::MoveAction;
+}
+
+QStringList QuoteTableModel::mimeTypes() const {
+    return {QStringLiteral("application/x-tqsdk-symbol")};
+}
+
+QMimeData* QuoteTableModel::mimeData(const QModelIndexList& indexes) const {
+    if (indexes.isEmpty()) {
+        return nullptr;
+    }
+    const QString symbol = symbolAt(indexes.first().row());
+    if (symbol.isEmpty()) {
+        return nullptr;
+    }
+    auto* data = new QMimeData;
+    data->setData(QStringLiteral("application/x-tqsdk-symbol"), symbol.toUtf8());
+    return data;
+}
+
+bool QuoteTableModel::canDropMimeData(
+    const QMimeData* data, Qt::DropAction, int, int, const QModelIndex&) const {
+    return data != nullptr && data->hasFormat(QStringLiteral("application/x-tqsdk-symbol"));
+}
+
+bool QuoteTableModel::dropMimeData(
+    const QMimeData* data, Qt::DropAction action, int row, int, const QModelIndex& parent) {
+    if (data == nullptr || action == Qt::IgnoreAction ||
+        !data->hasFormat(QStringLiteral("application/x-tqsdk-symbol"))) {
+        return false;
+    }
+    const QString symbol =
+        QString::fromUtf8(data->data(QStringLiteral("application/x-tqsdk-symbol")));
+    const int from = symbols_.indexOf(symbol);
+    if (from < 0) {
+        return false;
+    }
+    int to = row;
+    if (to < 0) {
+        to = parent.isValid() ? parent.row() : symbols_.size();
+    }
+    to = std::clamp(to, 0, static_cast<int>(symbols_.size()));
+    if (from < to) {
+        --to;
+    }
+    if (to == from) {
+        return false;
+    }
+    beginResetModel();
+    symbols_.move(from, to);
+    endResetModel();
+    emit symbolsReordered(symbols_);
+    return true;
 }
 
 void QuoteTableModel::applyQuotes(const QVector<Quote>& quotes) {

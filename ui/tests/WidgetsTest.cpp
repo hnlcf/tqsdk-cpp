@@ -25,6 +25,7 @@ private slots:
     void orderTicketTracksSymbolAndPriceMode();
     void accountPanelShowsAccount();
     void orderBookShowsFiveLevels();
+    void orderBookPriceClickEmits();
     void positionDetailShowsSelectedPosition();
     void tradingPanelsRemainIndependent();
     void tradeTapePanelOwnsBoundedView();
@@ -160,6 +161,27 @@ void WidgetsTest::orderBookShowsFiveLevels() {
              QStringLiteral("22"));
     QCOMPARE(panel.findChild<QLabel*>(QStringLiteral("bookLast"))->text(),
              QStringLiteral("3000.00"));
+}
+
+void WidgetsTest::orderBookPriceClickEmits() {
+    OrderBookPanel panel;
+    Quote          quote;
+    quote.instrumentId = QStringLiteral("SHFE.rb2701");
+    quote.lastPrice    = 3010.5;
+    quote.bidPrice1    = 3010.0;
+    quote.askPrice1    = 3011.0;
+    quote.bidVolume1   = 10;
+    quote.askVolume1   = 20;
+    panel.setSymbol(quote.instrumentId);
+    panel.setQuote(&quote);
+    panel.show();
+    QTest::qWait(10);
+    auto* ask = panel.findChild<QLabel*>(QStringLiteral("bookAskPrice1"));
+    QVERIFY(ask != nullptr);
+    QSignalSpy clicked(&panel, &OrderBookPanel::priceClicked);
+    QTest::mouseClick(ask, Qt::LeftButton);
+    QCOMPARE(clicked.count(), 1);
+    QVERIFY(qFuzzyCompare(clicked.first().first().toDouble(), 3011.0));
 }
 
 void WidgetsTest::positionDetailShowsSelectedPosition() {

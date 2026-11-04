@@ -178,6 +178,20 @@ void OrderTicketPanel::setStatus(const QString& text, bool error) {
                                  : QStringLiteral("color: #8f8f8f;"));
 }
 
+void OrderTicketPanel::setPrice(double price) {
+    if (!std::isfinite(price) || price <= 0.0) {
+        return;
+    }
+    if (marketCheck_ != nullptr) {
+        marketCheck_->setChecked(false);
+    }
+    if (opponentCheck_ != nullptr) {
+        opponentCheck_->setChecked(false);
+    }
+    priceBox_->setEnabled(true);
+    priceBox_->setValue(price);
+}
+
 void OrderTicketPanel::setPriceIfEmpty(double price) {
     if (marketOrder() || counterpartyOrder()) {
         return;

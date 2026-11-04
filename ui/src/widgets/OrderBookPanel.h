@@ -5,6 +5,7 @@
 #include <QWidget>
 
 class QLabel;
+class QMouseEvent;
 
 namespace tqsdk::ui {
 
@@ -22,12 +23,18 @@ public:
     void setQuote(const Quote* quote);
     void clear();
 
+signals:
+    void priceClicked(double price);
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private:
-    QLabel* symbol_      = nullptr;
-    QLabel* last_        = nullptr;
-    QLabel* askPrice_[5] = {};
+    QLabel* symbol_       = nullptr;
+    QLabel* last_         = nullptr;
+    QLabel* askPrice_[5]  = {};
     QLabel* askVolume_[5] = {};
-    QLabel* bidPrice_[5] = {};
+    QLabel* bidPrice_[5]  = {};
     QLabel* bidVolume_[5] = {};
 };
 
