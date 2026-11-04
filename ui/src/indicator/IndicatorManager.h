@@ -4,6 +4,7 @@
 #include "net/Protocol.h"
 
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
 #include <QSet>
@@ -59,7 +60,8 @@ private:
     void                   emitSeries();
     QString                resolveSidecarPath() const;
     QString                pythonExecutable() const;
-    QVector<IndicatorSpec> loadSpecs(const QStringList& directories) const;
+    void                   applyCatalog(const QJsonArray& indicators);
+    QVector<IndicatorSpec> parseCatalog(const QJsonArray& indicators) const;
     QString                specName(const QString& indicatorId) const;
     QString                specPanel(const QString& indicatorId) const;
     QColor                 seriesColor(const QString& indicatorId, int index) const;
@@ -83,8 +85,10 @@ private:
 
     QHash<QString, QVector<IndicatorSeries>> seriesById_;
     QSet<QString>                            pendingResponses_;
-    bool                                     stopping_ = false;
-    bool                                     ready_    = false;
+    bool                                     stopping_      = false;
+    bool                                     ready_         = false;
+    bool                                     catalogReady_  = false;
+    bool                                     catalogWanted_ = true;
 };
 
 } // namespace tqsdk::ui

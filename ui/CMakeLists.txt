@@ -101,7 +101,7 @@ install(TARGETS tqsdk-ui
 # Python indicator sidecar is deployed as data, never linked into the UI.
 install(DIRECTORY indicator_sidecar
         DESTINATION share/tqsdk
-        FILES_MATCHING PATTERN "*.py" PATTERN "*.json")
+        FILES_MATCHING PATTERN "*.py")
 
 option(TQSDK_BUILD_UI_TESTS "Build Qt UI tests" OFF)
 if(TQSDK_BUILD_UI_TESTS)

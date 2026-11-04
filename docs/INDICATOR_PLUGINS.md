@@ -1,6 +1,6 @@
 # K 线指标插件设计
 
-> 状态：Phase B（Python sidecar、manifest 动态发现、内置 MA/EMA/BOLL/MACD）已实现；插件签名/依赖管理和 DSL 仍待 Phase C。
+> 状态：Phase B（Python sidecar、单文件指标插件、动态菜单、内置 MA/EMA/BOLL/MACD）已实现；插件签名/依赖管理和 DSL 仍待 Phase C。
 >
 > 目标不是把指标公式塞进 `paintEvent`，而是让指标计算、渲染和生命周期与
 > K 线数据、图表控件解耦，后续可以支持 Python 脚本、内置 DSL 和第三方插件包。
@@ -106,7 +106,7 @@ def on_bar(ctx, bar):
 
 - `IndicatorManager` 只知道 `KLineBar` 和指标请求；
 - `KLineChartWidget` 只接收已经算好的数值序列，不执行表达式/脚本；
-- Python sidecar 只看到行情数据和指标 manifest，不接触 node/账户/交易；
+- Python sidecar 只看到行情数据和指标元数据，不接触 node/账户/交易；
 - UI 主线程只做消息编解码和重绘，不做指标计算。
 
 ## 4. 指标描述模型
@@ -233,7 +233,7 @@ abs/exp/log/min/max
 
 ```text
 UI 启动
-  -> 扫描插件目录和 manifest
+  -> 扫描插件目录的 .py 元数据
   -> 用户启用指标时按需启动 sidecar
   -> init 指标
   -> reset bars
@@ -252,42 +252,54 @@ UI 启动
 
 ### 7.3 插件目录
 
+每个指标只有一个 Python 文件；不再要求独立的 `manifest.json`：
+
 ```text
 ~/.config/tqsdk/indicators/
-  ma_cross/
-    manifest.json
+  rsi.py
+  my_indicator/
     indicator.py
-    requirements.txt   # 可选，首次启用时提示安装
 ```
 
-项目内也可以放只读示例：
+项目内自带文件：
 
 ```text
-indicators/builtin/
+ui/indicator_sidecar/plugins/
+  ma/indicator.py
+  ema/indicator.py
+  boll/indicator.py
+  macd/indicator.py
 ```
 
-### 7.4 Python API 草案
+`requirements.txt` 自动安装属于 Phase C，当前插件只应使用 Python 标准库。
+
+### 7.4 Python API（已实现）
 
 ```python
-# indicator.py
-def on_init(ctx):
-    ctx.declare_output("ma_fast", panel="main", color="#f5c542")
-    ctx.declare_output("ma_slow", panel="main", color="#4f8cff")
+MANIFEST = {
+    "id": "ma_cross",
+    "name": "均线交叉",
+    "panel": "main",
+    "params": [
+        {"key": "fast", "label": "快线", "type": "int", "default": 5},
+        {"key": "slow", "label": "慢线", "type": "int", "default": 20},
+    ],
+    "series": [
+        {"name": "ma_fast", "label": "MA快", "color": "#f5c542"},
+        {"name": "ma_slow", "label": "MA慢", "color": "#4f8cff"},
+    ],
+}
 
-def on_bar(ctx, bar):
-    ctx.plot("ma_fast", ctx.sma(bar.close, 5))
-    ctx.plot("ma_slow", ctx.sma(bar.close, 20))
+
+def compute(params, bars):
+    # bars: [{"datetime", "open", "high", "low", "close", "volume", ...}]
+    # 返回的每个 values 必须与 bars 等长
+    return {"ma_fast": [...], "ma_slow": [...]}
 ```
 
-`ctx` 只暴露：
-
-- 当前参数；
-- 当前 bar 和窗口历史；
-- 预编译的 SMA/EMA/STD 等基础算子；
-- `plot(name, value)`；
-- 错误/日志接口。
-
-不提供：网络、文件、subprocess、交易、Qt 对象。
+也支持 `def manifest(): return {...}`。sidecar 只把元数据和计算函数暴露给
+Qt，不提供网络、文件、subprocess、交易或 Qt 对象 API；插件代码本身仍在
+独立进程中运行。
 
 ## 8. 图表集成
 
@@ -324,14 +336,14 @@ def on_bar(ctx, bar):
 - 重载/查看错误；
 - 删除用户插件（需要确认）。
 
-指标配置写入 `QSettings`，但 Python 文件、manifest 和依赖不写入 QSettings。
+指标配置写入 `QSettings`，但 Python 插件文件和依赖不写入 QSettings。
 
 ## 10. 分阶段计划
 
 ### Phase A：DSL 内核
 
 - `IndicatorSpec` / `IndicatorManager`；
-- YAML/JSON manifest 校验；
+- YAML/JSON DSL manifest 校验；
 - MA/EMA/MACD/KDJ/RSI/BOLL/VOL；
 - 主图叠加和副图；
 - 单元测试（向量结果、NaN、重置、窗口边界）。
@@ -410,6 +422,12 @@ ui/tests/MainWindowTest.cpp                UI 端到端指标测试
 响应：
 
 ```json
+{"type":"ready","protocol":2,"indicators":[
+  {"id":"ma","name":"MA","panel":"main",
+   "params":[{"key":"fast","label":"快线","default":5}],
+   "series":[{"name":"ma_fast","label":"MA快","color":"#f0c75e"}]}
+]}
+
 {"type":"series","indicator_id":"ma","series":[{"name":"ma_fast",
   "panel":"main","points":[{"datetime":...,"value":...}]}]}
 ```
@@ -430,8 +448,8 @@ ui/tests/MainWindowTest.cpp                UI 端到端指标测试
 
 ### 12.4 Qt Manager 生命周期
 
-1. 启动时 `/ready` 发送 `ready`；
-2. `IndicatorManager` 为启用指标发送 `init`；
+1. sidecar 扫描插件 `.py`，在首帧 `ready.indicators` 返回完整 catalog；
+2. Qt 根据 catalog 构建动态菜单；`IndicatorManager` 为启用指标发送 `init`；
 3. K 线 reset 时发送完整窗口，后续相同合约/周期只发送最后一根 bar 或新增 bar；
 4. 结果按 `indicator_id` 聚合，按启用顺序发给图表；
 5. 进程退出后标记错误，1 秒后自动重启；
@@ -472,7 +490,7 @@ TQSDK_INDICATOR_SIDECAR=<repo>/ui/indicator_sidecar/indicator_sidecar.py
 
 ### 12.7 当前边界
 
-- 第三方插件目录扫描和动态菜单刷新已实现；插件签名、权限沙箱和依赖安装尚未实现；
+- 单文件插件目录扫描和动态菜单刷新已实现；插件签名、权限沙箱和依赖安装尚未实现；
 - Python 依赖只使用标准库，暂不支持执行 `requirements.txt` 安装；
 - 副图当前固定一个 MACD 区域，后续可扩展多副图和十字光标联动；
 - 指标有独立覆盖层缓存，副图出现时会缩小主图和成交量区域；
@@ -481,72 +499,107 @@ TQSDK_INDICATOR_SIDECAR=<repo>/ui/indicator_sidecar/indicator_sidecar.py
 
 ### 12.8 动态添加指标（无需重新编译）
 
-指标元数据从 `manifest.json` 发现，C++ UI 不包含指标公式列表，Python
-sidecar 也不需要在每次新增指标时改主脚本。新增一个指标只需要增加目录和两个文件：
-
-```text
-~/.config/tqsdk/indicators/rsi/
-  manifest.json
-  indicator.py
-```
-
-`manifest.json` 示例：
-
-```json
-{
-  "id": "rsi",
-  "name": "RSI",
-  "version": "1.0",
-  "panel": "sub",
-  "params": [
-    {"key": "period", "label": "周期", "type": "int",
-     "default": 14, "min": 2, "max": 500}
-  ],
-  "series": [
-    {"name": "rsi", "label": "RSI", "color": "#f0c75e"}
-  ]
-}
-```
-
-`indicator.py` 示例：
+每个指标只需要 **一个 Python 文件**。元数据和计算放在同一个文件里：
 
 ```python
+# ~/.config/tqsdk/indicators/rsi.py
+MANIFEST = {
+    "id": "rsi",
+    "name": "RSI",
+    "version": "1.0",
+    "panel": "sub",
+    "params": [
+        {"key": "period", "label": "周期", "type": "int",
+         "default": 14, "min": 2, "max": 500}
+    ],
+    "series": [
+        {"name": "rsi", "label": "RSI", "color": "#f0c75e"}
+    ]
+}
+
+
 def compute(params, bars):
     period = max(1, int(params.get("period", 14)))
-    values = []
     closes = [float(bar["close"]) for bar in bars]
+    values = []
     for i in range(len(closes)):
         window = closes[max(0, i - period + 1):i + 1]
         values.append(sum(window) / len(window))
     return {"rsi": values}
 ```
 
-要求：
+也可以把元数据定义成接口，适合动态生成参数：
+
+```python
+def manifest():
+    return {
+        "id": "rsi",
+        "name": "RSI",
+        "panel": "sub",
+        ...
+    }
+
+def compute(params, bars):
+    ...
+```
+
+sidecar 支持：
+
+- `MANIFEST` 字典；
+- `MANIFEST` 可调用对象；
+- `manifest()` 函数；
+- `manifest` 字典。
+
+### 目录布局
+
+支持两种形式：
+
+```text
+~/.config/tqsdk/indicators/rsi.py
+# 或
+~/.config/tqsdk/indicators/rsi/indicator.py
+# 或
+~/.config/tqsdk/indicators/rsi/any_name.py
+```
+
+扫描目录：
+
+```text
+<应用配置>/tqsdk/indicators/
+<QStandardPaths::AppConfigLocation>/indicators/
+$TQSDK_INDICATOR_PLUGIN_DIRS
+<sidecar 目录>/plugins/
+```
+
+UI 和 sidecar 使用同一目录列表。sidecar 在 `ready` 帧里返回完整 catalog，
+Qt UI 用它构建菜单、参数编辑和颜色；GUI 不执行 Python。
+
+### 运算契约
 
 - `compute(params, bars)` 返回 `{series_name: values}`；
 - 每个 values 的长度必须等于 bars；
 - 返回 `None` 或 NaN 会从图中过滤；
 - `panel` 只能是 `main` 或 `sub`；
-- 参数目前按 manifest 的数值类型编辑，`type` 支持 `int` / `float`；
-- 插件入口必须在插件目录内部，不能用 `../` 越界。
+- 参数目前按数值类型编辑，`type` 支持 `int` / `float`；
+- `compute` 和元数据可以放在同一个模块；
+- sidecar 启动时 import 插件，插件异常只跳过该插件，不影响其他指标。
 
-扫描目录：
+### 使用流程
 
-```text
-<应用配置>/tqsdk/indicators/          # 普通用户插件
-<QStandardPaths::AppConfigLocation>/indicators/
-$TQSDK_INDICATOR_PLUGIN_DIRS          # 可显式追加，路径分隔符分隔
-<sidecar 目录>/plugins/               # 项目自带 manifest + 内置实现
-```
+1. 放置单个 `.py` 文件；
+2. 指标菜单中的“刷新指标列表”；
+3. sidecar 重扫并返回新 catalog；
+4. 菜单立即出现新指标；
+5. 启用后 sidecar 发送 `init` 和 K 线，开始计算。
 
-UI 和 sidecar 使用同一目录列表。添加文件后：
+新增指标不需要重新编译 C++、Qt UI 或 sidecar 主脚本。
 
-1. 指标菜单中的“刷新指标列表”；
-2. 新指标会立即出现在菜单中；
-3. 启用后 sidecar 按需重启并加载 Python 文件。
+### 注意事项
 
-内置指标的 manifest 在 `ui/indicator_sidecar/plugins/`，可以直接作为第三方
-插件模板复制。新增指标不需要重新编译 C++，也不需要重新构建 Qt UI。
+- 插件是用户代码，当前在独立 sidecar 进程中直接 import，没有文件/网络/进程沙箱；
+- 插件目录、manifest 元数据和 `.py` 文件都不写入 QSettings；
+- 多指标同时启用时 sidecar 按请求顺序计算；大窗口/多指标基准测试留在 Phase C；
+- 参数目前只支持数值类型，字符串/枚举参数后续扩展。
 
 ### 12.9 验证记录
 
@@ -560,7 +613,7 @@ ctest --test-dir build-ui --output-on-failure
 
 指标相关覆盖：
 
-- `tqsdk-ui-indicator`：MA/MACD 计算、增量 update、参数下发、manifest 外部插件动态加载、非法 sidecar 路径、崩溃 sidecar；
+- `tqsdk-ui-indicator`：MA/MACD 计算、增量 update、参数下发、单文件外部插件动态加载、非法 sidecar 路径、崩溃 sidecar；
 - `tqsdk-ui-chart`：主图叠加 + MACD 副图绘制 smoke；
 - `tqsdk-ui-window`：FakeNodeClient K 线 → IndicatorManager → sidecar → 图表端到端；
 - 4K UI stress 仍保持最大 event-loop gap 约 9ms。

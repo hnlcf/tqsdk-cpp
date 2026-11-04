@@ -142,8 +142,6 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         QDir().mkpath(directory.filePath(QStringLiteral("rsi")));
-        QFile manifest(directory.filePath(QStringLiteral("rsi/manifest.json")));
-        QVERIFY(manifest.open(QIODevice::WriteOnly));
         const QJsonObject manifestObject{
             {QStringLiteral("id"), QStringLiteral("rsi")},
             {QStringLiteral("name"), QStringLiteral("RSI")},
@@ -161,11 +159,12 @@ private slots:
                                     {QStringLiteral("label"), QStringLiteral("RSI")},
                                     {QStringLiteral("color"), QStringLiteral("#f0c75e")}}}},
         };
-        manifest.write(QJsonDocument(manifestObject).toJson(QJsonDocument::Compact));
-        manifest.close();
         QFile plugin(directory.filePath(QStringLiteral("rsi/indicator.py")));
         QVERIFY(plugin.open(QIODevice::WriteOnly));
-        plugin.write("def compute(params, bars):\n"
+        // 元数据和实现放在同一个 Python 文件；这里用 manifest() 接口形式验证兼容性。
+        plugin.write("def manifest():\n    return ");
+        plugin.write(QJsonDocument(manifestObject).toJson(QJsonDocument::Compact));
+        plugin.write("\n\ndef compute(params, bars):\n"
                      "    period = max(1, int(params.get('period', 5)))\n"
                      "    out = []\n"
                      "    closes = [float(bar['close']) for bar in bars]\n"
@@ -179,7 +178,7 @@ private slots:
         IndicatorManager manager;
         manager.setSidecarPathForTest(QStringLiteral(TQSDK_TEST_SIDECAR_PATH));
         manager.setPluginDirectoriesForTest({directory.path()});
-        QCOMPARE(manager.specs().size(), 1);
+        QTRY_COMPARE_WITH_TIMEOUT(manager.specs().size(), 1, 3000);
         QCOMPARE(manager.specs().first().id, QStringLiteral("rsi"));
 
         QSignalSpy spy(&manager, &IndicatorManager::seriesChanged);

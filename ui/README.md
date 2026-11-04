@@ -52,15 +52,27 @@ cmake --build build-ui --target tqsdk-ui -j
 
 ## 指标插件（动态加载）
 
-内置 manifest 位于 `ui/indicator_sidecar/plugins/`。用户指标放到：
+每个指标只有一个 Python 文件，元数据和计算放在一起：
 
 ```text
-~/.config/tqsdk/indicators/<id>/manifest.json
-~/.config/tqsdk/indicators/<id>/indicator.py
+~/.config/tqsdk/indicators/rsi.py
+# 或 ~/.config/tqsdk/indicators/rsi/indicator.py
 ```
 
-插件 Python 只需实现 `compute(params, bars)`，返回 `{series: values}`。
-修改文件后在“指标”菜单点“刷新指标列表”，不需要重新编译 UI。
+```python
+MANIFEST = {
+    "id": "rsi", "name": "RSI", "panel": "sub",
+    "params": [{"key": "period", "default": 14, "min": 2, "max": 500}],
+    "series": [{"name": "rsi", "color": "#f0c75e"}],
+}
+
+def compute(params, bars):
+    ...
+    return {"rsi": values}
+```
+
+也可以使用 `def manifest(): return {...}` 接口。把文件放入目录后，在
+“指标”菜单点“刷新指标列表”即可，不需要重新编译 UI。
 
 ## 当前阶段
 
@@ -82,7 +94,7 @@ Phase 3（P3 Phase B 已完成）：
 - 内置 MA/EMA/BOLL/MACD；
 - 主图叠加和 MACD 副图；
 - 指标菜单、参数编辑、启停和 QSettings 持久化；
-- manifest 动态发现插件，新增指标无需重新编译；
+- 单文件 Python 插件动态发现，新增指标无需重新编译；
 - 指标菜单“刷新指标列表”可在运行时加载新插件；
 - sidecar 超时、输出上限、崩溃重启和敏感环境变量隔离；
 - `tqsdk-ui-indicator` 测试覆盖协议、计算、增量更新和 UI 端到端。

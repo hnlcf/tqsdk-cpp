@@ -43,3 +43,7 @@ ui-expected.png
 
 # UI 检查截图
 actual-ui-*.png
+
+# Python sidecar caches
+__pycache__/
+*.pyc

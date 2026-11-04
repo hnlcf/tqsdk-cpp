@@ -42,81 +42,6 @@ QJsonArray barsToJson(const QVector<KlineBar>& bars, int start) {
     return array;
 }
 
-/// 从 manifest 构建可显示/可参数化的 spec。manifest 是动态插件与 UI 的唯一接口，
-/// 新指标不需要修改 C++ 代码。
-IndicatorSpec parseManifest(const QFileInfo& file, bool& ok) {
-    ok = false;
-    IndicatorSpec spec;
-    QFile         handle(file.absoluteFilePath());
-    if (!handle.open(QIODevice::ReadOnly)) {
-        return spec;
-    }
-    const QJsonDocument document = QJsonDocument::fromJson(handle.readAll());
-    if (!document.isObject()) {
-        return spec;
-    }
-    const QJsonObject object = document.object();
-    spec.id                  = object.value(QStringLiteral("id")).toString();
-    spec.name                = object.value(QStringLiteral("name")).toString(spec.id);
-    spec.panel = object.value(QStringLiteral("panel")).toString(QStringLiteral("sub"));
-    if (spec.id.isEmpty() ||
-        spec.panel != QStringLiteral("main") && spec.panel != QStringLiteral("sub")) {
-        return spec;
-    }
-    if (spec.id.contains(QLatin1Char('/')) || spec.id.contains(QLatin1Char('\\'))) {
-        return spec;
-    }
-
-    static const QStringList fallbackColors = {QStringLiteral("#f0c75e"),
-                                               QStringLiteral("#53b7ff"),
-                                               QStringLiteral("#f28e8e"),
-                                               QStringLiteral("#c792ea"),
-                                               QStringLiteral("#23b39a")};
-    const QJsonArray         params         = object.value(QStringLiteral("params")).toArray();
-    for (const auto& item : params) {
-        const QJsonObject param = item.toObject();
-        const QString     key   = param.value(QStringLiteral("key")).toString();
-        if (key.isEmpty()) {
-            continue;
-        }
-        IndicatorParamSpec definition;
-        definition.key          = key;
-        definition.label        = param.value(QStringLiteral("label")).toString(key);
-        definition.defaultValue = param.value(QStringLiteral("default")).toDouble(0.0);
-        definition.minimum      = param.value(QStringLiteral("minimum"))
-                                      .toDouble(param.value(QStringLiteral("min")).toDouble(0.0));
-        definition.maximum      = param.value(QStringLiteral("maximum"))
-                                      .toDouble(param.value(QStringLiteral("max")).toDouble(1.0e9));
-        definition.integer =
-            param.value(QStringLiteral("type")).toString() != QStringLiteral("float");
-        definition.decimals =
-            definition.integer ? 0 : param.value(QStringLiteral("decimals")).toInt(2);
-        spec.params.push_back(definition);
-    }
-
-    const QJsonArray series = object.value(QStringLiteral("series")).toArray();
-    int              index  = 0;
-    for (const auto& item : series) {
-        const QJsonObject seriesObject = item.toObject();
-        QString           name         = seriesObject.value(QStringLiteral("name")).toString();
-        if (name.isEmpty() && item.isString()) {
-            name = item.toString();
-        }
-        if (name.isEmpty()) {
-            continue;
-        }
-        spec.seriesNames.push_back(name);
-        spec.colors.push_back(seriesObject.value(QStringLiteral("color"))
-                                  .toString(fallbackColors.at(index % fallbackColors.size())));
-        ++index;
-    }
-    if (spec.seriesNames.isEmpty()) {
-        return spec;
-    }
-    ok = true;
-    return spec;
-}
-
 } // namespace
 
 IndicatorManager::IndicatorManager(QObject* parent)
@@ -137,7 +62,7 @@ IndicatorManager::IndicatorManager(QObject* parent)
     restartTimer_->setSingleShot(true);
     restartTimer_->setInterval(1000);
     connect(restartTimer_, &QTimer::timeout, this, [this] {
-        if (!enabled_.isEmpty() && !process_) {
+        if (catalogWanted_ && !process_) {
             startProcess();
         }
     });
@@ -198,35 +123,64 @@ QStringList IndicatorManager::pluginDirectories() const {
     return result;
 }
 
-QVector<IndicatorSpec> IndicatorManager::loadSpecs(const QStringList& directories) const {
-    QVector<IndicatorSpec> specs;
-    QSet<QString>          seenIds;
-    for (const QString& directory : directories) {
-        QDir root(directory);
-        if (!root.exists()) {
+QVector<IndicatorSpec> IndicatorManager::parseCatalog(const QJsonArray& indicators) const {
+    QVector<IndicatorSpec>   specs;
+    static const QStringList fallbackColors = {QStringLiteral("#f0c75e"),
+                                               QStringLiteral("#53b7ff"),
+                                               QStringLiteral("#f28e8e"),
+                                               QStringLiteral("#c792ea"),
+                                               QStringLiteral("#23b39a")};
+    for (const auto& item : indicators) {
+        const QJsonObject object = item.toObject();
+        IndicatorSpec     spec;
+        spec.id    = object.value(QStringLiteral("id")).toString();
+        spec.name  = object.value(QStringLiteral("name")).toString(spec.id);
+        spec.panel = object.value(QStringLiteral("panel")).toString(QStringLiteral("sub"));
+        if (spec.id.isEmpty() ||
+            (spec.panel != QStringLiteral("main") && spec.panel != QStringLiteral("sub"))) {
             continue;
         }
-        QStringList     manifests;
-        const QFileInfo direct(root.filePath(QStringLiteral("manifest.json")));
-        if (direct.isFile()) {
-            manifests.push_back(direct.absoluteFilePath());
-        }
-        for (const QFileInfo& subdir :
-             root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
-            const QFileInfo manifest(subdir.absoluteFilePath() + QStringLiteral("/manifest.json"));
-            if (manifest.isFile()) {
-                manifests.push_back(manifest.absoluteFilePath());
-            }
-        }
-        for (const QString& manifest : manifests) {
-            bool          ok   = false;
-            IndicatorSpec spec = parseManifest(QFileInfo(manifest), ok);
-            if (!ok || seenIds.contains(spec.id)) {
+        const QJsonArray params = object.value(QStringLiteral("params")).toArray();
+        for (const auto& paramValue : params) {
+            const QJsonObject param = paramValue.toObject();
+            const QString     key   = param.value(QStringLiteral("key")).toString();
+            if (key.isEmpty()) {
                 continue;
             }
-            seenIds.insert(spec.id);
-            specs.push_back(spec);
+            IndicatorParamSpec definition;
+            definition.key          = key;
+            definition.label        = param.value(QStringLiteral("label")).toString(key);
+            definition.defaultValue = param.value(QStringLiteral("default")).toDouble(0.0);
+            definition.minimum = param.value(QStringLiteral("minimum"))
+                                     .toDouble(param.value(QStringLiteral("min")).toDouble(0.0));
+            definition.maximum = param.value(QStringLiteral("maximum"))
+                                     .toDouble(param.value(QStringLiteral("max")).toDouble(1.0e9));
+            definition.integer =
+                param.value(QStringLiteral("type")).toString() != QStringLiteral("float");
+            definition.decimals =
+                definition.integer ? 0 : param.value(QStringLiteral("decimals")).toInt(2);
+            spec.params.push_back(definition);
         }
+        const QJsonArray series = object.value(QStringLiteral("series")).toArray();
+        int              index  = 0;
+        for (const auto& seriesValue : series) {
+            const QJsonObject seriesObject = seriesValue.toObject();
+            QString           name         = seriesObject.value(QStringLiteral("name")).toString();
+            if (name.isEmpty() && seriesValue.isString()) {
+                name = seriesValue.toString();
+            }
+            if (name.isEmpty()) {
+                continue;
+            }
+            spec.seriesNames.push_back(name);
+            spec.colors.push_back(seriesObject.value(QStringLiteral("color"))
+                                      .toString(fallbackColors.at(index % fallbackColors.size())));
+            ++index;
+        }
+        if (spec.seriesNames.isEmpty()) {
+            continue;
+        }
+        specs.push_back(spec);
     }
     std::sort(specs.begin(), specs.end(), [](const IndicatorSpec& a, const IndicatorSpec& b) {
         return a.name.localeAwareCompare(b.name) < 0;
@@ -234,17 +188,11 @@ QVector<IndicatorSpec> IndicatorManager::loadSpecs(const QStringList& directorie
     return specs;
 }
 
-void IndicatorManager::reloadCatalog() {
-    const QStringList                 oldEnabled = enabled_;
-    const QHash<QString, QJsonObject> oldParams  = params_;
-    specs_                                       = loadSpecs(pluginDirectories());
-    params_.clear();
-    for (const auto& spec : specs_) {
-        params_.insert(spec.id, oldParams.value(spec.id, spec.defaults()));
-    }
-
+void IndicatorManager::applyCatalog(const QJsonArray& indicators) {
+    specs_        = parseCatalog(indicators);
+    catalogReady_ = true;
     QStringList normalized;
-    for (const QString& id : oldEnabled) {
+    for (const QString& id : enabled_) {
         for (const auto& spec : specs_) {
             if (spec.id == id) {
                 normalized.push_back(id);
@@ -253,19 +201,36 @@ void IndicatorManager::reloadCatalog() {
         }
     }
     enabled_ = normalized;
-    seriesById_.clear();
-    if (process_ != nullptr) {
-        stopProcess();
-        if (!enabled_.isEmpty()) {
-            startProcess();
+    for (const auto& spec : specs_) {
+        QJsonObject defaults = spec.defaults();
+        QJsonObject saved    = params_.value(spec.id);
+        for (auto it = saved.begin(); it != saved.end(); ++it) {
+            defaults.insert(it.key(), it.value());
         }
-    } else if (!enabled_.isEmpty()) {
-        startProcess();
+        params_[spec.id] = defaults;
     }
+    emit catalogChanged();
+    for (const auto& id : enabled_) {
+        sendInit(id);
+    }
+    sentBars_.clear();
+    sendBars(true);
     if (enabled_.isEmpty()) {
         emit seriesChanged({});
     }
+}
+
+void IndicatorManager::reloadCatalog() {
+    if (process_ != nullptr) {
+        stopProcess();
+    }
+    catalogReady_ = false;
+    specs_.clear();
+    seriesById_.clear();
     emit catalogChanged();
+    if (catalogWanted_) {
+        startProcess();
+    }
 }
 
 QString IndicatorManager::pythonExecutable() const {
@@ -301,9 +266,6 @@ QString IndicatorManager::resolveSidecarPath() const {
 }
 
 void IndicatorManager::startProcess() {
-    if (enabled_.isEmpty()) {
-        return;
-    }
     if (process_ != nullptr) {
         return;
     }
@@ -354,13 +316,13 @@ void IndicatorManager::startProcess() {
         if (stopping_ || process_ == nullptr) {
             return;
         }
-        const bool hadEnabled = !enabled_.isEmpty();
         process_->deleteLater();
-        process_ = nullptr;
-        ready_   = false;
+        process_      = nullptr;
+        ready_        = false;
+        catalogReady_ = false;
         sentBars_.clear();
         pendingResponses_.clear();
-        if (hadEnabled) {
+        if (catalogWanted_) {
             emit errorOccurred(tr("指标 sidecar 已退出，1 秒后尝试恢复"));
             restartTimer_->start();
         }
@@ -391,7 +353,7 @@ void IndicatorManager::stopProcess() {
 }
 
 void IndicatorManager::scheduleRestart() {
-    if (!enabled_.isEmpty() && !restartTimer_->isActive()) {
+    if (catalogWanted_ && !restartTimer_->isActive()) {
         restartTimer_->start();
     }
 }
@@ -498,11 +460,7 @@ void IndicatorManager::handleMessage(const QJsonObject& message) {
     const QString type = message.value(QStringLiteral("type")).toString();
     if (type == QStringLiteral("ready")) {
         ready_ = true;
-        for (const auto& id : enabled_) {
-            sendInit(id);
-        }
-        sentBars_.clear();
-        sendBars(true);
+        applyCatalog(message.value(QStringLiteral("indicators")).toArray());
         return;
     }
     if (type == QStringLiteral("initialized")) {
@@ -602,9 +560,18 @@ QColor IndicatorManager::seriesColor(const QString& indicatorId, int index) cons
 
 void IndicatorManager::setEnabled(const QStringList& indicatorIds) {
     QStringList normalized;
-    for (const auto& spec : specs_) {
-        if (indicatorIds.contains(spec.id)) {
-            normalized.push_back(spec.id);
+    if (!specs_.isEmpty()) {
+        for (const auto& spec : specs_) {
+            if (indicatorIds.contains(spec.id)) {
+                normalized.push_back(spec.id);
+            }
+        }
+    } else {
+        // 指标目录来自 sidecar catalog；catalog 还没到时先保留请求，ready 后过滤。
+        for (const QString& id : indicatorIds) {
+            if (!normalized.contains(id)) {
+                normalized.push_back(id);
+            }
         }
     }
     if (normalized == enabled_) {
@@ -614,26 +581,30 @@ void IndicatorManager::setEnabled(const QStringList& indicatorIds) {
     seriesById_.clear();
     sentBars_.clear();
     emit seriesChanged({});
-    stopProcess();
-    if (enabled_.isEmpty()) {
+    if (process_ == nullptr) {
+        startProcess();
         return;
     }
-    startProcess();
+    if (!ready_) {
+        return;
+    }
+    for (const auto& id : enabled_) {
+        sendInit(id);
+    }
+    sendBars(true);
 }
 
 void IndicatorManager::setParams(const QString& indicatorId, const QJsonObject& params) {
-    if (!params_.contains(indicatorId)) {
-        return;
-    }
+    // 允许在 catalog 到达前保存参数；applyCatalog() 会合并默认值。
     QJsonObject merged = params_.value(indicatorId);
     for (auto it = params.begin(); it != params.end(); ++it) {
         merged.insert(it.key(), it.value());
     }
     params_[indicatorId] = merged;
-    if (enabled_.contains(indicatorId)) {
+    if (ready_ && enabled_.contains(indicatorId)) {
+        sendInit(indicatorId);
         sentBars_.clear();
-        stopProcess();
-        startProcess();
+        sendBars(true);
     }
 }
 
