@@ -133,8 +133,12 @@ if(TQSDK_BUILD_UI_TESTS)
     add_test(NAME tqsdk-ui-models COMMAND tqsdk-ui-model-tests)
     qt_add_executable(tqsdk-ui-parser-tests
         tests/JsonParserWorkerTest.cpp
+        src/net/HttpWsNodeClient.cpp
+        src/net/HttpWsNodeClient.h
         src/net/JsonParserWorker.cpp
         src/net/JsonParserWorker.h
+        src/net/NodeClient.cpp
+        src/net/NodeClient.h
         src/net/Protocol.cpp
         src/net/Protocol.h
     )
@@ -143,7 +147,9 @@ if(TQSDK_BUILD_UI_TESTS)
     )
     target_link_libraries(tqsdk-ui-parser-tests PRIVATE
         Qt6::Core
+        Qt6::Network
         Qt6::Test
+        Qt6::WebSockets
     )
     add_test(NAME tqsdk-ui-parser COMMAND tqsdk-ui-parser-tests)
 

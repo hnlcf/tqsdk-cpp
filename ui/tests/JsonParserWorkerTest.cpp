@@ -1,6 +1,9 @@
+#include "net/HttpWsNodeClient.h"
 #include "net/JsonParserWorker.h"
 
 #include <QSignalSpy>
+#include <QWebSocket>
+#include <QWebSocketServer>
 #include <QtTest>
 
 using namespace tqsdk::ui;
@@ -63,6 +66,37 @@ private slots:
         worker.parseWsMessage(QByteArray("not-json"));
 
         QCOMPARE(finished.count(), 4);
+    }
+
+    void welcomeDoesNotBlockFollowingQuote() {
+        QWebSocketServer server(QStringLiteral("tqsdk-ui-test"), QWebSocketServer::NonSecureMode);
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+
+        HttpWsNodeClient client;
+        QVector<Quote>   received;
+        int              count = 0;
+        connect(&client, &NodeClient::quotesUpdated, &client, [&](const QVector<Quote>& quotes) {
+            received = quotes;
+            ++count;
+        });
+
+        client.connectToNode(QUrl(QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort())));
+        QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 2000);
+        QWebSocket* peer = server.nextPendingConnection();
+        QVERIFY(peer != nullptr);
+        QTRY_COMPARE_WITH_TIMEOUT(peer->state(), QAbstractSocket::ConnectedState, 2000);
+
+        peer->sendTextMessage(QStringLiteral(
+            R"json({"type":"welcome","protocol":1,"heartbeat_interval_ms":30000})json"));
+        QTest::qWait(30);
+        peer->sendTextMessage(QStringLiteral(
+            R"json({"type":"diff","data":{"quotes":{"SHFE.rb2701":{"instrument_id":"SHFE.rb2701","last_price":3000.0}}}})json"));
+
+        QTRY_COMPARE_WITH_TIMEOUT(count, 1, 2000);
+        QCOMPARE(received.size(), 1);
+        QCOMPARE(received.first().instrumentId, QStringLiteral("SHFE.rb2701"));
+        QCOMPARE(received.first().lastPrice, 3000.0);
+        client.disconnectFromNode();
     }
 
     void catalogPayloadIsParsedOffModelThread() {
