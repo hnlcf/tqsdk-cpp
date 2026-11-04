@@ -26,10 +26,12 @@ class RemoteTdGateway : public TradingGateway {
 public:
     RemoteTdGateway(IpcClient&                client,
                     asio::any_io_executor     ex,
-                    std::chrono::milliseconds ack_timeout = std::chrono::seconds(10));
+                    std::chrono::milliseconds ack_timeout          = std::chrono::seconds(10),
+                    bool                      shfe_market_as_limit = true);
     RemoteTdGateway(std::shared_ptr<IpcClient> client,
                     asio::any_io_executor      ex,
-                    std::chrono::milliseconds  ack_timeout = std::chrono::seconds(10));
+                    std::chrono::milliseconds  ack_timeout          = std::chrono::seconds(10),
+                    bool                       shfe_market_as_limit = true);
     ~RemoteTdGateway() override;
 
     asio::awaitable<void> start() override;
@@ -41,7 +43,8 @@ public:
 
     Channel<TradeEvent>& event_output() override { return ch_; }
     nlohmann::json       metrics() const override;
-    bool requires_initial_trade_snapshot() const override { return true; }
+    bool                 requires_initial_trade_snapshot() const override { return true; }
+    bool needs_shfe_price_normalization() const override { return shfe_market_as_limit_; }
 
     /// 供 IpcClient 调用：把一帧翻译成事件推入 event_output()。
     void on_frame(ReceivedFrame&& frame);
@@ -55,6 +58,7 @@ private:
     asio::any_io_executor      ex_;
     Channel<TradeEvent>        ch_;
     std::chrono::milliseconds  ack_timeout_;
+    bool                       shfe_market_as_limit_ = true;
 };
 
 } // namespace ipc

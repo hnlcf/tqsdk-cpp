@@ -170,6 +170,8 @@ TqApiConfig build_from_toml(const toml::table& root) {
         cfg.td.tcp_port        = static_cast<uint16_t>(get_int(td_t, "tcp_port", 0));
         cfg.td.name            = get_str(td_t, "name", cfg.td.name);
         cfg.td.ack_timeout     = std::chrono::milliseconds(get_int(td_t, "ack_timeout_ms", 10000));
+        cfg.td.shfe_market_as_limit =
+            get_bool(td_t, "shfe_market_as_limit", cfg.td.shfe_market_as_limit);
     }
 
     cfg.ctp = parse_ctp_config(root);
@@ -308,7 +310,8 @@ asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context&           c
         td = nullptr;
         break;
     case TdKind::Remote:
-        td = std::make_unique<ipc::RemoteTdGateway>(client, ex, cfg.td.ack_timeout);
+        td = std::make_unique<ipc::RemoteTdGateway>(
+            client, ex, cfg.td.ack_timeout, cfg.td.shfe_market_as_limit);
         break;
     }
 

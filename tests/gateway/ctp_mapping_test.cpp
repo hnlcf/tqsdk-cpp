@@ -2,6 +2,7 @@
 
 #include "tqsdk/gateway/ctp/ctp_convert.h"
 #include "tqsdk/gateway/ctp/ctp_task_queue.h"
+#include "tqsdk/trading/order_normalizer.h"
 
 #include "support/test_helpers.h"
 
@@ -51,6 +52,61 @@ TEST(CtpConvert, OrderAndTradeJson) {
     EXPECT_EQ(tj["volume"], 1);
     EXPECT_EQ(tj["instrument_id"], "SHFE.rb2610");
     EXPECT_DOUBLE_EQ(tj["price"], 3799.0);
+}
+
+TEST(CtpConvert, ShfeMarketAndBestAreConvertedToLimit) {
+    Quote quote;
+    quote.instrument_id = "SHFE.ao2701";
+    quote.upper_limit   = 2750.0;
+    quote.lower_limit   = 2550.0;
+    quote.bid_price1    = 2631.0;
+    quote.ask_price1    = 2632.0;
+
+    InsertOrderReq buy_market;
+    buy_market.instrument_id = "SHFE.ao2701";
+    buy_market.direction     = Direction::BUY;
+    buy_market.price_type    = PriceType::ANY;
+    auto market              = normalize_shfe_order_price(buy_market, &quote);
+    ASSERT_TRUE(market.ok());
+    EXPECT_TRUE(market.converted);
+    EXPECT_EQ(market.request.price_type, PriceType::LIMIT);
+    EXPECT_DOUBLE_EQ(market.request.limit_price, 2750.0);
+    EXPECT_EQ(market.request.time_cond, TimeCondition::IOC);
+
+    InsertOrderReq sell_market;
+    sell_market.instrument_id = "SHFE.ao2701";
+    sell_market.direction     = Direction::SELL;
+    sell_market.price_type    = PriceType::ANY;
+    auto sell                 = normalize_shfe_order_price(sell_market, &quote);
+    ASSERT_TRUE(sell.ok());
+    EXPECT_DOUBLE_EQ(sell.request.limit_price, 2550.0);
+
+    InsertOrderReq buy_best;
+    buy_best.instrument_id = "SHFE.ao2701";
+    buy_best.direction     = Direction::BUY;
+    buy_best.price_type    = PriceType::BEST;
+    auto best              = normalize_shfe_order_price(buy_best, &quote);
+    ASSERT_TRUE(best.ok());
+    EXPECT_DOUBLE_EQ(best.request.limit_price, 2632.0);
+
+    InsertOrderReq sell_best;
+    sell_best.instrument_id = "SHFE.ao2701";
+    sell_best.direction     = Direction::SELL;
+    sell_best.price_type    = PriceType::BEST;
+    auto best_sell          = normalize_shfe_order_price(sell_best, &quote);
+    ASSERT_TRUE(best_sell.ok());
+    EXPECT_DOUBLE_EQ(best_sell.request.limit_price, 2631.0);
+
+    InsertOrderReq non_shfe = buy_market;
+    non_shfe.instrument_id  = "DCE.i2701";
+    auto unchanged          = normalize_shfe_order_price(non_shfe, &quote);
+    ASSERT_TRUE(unchanged.ok());
+    EXPECT_FALSE(unchanged.converted);
+    EXPECT_EQ(unchanged.request.price_type, PriceType::ANY);
+
+    quote.upper_limit = kUnknownDouble;
+    auto missing      = normalize_shfe_order_price(buy_market, &quote);
+    EXPECT_FALSE(missing.ok());
 }
 
 TEST(CtpConvert, MarketAndBestOrdersUseZeroLimitPrice) {

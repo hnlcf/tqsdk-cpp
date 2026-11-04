@@ -126,6 +126,10 @@ public:
 
     // 远端网关需要先收到一次完整 Snapshot 才算就绪；本地/mock 网关默认无需。
     virtual bool requires_initial_trade_snapshot() const { return false; }
+
+    /// 是否应按 SHFE 规则把 AnyPrice/BestPrice 转成实际限价单。
+    /// 本地 Sim/Mock 有自己的撮合语义，不应走 CTP 转换。
+    virtual bool needs_shfe_price_normalization() const { return false; }
 };
 
 } // namespace tqsdk

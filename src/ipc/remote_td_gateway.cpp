@@ -7,22 +7,26 @@ namespace ipc {
 
 RemoteTdGateway::RemoteTdGateway(IpcClient&                client,
                                  asio::any_io_executor     ex,
-                                 std::chrono::milliseconds ack_timeout)
+                                 std::chrono::milliseconds ack_timeout,
+                                 bool                      shfe_market_as_limit)
     : client_(client),
       ex_(ex),
       ch_(ex),
-      ack_timeout_(ack_timeout) {
+      ack_timeout_(ack_timeout),
+      shfe_market_as_limit_(shfe_market_as_limit) {
     install_handlers();
 }
 
 RemoteTdGateway::RemoteTdGateway(std::shared_ptr<IpcClient> client,
                                  asio::any_io_executor      ex,
-                                 std::chrono::milliseconds  ack_timeout)
+                                 std::chrono::milliseconds  ack_timeout,
+                                 bool                       shfe_market_as_limit)
     : client_owner_(std::move(client)),
       client_(*client_owner_),
       ex_(ex),
       ch_(ex),
-      ack_timeout_(ack_timeout) {
+      ack_timeout_(ack_timeout),
+      shfe_market_as_limit_(shfe_market_as_limit) {
     install_handlers();
 }
 

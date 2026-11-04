@@ -83,6 +83,8 @@ struct TqApiConfig {
         uint16_t                  tcp_port = 0;
         std::string               name     = "gw-td";
         std::chrono::milliseconds ack_timeout{std::chrono::seconds(10)};
+        /// 远程网关（通常为 CTP）是否启用 SHFE 市价/对价限价转换。
+        bool shfe_market_as_limit = true;
     } td;
 
     /// [ctp] 柜台参数（md.kind/td.kind == ctp 时使用）。

@@ -33,6 +33,7 @@ public:
 
     nlohmann::json snapshot() const override;
     bool           snapshot_ready() const override;
+    bool           needs_shfe_price_normalization() const override { return true; }
 
     Channel<TradeEvent>& event_output() override { return ch_; }
 

@@ -320,3 +320,20 @@ python3 scripts/simnow_acceptance.py --symbol SHFE.rb2701 --orders --yes
 ```bash
 python3 scripts/test_simnow_acceptance.py
 ```
+
+## 9. SHFE 市价/对价单转换
+
+SHFE 不接受 CTP 的 `AnyPrice` / `BestPrice` 报单类型。node 在
+`TqApi::insert_order` 发送命令前，会利用已合并的 quote 做确定性转换：
+
+| 用户意图 | SHFE 实际报单 |
+|---|---|
+| BUY 市价 | 涨停价 LIMIT + IOC |
+| SELL 市价 | 跌停价 LIMIT + IOC |
+| BUY 对价 | 卖一价 LIMIT + IOC |
+| SELL 对价 | 买一价 LIMIT + IOC |
+
+- 转换发生在 node 侧，`tqsdk-gw` / CTP 最终收到的都是合法限价单；
+- 没有有效停板价或买一/卖一价时，下单直接返回错误，不会发送错误的 CTP 报单；
+- 其他交易所仍保留原有 `ANY` / `BEST` 映射；
+- CTP 网关仍对市价单发送 `LimitPrice=0`，作为最后的字段兜底。
