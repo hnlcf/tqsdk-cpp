@@ -266,3 +266,17 @@ log:  artifacts/ctp_session_20261105_live.log
 它每 30s 采样 `/readyz`、account、positions、orders，按 `phase` 区分
 `open/break/pre_open` 与 `settlement/closed`。结算断线会记录为 expected，
 不会伪装成 CTP 连续 24h 在线。
+
+### 2026-11-05 后续自动任务
+
+已通过 `at` 安排：
+
+```text
+09:30 2026-11-06  平昨自动 runner（隔离端口 24332/28083）
+10:30 2026-11-06  平昨重试
+10:35 2026-11-06  下一交易时段 CTP session monitor（14400s）
+13:35 2026-11-05  小额期权部分成交 probe
+```
+
+所有任务均使用隔离端口，避免与正在运行的 session monitor 冲突。跨结算的
+CTP 任务只对 `readyz.phase`/expected disconnect 做记录，不把预期断线当成故障。

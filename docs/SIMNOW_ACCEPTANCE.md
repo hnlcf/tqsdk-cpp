@@ -309,3 +309,12 @@ artifacts/ctp_session_20261105_live.jsonl
 
 由于部分成交取决于 SimNow 撮合窗口，这个探针是“可重复尝试”，不是每次都能
 得到 PARTIAL。
+
+### 8.9 后续自动探针
+
+- 13:35 部分成交 probe：小额期权、自动撤余量/平仓，结果可能为
+  `PARTIAL/FULL/NO_FILL`；
+- 09:30/10:30 平昨 runner；
+- 10:35 下一交易时段 session monitor。
+
+这些任务使用 `artifacts/` 下的独立日志/JSONL，不覆盖本次报告。
