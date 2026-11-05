@@ -52,4 +52,6 @@ for i in $(seq 1 120); do
     sleep 1
 done
 NODE_URL="$NODE_URL" "$ROOT/scripts/ctp_close_yesterday_test.sh"
-echo "[$(date -Is)] close-yesterday runner finished"
+RC=$?
+echo "[$(date -Is)] close-yesterday runner finished rc=$RC"
+exit "$RC"
