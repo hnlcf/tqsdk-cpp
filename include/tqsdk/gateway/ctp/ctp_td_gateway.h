@@ -162,11 +162,11 @@ private:
     std::unique_ptr<ctp::CtpTdSpi> spi_;
     CThostFtdcTraderApi*           api_ = nullptr;
 
-    bool started_        = false;
-    bool stopped_        = false;
-    bool authenticated_  = false;
-    bool logged_in_      = false;
-    bool initial_loaded_ = false;
+    bool              started_       = false;
+    bool              stopped_       = false;
+    bool              authenticated_ = false;
+    std::atomic<bool> logged_in_{false}; // readiness 可从其他线程读取
+    bool              initial_loaded_ = false;
 
     int             front_id_   = 0;
     int             session_id_ = 0;

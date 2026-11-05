@@ -1156,7 +1156,7 @@ TradingCalendar::Phase CtpTdGateway::session_phase() const {
     // 处于交易窗口但尚未登录/结算确认，说明仍在重连或恢复查询。
     if ((phase == TradingCalendar::Phase::Open || phase == TradingCalendar::Phase::Break ||
          phase == TradingCalendar::Phase::PreOpen) &&
-        !logged_in_) {
+        !logged_in_.load(std::memory_order_relaxed)) {
         return TradingCalendar::Phase::Reconnecting;
     }
     return phase;
