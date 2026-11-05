@@ -23,12 +23,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
-Q=$(curl -sS -m 5 "$NODE_URL/quote/$SYMBOL" || true)
-ASK=$(printf '%s' "$Q" | jq -r '.ask_price1 // empty' 2>/dev/null || true)
-BID=$(printf '%s' "$Q" | jq -r '.bid_price1 // empty' 2>/dev/null || true)
+# 首次 /quote 可能只是订阅占位，必须等待行情推送，否则会误判为不可交易。
+Q=
+for _ in $(seq 1 30); do
+    Q=$(curl -sS -m 5 "$NODE_URL/quote/$SYMBOL" || true)
+    ASK=$(printf '%s' "$Q" | jq -r '.ask_price1 // empty' 2>/dev/null || true)
+    BID=$(printf '%s' "$Q" | jq -r '.bid_price1 // empty' 2>/dev/null || true)
+    if [[ -n "$ASK" && "$ASK" != "null" && -n "$BID" && "$BID" != "null" ]]; then
+        break
+    fi
+    sleep 1
+done
 AV=$(printf '%s' "$Q" | jq -r '.ask_volume1 // 0' 2>/dev/null || true)
 if [[ -z "$ASK" || "$ASK" == "null" || -z "$BID" || "$BID" == "null" ]]; then
-    echo "no valid option quote; skip (not a failure of order path)"
+    echo "no valid option quote after 30s; skip (not a failure of order path)"
     exit 3
 fi
 QTY=$((AV + 1))
