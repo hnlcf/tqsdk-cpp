@@ -133,10 +133,10 @@ heartbeat_interval_ms = 1000
 heartbeat_timeout_ms = 5000
 local_name = "node-soak"
 
+# TD-only soak: the gateway has no market-data kind. Do not create a remote
+# MD gateway with no upstream, otherwise /readyz is permanently false.
 [md]
-kind = "remote"
-tcp_host = "127.0.0.1"
-tcp_port = {gw_port}
+kind = "none"
 
 [td]
 kind = "remote"
@@ -223,7 +223,7 @@ class Soak:
                 )
         finally:
             log.close()
-        wait_http(self.node_base + "/healthz")
+        wait_http(self.node_base + "/readyz")
 
     def stop_node(self) -> None:
         with self.proc_lock:

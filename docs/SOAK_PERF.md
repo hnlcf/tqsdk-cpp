@@ -313,3 +313,26 @@ csv:  artifacts/soak_24h_20261105_194846.csv
 
 该轮将在 2026-11-06 19:48 左右结束。CTP monitor 同时观察到 19:47 已进入
 `settlement` 阶段，`expected_disconnect=true`，说明结算阶段被正确分类。
+
+### TD-only soak 配置修正
+
+原 SimTd soak 的 gateway 使用 `[md] kind="none"`，但 node 仍生成
+`[md] kind="remote"`，造成：
+
+```text
+td.ready=true
+md.connected=false
+ready=false
+```
+
+这不是交易故障，而是测试配置创建了一个没有上游的 RemoteMdGateway。已将
+soak node 改为 `[md] kind="none"`，启动等待也从 `/healthz` 改为 `/readyz`；
+新的 TD-only soak 现在返回：
+
+```json
+{"ready":true,"md":{"connected":false,"present":false,"ready":true},
+ "td":{"connected":true,"ready":true}}
+```
+
+catalog 未加载是 TD-only soak 未配置 `[instruments]` 的预期行为；需要
+catalog 时使用 live node。
