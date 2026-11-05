@@ -342,3 +342,27 @@ TEST(WsStreamConfig, ParseServeWsSection) {
     EXPECT_EQ(cfg.ws.max_queue, 9u);
     EXPECT_EQ(cfg.ws.coalesce, std::chrono::milliseconds(12));
 }
+
+// 只发 symbols 不带 topics 时，服务端不应默认推送 account/orders/trades/positions。
+TEST(WsStream, DefaultSubscriptionIsMarketDataOnly) {
+    WsFixture f;
+    bool      no_trading_topics = false;
+    bool      ack_topics_empty  = false;
+    test::run_coro(f.ctx, [&]() -> asio::awaitable<void> {
+        WsClient c(f.ctx);
+        co_await c.connect("127.0.0.1", f.port, "/stream");
+        (void)co_await c.read_json(); // welcome
+        co_await c.send_json(
+            json{{"op", "subscribe"}, {"symbols", {"SHFE.rb2610"}}, {"klines", json::array()}});
+        auto sub             = co_await c.read_json();
+        ack_topics_empty     = sub.value("topics", json::array()).empty();
+        auto        snapshot = co_await c.read_json();
+        const auto& data     = snapshot["data"];
+        no_trading_topics    = !data.contains("account") && !data.contains("orders") &&
+                               !data.contains("trades") && !data.contains("positions");
+        co_await c.close();
+        co_return;
+    }());
+    EXPECT_TRUE(ack_topics_empty);
+    EXPECT_TRUE(no_trading_topics);
+}

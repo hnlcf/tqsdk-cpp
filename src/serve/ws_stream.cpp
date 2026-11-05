@@ -229,6 +229,11 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
     std::map<std::pair<std::string, int64_t>, int> klines; // key -> view_width
     std::set<std::string>                          topics;
     bool                                           topics_initialized = false;
+    // 每客户端最近一次下发的实体 JSON，过滤 CTP 全量查询造成的伪 diff。
+    std::unordered_map<std::string, std::string> sent_order_json;
+    std::unordered_map<std::string, std::string> sent_trade_json;
+    std::unordered_map<std::string, std::string> sent_position_json;
+    std::string                                  sent_account_json;
 
     uint64_t                    id_;
     ws_t                        ws_;
@@ -419,12 +424,13 @@ asio::awaitable<void> WebSocketHub::add_subscriptions(std::shared_ptr<Client> cl
         co_return;
     }
 
-    // topics：首次订阅未显式给出时默认全开；显式给出则整体替换。
-    if (!request.topics.empty()) {
+    // topics：缺省只订阅 quote/kline，不默认推送账户和交易实体；
+    // 显式 topics（即使空数组）整体替换。UI 会显式请求四个交易 topic。
+    if (request.topics_provided) {
         client->topics = std::set<std::string>(request.topics.begin(), request.topics.end());
         client->topics_initialized = true;
     } else if (!client->topics_initialized) {
-        client->topics             = {"account", "orders", "trades", "positions"};
+        client->topics.clear();
         client->topics_initialized = true;
     }
 
@@ -562,7 +568,7 @@ asio::awaitable<void> WebSocketHub::remove_client(uint64_t id) {
     co_return;
 }
 
-nlohmann::json WebSocketHub::snapshot_for(const Client& client) const {
+nlohmann::json WebSocketHub::snapshot_for(Client& client) const {
     json data = json::object();
 
     for (const auto& sym : client.symbols) {
@@ -582,26 +588,31 @@ nlohmann::json WebSocketHub::snapshot_for(const Client& client) const {
         }
     }
 
-    // 交易类快照只发给显式订阅了对应 topic 的客户端。
+    // 交易类快照只发给显式订阅了对应 topic 的客户端；同时记录该客户端
+    // 已经看到的 JSON，防止之后 CTP 全量查询把未变化实体再次当成 diff。
     if (client.topics.count("account") != 0) {
-        data["account"] = account_to_json(api_->data().account);
+        data["account"]          = account_to_json(api_->data().account);
+        client.sent_account_json = data["account"].dump();
     }
     if (client.topics.count("orders") != 0) {
         data["orders"] = json::object();
         for (const auto& [oid, o] : api_->data().orders) {
-            data["orders"][oid] = order_to_json(o);
+            data["orders"][oid]         = order_to_json(o);
+            client.sent_order_json[oid] = data["orders"][oid].dump();
         }
     }
     if (client.topics.count("trades") != 0) {
         data["trades"] = json::object();
         for (const auto& [tid, t] : api_->data().trades) {
-            data["trades"][tid] = trade_to_json(t);
+            data["trades"][tid]         = trade_to_json(t);
+            client.sent_trade_json[tid] = data["trades"][tid].dump();
         }
     }
     if (client.topics.count("positions") != 0) {
         data["positions"] = json::object();
         for (const auto& [sym, p] : api_->data().positions) {
-            data["positions"][sym] = position_to_json(p);
+            data["positions"][sym]         = position_to_json(p);
+            client.sent_position_json[sym] = data["positions"][sym].dump();
         }
     }
     return data;
@@ -655,7 +666,7 @@ nlohmann::json WebSocketHub::build_diff() const {
     return data;
 }
 
-nlohmann::json WebSocketHub::filter_diff(const Client& client, const nlohmann::json& diff) const {
+nlohmann::json WebSocketHub::filter_diff(Client& client, const nlohmann::json& diff) const {
     json out = json::object();
 
     if (auto it = diff.find("quotes"); it != diff.end()) {
@@ -678,10 +689,52 @@ nlohmann::json WebSocketHub::filter_diff(const Client& client, const nlohmann::j
             }
         }
     }
-    for (const char* topic : {"account", "orders", "trades", "positions"}) {
-        if (client.topics.count(topic) != 0) {
-            if (auto it = diff.find(topic); it != diff.end()) {
-                out[topic] = *it;
+
+    if (client.topics.count("account") != 0) {
+        if (auto it = diff.find("account"); it != diff.end()) {
+            auto text = it->dump();
+            if (text != client.sent_account_json) {
+                client.sent_account_json = std::move(text);
+                out["account"]           = *it;
+            }
+        }
+    }
+    if (client.topics.count("orders") != 0) {
+        if (auto it = diff.find("orders"); it != diff.end()) {
+            for (const auto& [oid, order] : it->items()) {
+                auto text              = order.dump();
+                auto [cache, inserted] = client.sent_order_json.try_emplace(oid, text);
+                if (!inserted && cache->second == text) {
+                    continue;
+                }
+                cache->second      = std::move(text);
+                out["orders"][oid] = order;
+            }
+        }
+    }
+    if (client.topics.count("trades") != 0) {
+        if (auto it = diff.find("trades"); it != diff.end()) {
+            for (const auto& [tid, trade] : it->items()) {
+                auto text              = trade.dump();
+                auto [cache, inserted] = client.sent_trade_json.try_emplace(tid, text);
+                if (!inserted && cache->second == text) {
+                    continue;
+                }
+                cache->second      = std::move(text);
+                out["trades"][tid] = trade;
+            }
+        }
+    }
+    if (client.topics.count("positions") != 0) {
+        if (auto it = diff.find("positions"); it != diff.end()) {
+            for (const auto& [sym, position] : it->items()) {
+                auto text              = position.dump();
+                auto [cache, inserted] = client.sent_position_json.try_emplace(sym, text);
+                if (!inserted && cache->second == text) {
+                    continue;
+                }
+                cache->second         = std::move(text);
+                out["positions"][sym] = position;
             }
         }
     }

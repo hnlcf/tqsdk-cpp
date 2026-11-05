@@ -57,6 +57,7 @@ struct WsOptions {
 ///                  "klines":[{"symbol":"SHFE.rb2610","duration_ns":60000000000,
 ///                             "view_width":200}],
 ///                  "topics":["account","orders","trades","positions"]}
+///   说明：topics 缺省/空数组只订阅 quote/kline；显式列出才订阅交易实体。
 ///   取消订阅：    {"op":"unsubscribe","symbols":[...],"klines":[...]}
 ///   应用层探活：  {"op":"ping"}  ->  {"type":"pong"}
 ///   订阅回执：    {"type":"subscribed",...} / {"type":"unsubscribed",...}
@@ -68,7 +69,8 @@ struct WsOptions {
 /// diff.data 中：
 ///   quotes   完整/部分字段（只含 changed_fields 置位字段）
 ///   klines   {"sym":{"dur":{"reset":bool,"bars":[...]}}}；reset=false 时只含最后一根
-///   account/orders/trades/positions 仅在该实体有变化时出现（完整实体）。
+///   account/orders/trades/positions 仅在该客户端未见过该 JSON 时出现
+///   （CTP 全量查询造成的重复实体会被过滤）。
 class WebSocketHub : public std::enable_shared_from_this<WebSocketHub> {
 public:
     /// 兼容构造：Hub 状态与客户端 I/O 使用同一 executor（单线程/测试）。
@@ -118,27 +120,32 @@ private:
     asio::awaitable<void> remove_client(uint64_t id);
 
     /// 当前订阅集合的完整快照（用于订阅成功后的首帧）。
-    nlohmann::json snapshot_for(const Client& client) const;
+    nlohmann::json snapshot_for(Client& client) const;
 
     /// 把 DataManager 本轮 changed_fields 翻译成全局 diff。
     nlohmann::json build_diff() const;
 
     /// 按客户端 symbols/klines/topics 过滤全局 diff；无相关内容返回空 object。
-    nlohmann::json filter_diff(const Client& client, const nlohmann::json& diff) const;
+    nlohmann::json filter_diff(Client& client, const nlohmann::json& diff) const;
 
     void broadcast(const nlohmann::json& diff);
 
-    TqApi*                                                api_;
-    asio::any_io_executor                                 ex_;    // core strand
-    asio::any_io_executor                                 io_ex_; // 客户端 I/O 基础 executor
-    asio::steady_timer                                    stop_timer_;
-    WsOptions                                             options_;
-    std::atomic<bool>                                     started_{false};
-    std::atomic<bool>                                     stopped_{false};
-    uint64_t                                              next_client_id_ = 1;
-    std::atomic<uint64_t>                                 seq_{0};
-    mutable std::mutex                                    clients_mu_;
-    const InstrumentCatalog*                              catalog_ = nullptr;
+    TqApi*                   api_;
+    asio::any_io_executor    ex_;    // core strand
+    asio::any_io_executor    io_ex_; // 客户端 I/O 基础 executor
+    asio::steady_timer       stop_timer_;
+    WsOptions                options_;
+    std::atomic<bool>        started_{false};
+    std::atomic<bool>        stopped_{false};
+    uint64_t                 next_client_id_ = 1;
+    std::atomic<uint64_t>    seq_{0};
+    mutable std::mutex       clients_mu_;
+    const InstrumentCatalog* catalog_ = nullptr;
+    // 防止 CTP 全量查询把未变化实体重复当成 diff 广播。
+    mutable std::unordered_map<std::string, std::string>  last_order_json_;
+    mutable std::unordered_map<std::string, std::string>  last_trade_json_;
+    mutable std::unordered_map<std::string, std::string>  last_position_json_;
+    mutable std::string                                   last_account_json_;
     std::unordered_map<uint64_t, std::shared_ptr<Client>> clients_;
     std::unordered_map<std::string, int>                  quote_refs_;
     struct KlineRef {

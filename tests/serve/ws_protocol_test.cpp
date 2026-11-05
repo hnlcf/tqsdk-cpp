@@ -135,3 +135,15 @@ TEST(WsProtocol, NumericDiscriminatorIsProtocolError) {
     EXPECT_THROW(parse_ws_server_message(R"({"type":1})"), WsProtocolError);
     EXPECT_THROW(parse_ws_server_message(R"({"type":true})"), WsProtocolError);
 }
+
+TEST(WsProtocol, TopicsPresenceIsDistinctFromEmptyTopics) {
+    const auto no_topics =
+        parse_ws_client_message(R"({"op":"subscribe","symbols":["SHFE.rb2610"],"klines":[]})");
+    ASSERT_TRUE(std::holds_alternative<WsSubscribe>(no_topics));
+    EXPECT_FALSE(as_subscribe(no_topics).topics_provided);
+
+    const auto empty_topics = parse_ws_client_message(
+        R"({"op":"subscribe","symbols":["SHFE.rb2610"],"klines":[],"topics":[]})");
+    ASSERT_TRUE(std::holds_alternative<WsSubscribe>(empty_topics));
+    EXPECT_TRUE(as_subscribe(empty_topics).topics_provided);
+}

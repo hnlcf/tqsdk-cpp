@@ -60,6 +60,9 @@ struct WsSubscribe {
     std::vector<std::string>       symbols;
     std::vector<KlineSubscription> klines;
     std::vector<std::string>       topics;
+    /// 是否显式携带 topics 字段。缺省/空数组都表示不订阅交易 topic；
+    /// UI 需要 account/orders/trades/positions 时必须显式列出。
+    bool topics_provided = false;
 };
 
 /// {"op":"unsubscribe","symbols":[...],"klines":[...]}
@@ -95,6 +98,7 @@ inline void from_json(const Json& j, WsSubscribe& m) {
         }
         m.klines.push_back(std::move(k));
     }
+    m.topics_provided = j.contains("topics");
     m.topics.clear();
     for (const auto& t : j.value("topics", std::vector<std::string>{})) {
         if (!t.empty()) {

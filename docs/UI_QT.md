@@ -430,3 +430,10 @@ Qt6::WebSockets
 - WebSocket `/stream` 支持 `coalesce_ms`，live 配置 10ms，服务端在 core strand
   上合并变化后发送单帧 diff；
 - quote 静态字段来自 catalog，避免 `price_tick=null`。
+
+## WebSocket 订阅语义
+
+- `subscribe` 不带 `topics` 或 `topics: []`：只推送 symbols/klines，不推 account/orders/trades/positions；
+- 需要交易数据时显式发送 `"topics":[...]`；
+- 同一订单/成交/持仓 JSON 未变化时，服务端不会在每个 CTP 查询周期重复广播；
+- 首帧 `snapshot` 仍会返回当前订阅的完整实体。
