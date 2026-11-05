@@ -94,6 +94,8 @@ asio::awaitable<void> CtpTdGateway::start() {
     if (cfg_.td_front.empty()) {
         throw std::runtime_error("CTP td_front is empty");
     }
+    // 供 TradingCalendar 判断节假日/节前夜盘；后台线程低频刷新。
+    HolidayCalendar::start_global();
     std::error_code ec;
     std::filesystem::create_directories(cfg_.flow_path, ec);
 

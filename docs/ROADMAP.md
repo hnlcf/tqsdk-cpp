@@ -595,3 +595,10 @@ apps/
 `ctp_td_gateway.cpp`、`diff_merge_engine.cpp`、`gateway_server.cpp` 的进一步
 文件拆分和统一订单状态机仍属于下一轮架构工作；本轮优先保证交易语义、
 结算阶段和故障边界不扩散。
+
+### 2026-11-05 节假日补充
+
+`HolidayCalendar` 已接入 `TradingCalendar`：后台从
+`files.shinnytech.com/shinny_chinese_holiday.json` 拉取非周末节假日，本地缓存
+`/tmp/tqsdk_holidays.json`，默认 12h 刷新。节前夜盘（包括周五后周一放假）
+按下一交易日扫描规则关闭；单测覆盖普通周五夜盘、节前夜盘和周一节假日。

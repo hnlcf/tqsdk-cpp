@@ -49,6 +49,8 @@ add_library(tqsdk_core SHARED
     src/gateway/tq/tq_md_protocol.cpp
     src/gateway/tq/tq_md_gateway.cpp
     src/util/log.cpp
+    src/util/http_download.cpp
+    src/trading/holiday_calendar.cpp
     # src/data/data_manager.cpp
     # src/data/diff_merge_engine.cpp
     # src/channel/channel.cpp

@@ -403,3 +403,32 @@ python3 scripts/ctp_session_soak.py \
 工具把结算/闭市断线记为 expected，把 `open/pre_open/break` 阶段的断线记为
 unexpected。CTP 不能以连续 24h 在线作为验收标准，应跨交易日运行并在每次
 结算后重新对账。
+
+## 13. 节假日/节前夜盘
+
+交易日历会定时加载：
+
+```text
+https://files.shinnytech.com/shinny_chinese_holiday.json
+```
+
+- 文件是 JSON 字符串数组，例如 `["2026-10-01", ...]`，只列非周末节假日；
+- node/gw 启动时由 `HolidayCalendar::start_global()` 在后台线程加载；
+- 本地缓存 `/tmp/tqsdk_holidays.json`，网络失败时保留旧表；
+- 默认每 12 小时刷新一次；
+- `/readyz` 的 `phase` 会把这些日期视为 Closed。
+
+### 节前夜盘规则
+
+夜盘属于下一个交易日，但：
+
+```text
+正常周五夜盘（周末无节假日）    -> 保留
+节假日前一晚（如 9/30 晚）     -> 关闭
+周五后周一放假                  -> 周五夜盘关闭
+节假日当天凌晨                  -> 关闭
+```
+
+实现上 `night_session_allowed()` 会向后寻找下一个交易日；如果途中遇到
+非周末节假日则拒绝当晚夜盘。这个规则比简单“周五夜盘都开”更严格，避免把
+节前夜盘误判为 Open。

@@ -4,6 +4,7 @@
 #include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/serve/http_server.h"
 #include "tqsdk/tqapi.h"
+#include "tqsdk/trading/holiday_calendar.h"
 #include "tqsdk/util/log.h"
 #include "tqsdk/util/spawn_logged.h"
 
@@ -44,6 +45,7 @@ struct NodeRuntime {
 } // namespace
 
 int main(int argc, char** argv) {
+    tqsdk::HolidayCalendar::start_global();
     CLI::App    app{"tqsdk-node: data service process (gw proxy + HTTP serve)"};
     std::string config_path;
     std::string log_level;
