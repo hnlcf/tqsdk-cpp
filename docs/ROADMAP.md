@@ -570,3 +570,28 @@ apps/
 4. **Qt 桌面客户端**：独立进程，REST + WebSocket 复用 node；
    设计/目录/通信见 `docs/UI_QT.md`。
 5. **后续架构**：Channel 多消费者、序列化下沉到 thread_pool、gateway 指标回传。
+
+## 12. P5 当前状态（2026-11-05）
+
+### 已落地
+
+- `TradingCalendar` / `/readyz td.phase` / `expected_disconnect`；
+- `RemoteTdGateway` 会话阶段透传；
+- CTP 断线快照失效、迟到查询、watchdog、ACK 异常本地化测试；
+- `ctp_session_soak.py` 交易时段监控；
+- `ctp_recovery_test.sh` gateway/node 重启对账；
+- `ctp_close_yesterday_test.sh` + `ctp_overnight_close_runner.sh`；
+- CTP `YdPosition -> volume_*_his` 修复。
+
+### 仍需真实时间流逝的项
+
+- 跨结算平昨（已安排下一交易日 09:30/10:30 自动执行）；
+- 真实部分成交/部分撤单（取决于 SimNow 撮合窗口）；
+- 连续 5 个交易日 session soak（交易日历不能压缩）；
+- Windows CTP。
+
+### 架构后续
+
+`ctp_td_gateway.cpp`、`diff_merge_engine.cpp`、`gateway_server.cpp` 的进一步
+文件拆分和统一订单状态机仍属于下一轮架构工作；本轮优先保证交易语义、
+结算阶段和故障边界不扩散。
