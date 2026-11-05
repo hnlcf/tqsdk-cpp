@@ -4,6 +4,12 @@
 
 #include <fstream>
 
+#if defined(_WIN32)
+    #include <process.h>
+#else
+    #include <unistd.h>
+#endif
+
 namespace tqsdk {
 
 namespace {
@@ -72,7 +78,12 @@ bool HolidayCalendar::refresh_now() {
         const auto text = util::http_get(cfg_.url, "tqsdk-node/0.1 holiday-calendar");
         load_from_json_text(text, cfg_.url);
 
-        const auto tmp = cfg_.file + ".tmp";
+#if defined(_WIN32)
+        const auto pid = static_cast<long>(_getpid());
+#else
+        const auto pid = static_cast<long>(::getpid());
+#endif
+        const auto tmp = cfg_.file + ".tmp." + std::to_string(pid);
         {
             std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
             if (out.is_open()) {
