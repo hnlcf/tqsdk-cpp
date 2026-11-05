@@ -280,3 +280,21 @@ log:  artifacts/ctp_session_20261105_live.log
 
 所有任务均使用隔离端口，避免与正在运行的 session monitor 冲突。跨结算的
 CTP 任务只对 `readyz.phase`/expected disconnect 做记录，不把预期断线当成故障。
+
+### CTP monitor 重启（WS 修复后）
+
+为验证 WebSocket 修复，CTP 交易时段 monitor 已重启到最新 node/gw：
+
+```text
+out: artifacts/ctp_session_20261105_final.jsonl
+log: artifacts/ctp_session_20261105_final.log
+```
+
+现场验证结果：
+
+```text
+quote-only subscribe -> topics=[]，snapshot 只有 quotes
+orders 显式订阅     -> 首帧 snapshot 带 orders，后续不再重复相同订单
+```
+
+CTP 仍按交易时段/结算阶段采样。
