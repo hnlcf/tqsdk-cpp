@@ -386,7 +386,8 @@ closed / pre_open / open / break / settlement / reconnecting / unknown
 - CTP front 在闭市/结算阶段断开时，`expected_disconnect=true`，不应按普通网络故障告警；
 - `RemoteTdGateway` 也维护同样的阶段，node 通过 IPC 代理 CTP 时不会丢失该信息；
 - 节假日和品种差异仍需要真实交易日历覆盖；当前默认日盘 09:00-15:00、
-  夜盘 21:00-23:00，并包含 10:15-10:30 休息。
+  夜盘 21:00-次日 02:30，并包含 10:15-10:30 休息。品种差异可用
+  `TradingCalendar::Config` 覆盖。
 
 ### 交易时段 soak
 

@@ -35,7 +35,7 @@ public:
         };
         /// 夜盘交易窗口；默认按 21:00-23:00 的通用窗口。
         std::vector<std::pair<int, int>> night_sessions{
-            {21 * 60, 23 * 60},
+            {21 * 60, 2 * 60 + 30},
         };
         /// 开盘前多少分钟进入 PreOpen。
         int pre_open_minutes = 15;

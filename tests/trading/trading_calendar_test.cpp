@@ -35,7 +35,8 @@ TEST(TradingCalendar, WeekdayPhases) {
     EXPECT_EQ(calendar.phase_at(make_tm(2026, 11, 5, 20, 50)),
               tqsdk::TradingCalendar::Phase::PreOpen);
     EXPECT_EQ(calendar.phase_at(make_tm(2026, 11, 5, 21, 30)), tqsdk::TradingCalendar::Phase::Open);
-    EXPECT_EQ(calendar.phase_at(make_tm(2026, 11, 5, 23, 30)),
+    EXPECT_EQ(calendar.phase_at(make_tm(2026, 11, 5, 23, 30)), tqsdk::TradingCalendar::Phase::Open);
+    EXPECT_EQ(calendar.phase_at(make_tm(2026, 11, 5, 2, 45)),
               tqsdk::TradingCalendar::Phase::Closed);
 }
 
