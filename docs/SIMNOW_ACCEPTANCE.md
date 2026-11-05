@@ -173,10 +173,31 @@ python3 scripts/test_simnow_acceptance.py
 
 ```text
 gateway down: readyz=503, node_alive=1
-gateway restart: ready=true, 约 9s
+gateway restart: ready=true, 约 8s
 node restart: ready=true, 约 2s
 positions/account/orders before/after 一致
 ```
+
+建议使用隔离端口和隔离 `flow_path` 跑，避免旧 gw 仍占用端口造成假阳性：
+
+```bash
+NODE_URL=http://127.0.0.1:28081 \
+GW_CONFIG=/tmp/ctp_recovery_gw.toml \
+NODE_CONFIG=/tmp/ctp_recovery_node.toml \
+./scripts/ctp_recovery_test.sh
+```
+
+隔离端口实测（2026-11-05）：
+
+```text
+initial ready: 7s
+gw down: readyz=503, node alive
+gw restart: 8s
+node restart: 2s
+```
+
+本次恢复测试的 raw log 已保存到
+`artifacts/ctp_recovery_20261105_1048.log`。
 
 ### 8.2 平昨仓
 

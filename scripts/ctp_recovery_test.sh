@@ -37,6 +37,12 @@ if curl -fsS -m 2 "$NODE_URL/healthz" >/dev/null 2>&1; then
     echo "node already listening at $NODE_URL; stop it first" >&2
     exit 2
 fi
+GW_PORT=$(awk -F= '/^[[:space:]]*tcp_port[[:space:]]*=/{gsub(/[[:space:]]/, "", $2); print $2; exit}' "$GW_CONFIG")
+if [[ -n "$GW_PORT" ]] && command -v ss >/dev/null 2>&1 &&
+    ss -ltn "sport = :$GW_PORT" 2>/dev/null | grep -q LISTEN; then
+    echo "gateway port $GW_PORT already in use; stop the old gateway first" >&2
+    exit 2
+fi
 
 GW=
 NODE=
@@ -52,6 +58,11 @@ trap cleanup EXIT
 start_gw() {
     "$GW_BIN" -c "$GW_CONFIG" >>"$GW_LOG" 2>&1 &
     GW=$!
+    sleep 0.2
+    if ! kill -0 "$GW" 2>/dev/null; then
+        echo "gateway exited immediately (see $GW_LOG)" >&2
+        return 1
+    fi
     echo "gw=$GW"
 }
 start_node() {
@@ -72,11 +83,28 @@ wait_ready() {
             echo "node exited while waiting for $label" >&2
             return 1
         fi
+        if [[ -n "$GW" ]] && ! kill -0 "$GW" 2>/dev/null; then
+            echo "gateway exited while waiting for $label" >&2
+            return 1
+        fi
         sleep 1
     done
     echo "timeout waiting for $label" >&2
     return 1
 }
+wait_pid_gone() {
+    local pid=$1 label=$2 i
+    for i in $(seq 1 20); do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        sleep 1
+    done
+    echo "process $label ($pid) did not exit" >&2
+    kill -KILL "$pid" 2>/dev/null || true
+    return 1
+}
+
 snapshot() {
     local tag=$1
     echo "snapshot[$tag]"
@@ -87,15 +115,17 @@ snapshot() {
 }
 
 rm -f "$GW_LOG" "$NODE_LOG"
-start_gw
+start_gw || exit 1
 start_node
 wait_ready initial || exit 1
 snapshot before
 
 echo "=== gateway restart ==="
-kill -TERM "$GW" 2>/dev/null || true
+old_gw=$GW
+kill -TERM "$old_gw" 2>/dev/null || true
+wait_pid_gone "$old_gw" gateway || exit 1
 GW=
-sleep 3
+sleep 1
 code=$(curl -s -m 2 -o /tmp/tqsdk_ctp_recovery_down.json -w '%{http_code}' \
     "$NODE_URL/readyz" || true)
 echo "after_gw_down http=$code body=$(cat /tmp/tqsdk_ctp_recovery_down.json 2>/dev/null)"
@@ -103,7 +133,7 @@ kill -0 "$NODE" 2>/dev/null && echo "node_alive_after_gw_down=1" || {
     echo "node_alive_after_gw_down=0" >&2
     exit 1
 }
-start_gw
+start_gw || exit 1
 wait_ready after_gw_restart || {
     tail -80 "$NODE_LOG" >&2
     exit 1
@@ -111,9 +141,11 @@ wait_ready after_gw_restart || {
 snapshot after_gw_restart
 
 echo "=== node restart ==="
-kill -TERM "$NODE" 2>/dev/null || true
+old_node=$NODE
+kill -TERM "$old_node" 2>/dev/null || true
+wait_pid_gone "$old_node" node || exit 1
 NODE=
-sleep 2
+sleep 1
 start_node
 wait_ready after_node_restart || {
     tail -80 "$NODE_LOG" >&2
