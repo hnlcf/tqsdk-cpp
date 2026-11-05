@@ -1,4 +1,5 @@
 #include "tqsdk/serve/http_server.h"
+#include "tqsdk/trading/holiday_calendar.h"
 
 #include "tqsdk/domain/sentinel.h"
 #include "tqsdk/serve/json_convert.h"
@@ -75,6 +76,9 @@ void HttpServer::setup_routes() {
          })},
         {http::verb::get, "/metrics", make_entry([this]() -> asio::awaitable<json> {
              co_return api_->metrics_json();
+         })},
+        {http::verb::get, "/holiday/status", make_entry([]() -> asio::awaitable<json> {
+             co_return HolidayCalendar::global().status_json();
          })},
         {http::verb::get, "/catalog/status", make_entry([this]() -> asio::awaitable<Response> {
              if (catalog_ == nullptr) {

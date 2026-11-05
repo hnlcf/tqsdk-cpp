@@ -416,6 +416,7 @@ https://files.shinnytech.com/shinny_chinese_holiday.json
 - node/gw 启动时由 `HolidayCalendar::start_global()` 在后台线程加载；
 - 本地缓存 `/tmp/tqsdk_holidays.json`，网络失败时保留旧表；
 - 默认每 12 小时刷新一次；
+- `/holiday/status` 可查看来源、日期数和版本；
 - `/readyz` 的 `phase` 会把这些日期视为 Closed。
 
 ### 节前夜盘规则

@@ -74,6 +74,7 @@ TEST(CatalogHttp, QueryNumbersAreStrictAndBounded) {
                      "/quote/A",
                      "/quotes?symbols=A,B",
                      "/trading-snapshot",
+                     "/holiday/status",
                  }) {
                 responses.push_back(co_await get_json(core_ex, port, target));
             }
@@ -83,7 +84,7 @@ TEST(CatalogHttp, QueryNumbersAreStrictAndBounded) {
         asio::detached);
     io.run();
 
-    ASSERT_EQ(responses.size(), 7u);
+    ASSERT_EQ(responses.size(), 8u);
     for (std::size_t i = 0; i < 4; ++i) {
         const auto& [status, body] = responses[i];
         EXPECT_EQ(status, 200u) << body.dump();
@@ -107,6 +108,10 @@ TEST(CatalogHttp, QueryNumbersAreStrictAndBounded) {
     EXPECT_TRUE(responses[6].second.contains("orders"));
     EXPECT_TRUE(responses[6].second.contains("trades"));
     EXPECT_TRUE(responses[6].second.contains("positions"));
+    EXPECT_EQ(responses[7].first, 200u);
+    EXPECT_TRUE(responses[7].second.contains("enabled"));
+    EXPECT_TRUE(responses[7].second.contains("loaded"));
+    EXPECT_TRUE(responses[7].second.contains("dates"));
 
     server.stop();
     api.close();
