@@ -296,3 +296,16 @@ artifacts/ctp_session_20261105_live.jsonl
 
 它按 30s 采样 `/readyz` 的 `phase` 和 account/positions/orders；结算断线会
 记录为 expected，而不是 fatal。
+
+### 8.8 部分成交探针
+
+`scripts/ctp_partial_fill_probe.sh` 采用小额、自动清理的方式观察 SimNow 是否能
+稳定构造部分成交：
+
+- 只选择盘口卖一量较小且价格低的期权合约；
+- 请求量 = 卖一量 + 1，最多 40 手；
+- 记录 `PARTIAL/FULL/NO_FILL`，不把封盘拒绝伪装成 PASS；
+- 若成交则立即以买一价平仓，退出时撤销残余订单。
+
+由于部分成交取决于 SimNow 撮合窗口，这个探针是“可重复尝试”，不是每次都能
+得到 PARTIAL。
