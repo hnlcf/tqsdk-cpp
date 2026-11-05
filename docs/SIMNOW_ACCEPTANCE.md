@@ -336,3 +336,22 @@ RESULT=FULL
 
 并自动以买一价平仓，最终期权持仓为 0、无未成交单。因此当前 SimNow 撮合环境
 仍无法稳定构造部分成交；这属于撮合环境限制，没有伪造 `PARTIAL` 结果。
+
+### 8.11 2026-11-05 13:36 午后复验
+
+开盘后再次执行完整写测试（`--orders --include-market --include-counterparty
+--cleanup-market`）：
+
+```text
+artifacts/simnow_acceptance_20261105_133656.json
+PASS 15 / FAIL 0 / WARN 0 / SKIP 0
+```
+
+当时 quote：
+
+```text
+SHFE.ao2701 last=2632.0 tick=1.0
+```
+
+市价/对价均成交并由 cleanup 平掉；最终没有残留活动订单，`CZCE.SA701` 和
+`CZCE.SR701` 原持仓未变，仍保留 `SHFE.rb2701` 1 手平昨测试仓。
