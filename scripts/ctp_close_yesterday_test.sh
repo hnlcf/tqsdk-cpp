@@ -35,8 +35,24 @@ if [[ -f "$PENDING" ]]; then
     echo "pending metadata: $(cat "$PENDING")"
 fi
 
-PAYLOAD=$(jq -n --arg s "$SYMBOL" --argjson v "$VOLUME" \
-    '{instrument_id:$s,direction:"SELL",offset:"CLOSE",price_type:"BEST",time_cond:"IOC",volume_cond:"ANY",volume:$v}')
+# 平昨脚本不能假设 node 已经订阅行情；先触发 quote 订阅并等待有效买一。
+# 用 LIMIT 而不是 BEST，避免 runner 启动时没有 quote 导致 SHFE 对价转换失败。
+BID=
+for _ in $(seq 1 30); do
+    QUOTE=$(curl -sS -m 5 "$NODE_URL/quote/$SYMBOL")
+    BID=$(printf '%s' "$QUOTE" | jq -r '.bid_price1 // empty')
+    if [[ -n "$BID" && "$BID" != "null" ]]; then
+        break
+    fi
+    sleep 1
+done
+if [[ -z "$BID" || "$BID" == "null" ]]; then
+    echo "no valid bid price for $SYMBOL; cannot submit close-yesterday LIMIT" >&2
+    exit 1
+fi
+echo "quote_bid=$BID"
+PAYLOAD=$(jq -n --arg s "$SYMBOL" --argjson p "$BID" --argjson v "$VOLUME" \
+    '{instrument_id:$s,direction:"SELL",offset:"CLOSE",price_type:"LIMIT",limit_price:$p,time_cond:"IOC",volume_cond:"ANY",volume:$v}')
 echo "submit=$PAYLOAD"
 ACK=$(curl -fsS -m 10 -H 'Content-Type: application/json' -d "$PAYLOAD" "$NODE_URL/order")
 echo "ack=$ACK"
