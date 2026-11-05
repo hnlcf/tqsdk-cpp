@@ -298,3 +298,18 @@ orders 显式订阅     -> 首帧 snapshot 带 orders，后续不再重复相同
 ```
 
 CTP 仍按交易时段/结算阶段采样。
+
+### 2026-11-05 19:48 SimTd 24h 重启
+
+上一轮 SimTd soak 在约 16.4h 被外部终止，日志停在 59040s，未生成最终 CSV；
+遗留的 node/gw 子进程已清理。已在最新代码上重新启动完整 24h：
+
+```text
+pid:  3502948
+start: 2026-11-05 19:48:46
+log:  artifacts/soak_24h_20261105_194846.log
+csv:  artifacts/soak_24h_20261105_194846.csv
+```
+
+该轮将在 2026-11-06 19:48 左右结束。CTP monitor 同时观察到 19:47 已进入
+`settlement` 阶段，`expected_disconnect=true`，说明结算阶段被正确分类。
