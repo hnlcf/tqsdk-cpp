@@ -247,6 +247,8 @@ if(TQSDK_BUILD_TESTS)
         tests/serve/catalog_http_test.cpp
         tests/serve/threading_test.cpp
         tests/serve/readiness_test.cpp
+        tests/trading/trading_calendar_test.cpp
+        tests/trading/tqapi_gateway_fault_test.cpp
         tests/e2e/tq_md_network_test.cpp
     )
     target_include_directories(tqsdk_tests PRIVATE

@@ -1151,6 +1151,17 @@ bool CtpTdGateway::snapshot_ready() const {
     return snapshot_ready_.load(std::memory_order_acquire);
 }
 
+TradingCalendar::Phase CtpTdGateway::session_phase() const {
+    const auto phase = calendar_.phase_at(std::chrono::system_clock::now());
+    // 处于交易窗口但尚未登录/结算确认，说明仍在重连或恢复查询。
+    if ((phase == TradingCalendar::Phase::Open || phase == TradingCalendar::Phase::Break ||
+         phase == TradingCalendar::Phase::PreOpen) &&
+        !logged_in_) {
+        return TradingCalendar::Phase::Reconnecting;
+    }
+    return phase;
+}
+
 nlohmann::json CtpTdGateway::snapshot() const {
     nlohmann::json orders = nlohmann::json::object();
     for (const auto& [rid, cached] : orders_) {

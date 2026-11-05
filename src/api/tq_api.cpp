@@ -131,7 +131,11 @@ nlohmann::json TqApi::readiness_json() const {
         {"td",
          {{"present", td_ != nullptr},
           {"ready", td_ready()},
-          {"connected", td_connected_.load(std::memory_order_relaxed)}}},
+          {"connected", td_connected_.load(std::memory_order_relaxed)},
+          {"phase",
+           td_ != nullptr ? std::string(TradingCalendar::name(td_->session_phase())) : "unknown"},
+          {"expected_disconnect",
+           td_ != nullptr && TradingCalendar::is_expected_disconnect(td_->session_phase())}}},
     };
 }
 
@@ -509,13 +513,24 @@ asio::awaitable<Order*> TqApi::insert_order(const InsertOrderReq& req) {
 
     // 2) 发给网关（异步发命令，不等终态）。
     if (td_) {
-        CommandAck ack = co_await td_->insert_order(effective, rid);
-        if (!ack.success) {
-            // 网关当场拒绝：本地立即标记为错误终态，无需再等 Diff。
+        try {
+            CommandAck ack = co_await td_->insert_order(effective, rid);
+            if (!ack.success) {
+                // 网关当场拒绝：本地立即标记为错误终态，无需再等 Diff。
+                o.is_error = true;
+                o.is_dead  = true;
+                o.status   = OrderStatus::FINISHED;
+                o.last_msg = ack.error_msg;
+                o.changed_fields |= (uint64_t)OrderField::is_error | (uint64_t)OrderField::is_dead |
+                                    (uint64_t)OrderField::status | (uint64_t)OrderField::last_msg;
+            }
+        } catch (const std::exception& e) {
+            // IPC/ACK 超时或 transport 断开：不能把异常抛给 UI；本地订单必须
+            // 进入明确的错误终态，后续重连对账再校正柜台侧状态。
             o.is_error = true;
             o.is_dead  = true;
             o.status   = OrderStatus::FINISHED;
-            o.last_msg = ack.error_msg;
+            o.last_msg = std::string("trading gateway error: ") + e.what();
             o.changed_fields |= (uint64_t)OrderField::is_error | (uint64_t)OrderField::is_dead |
                                 (uint64_t)OrderField::status | (uint64_t)OrderField::last_msg;
         }
@@ -537,7 +552,13 @@ asio::awaitable<CommandAck> TqApi::cancel_order(const CancelOrderReq& req) {
         co_return CommandAck{
             .success = false, .order_id = req.order_id, .error_msg = "no trading gateway"};
     }
-    co_return co_await td_->cancel_order(req);
+    try {
+        co_return co_await td_->cancel_order(req);
+    } catch (const std::exception& e) {
+        co_return CommandAck{.success   = false,
+                             .order_id  = req.order_id,
+                             .error_msg = std::string("trading gateway error: ") + e.what()};
+    }
 }
 
 } // namespace tqsdk

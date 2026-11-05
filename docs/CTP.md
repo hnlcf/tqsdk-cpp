@@ -363,3 +363,42 @@ volume_short_his
 
 并保留 `volume_long_today` / `volume_short_today`。这是平昨判断和 UI 持仓拆分
 的基础；已有测试覆盖 `CtpConvert.AccountPositionDepth`。
+
+## 12. 交易日/结算阶段
+
+`TradingCalendar` 为 `/readyz` 提供统一交易阶段：
+
+```text
+closed / pre_open / open / break / settlement / reconnecting / unknown
+```
+
+`/readyz` 的 `td` 对象现在包含：
+
+```json
+{
+  "connected": true,
+  "ready": true,
+  "phase": "open",
+  "expected_disconnect": false
+}
+```
+
+- CTP front 在闭市/结算阶段断开时，`expected_disconnect=true`，不应按普通网络故障告警；
+- `RemoteTdGateway` 也维护同样的阶段，node 通过 IPC 代理 CTP 时不会丢失该信息；
+- 节假日和品种差异仍需要真实交易日历覆盖；当前默认日盘 09:00-15:00、
+  夜盘 21:00-23:00，并包含 10:15-10:30 休息。
+
+### 交易时段 soak
+
+```bash
+python3 scripts/ctp_session_soak.py \
+  --manage-processes \
+  --gw-config run/live/gw.toml \
+  --node-config run/live/node.toml \
+  --duration 28800 --interval 30 \
+  --out artifacts/ctp_session_YYYYMMDD.jsonl
+```
+
+工具把结算/闭市断线记为 expected，把 `open/pre_open/break` 阶段的断线记为
+unexpected。CTP 不能以连续 24h 在线作为验收标准，应跨交易日运行并在每次
+结算后重新对账。

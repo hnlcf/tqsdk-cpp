@@ -41,6 +41,18 @@ protected:
     void set_position(const std::string& key, nlohmann::json value) {
         gw_->positions_[key] = std::move(value);
     }
+    void set_snapshot_ready(bool ready) { gw_->snapshot_ready_.store(ready); }
+    bool snapshot_ready() const { return gw_->snapshot_ready_.load(); }
+    void set_logged_in(bool logged_in) { gw_->logged_in_ = logged_in; }
+    bool logged_in() const { return gw_->logged_in_; }
+    void set_all_day_calendar() {
+        auto cfg         = gw_->calendar_.config();
+        cfg.day_sessions = {{0, 24 * 60}};
+        cfg.night_sessions.clear();
+        cfg.settlement_start_minute = 24 * 60;
+        cfg.settlement_end_minute   = 24 * 60;
+        gw_->calendar_              = tqsdk::TradingCalendar(cfg);
+    }
 
     asio::io_context                     io_;
     std::unique_ptr<tqsdk::CtpTdGateway> gw_;
@@ -109,4 +121,14 @@ TEST_F(CtpFaultInjectionTest, AutoSwitchesToCloseTodayForShfe) {
     set_position("DCE.m2701", nlohmann::json{{"volume_long", 1}, {"volume_long_today", 1}});
     EXPECT_EQ(offset_for("DCE", "m2701", tqsdk::Direction::SELL, tqsdk::Offset::CLOSE),
               THOST_FTDC_OF_Close);
+}
+
+TEST_F(CtpFaultInjectionTest, FrontDisconnectInvalidatesSnapshotAndMarksReconnecting) {
+    set_snapshot_ready(true);
+    set_logged_in(true);
+    set_all_day_calendar();
+    gw_->handle_front_disconnected(3);
+    EXPECT_FALSE(snapshot_ready());
+    EXPECT_FALSE(logged_in());
+    EXPECT_EQ(gw_->session_phase(), tqsdk::TradingCalendar::Phase::Reconnecting);
 }

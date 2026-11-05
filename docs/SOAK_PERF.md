@@ -246,3 +246,23 @@ order_err:   14（重启窗口内的预期错误）
 进程仍在运行，计划运行到约 24h 后生成 CSV/JSON 总结。CTP 账户的每日结算
 断线不会用这个 SimTd soak 掩盖；CTP 恢复/结算测试见
 `docs/SIMNOW_ACCEPTANCE.md` §8。
+
+### 2026-11-05 CTP 交易时段监控
+
+已增加 `scripts/ctp_session_soak.py`，它按交易阶段采样 `/readyz`、账户、持仓和
+委托，不把每日结算断线算作系统故障。当前 CTP 还预留着一个跨结算的
+`SHFE.rb2701 long=1` 平昨测试仓，相关状态记录在
+`artifacts/ctp_close_yesterday_pending.json`。
+
+### CTP 交易时段 monitor
+
+除了 SimTd 24h soak，当前还启动了 CTP 交易时段 monitor：
+
+```text
+out:  artifacts/ctp_session_20261105_live.jsonl
+log:  artifacts/ctp_session_20261105_live.log
+```
+
+它每 30s 采样 `/readyz`、account、positions、orders，按 `phase` 区分
+`open/break/pre_open` 与 `settlement/closed`。结算断线会记录为 expected，
+不会伪装成 CTP 连续 24h 在线。

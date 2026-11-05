@@ -4,6 +4,7 @@
 
 #include "tqsdk/channel/channel.h"
 #include "tqsdk/domain/sentinel.h"
+#include "tqsdk/trading/trading_calendar.h"
 #include "tqsdk/types.h"
 
 namespace tqsdk {
@@ -130,6 +131,9 @@ public:
     /// 是否应按 SHFE 规则把 AnyPrice/BestPrice 转成实际限价单。
     /// 本地 Sim/Mock 有自己的撮合语义，不应走 CTP 转换。
     virtual bool needs_shfe_price_normalization() const { return false; }
+
+    /// 当前交易阶段；CTP 在每日结算期间会主动断开，阶段用于区分预期断线和故障。
+    virtual TradingCalendar::Phase session_phase() const { return TradingCalendar::Phase::Unknown; }
 };
 
 } // namespace tqsdk

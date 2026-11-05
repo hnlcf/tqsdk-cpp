@@ -242,3 +242,24 @@ CTP 交易账户不是 24h 可用服务：每日结算期间前置会断开，�
 ```
 
 当前后台 24h soak 是 SimTd/Ipc 稳定性测试，不是 CTP 连续在线测试。
+
+### 8.5 自动平昨任务
+
+已准备并提交 `scripts/ctp_overnight_close_runner.sh`，它会在隔离端口启动
+gateway/node，等待 `/readyz`，然后调用平昨脚本并清理进程。
+
+当前测试仓：
+
+```text
+SHFE.rb2701 long=1 today=1 his=0
+pending: artifacts/ctp_close_yesterday_pending.json
+```
+
+已通过 `at` 安排下一交易日 09:30 自动执行（隔离端口 24332/28083）。如果执行
+成功，日志会写到：
+
+```text
+artifacts/ctp_overnight_close_runner.log
+```
+
+如果届时仍没有历史仓，脚本会明确退出并保留仓位，不会发送错误的平仓单。

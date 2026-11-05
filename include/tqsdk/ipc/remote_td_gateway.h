@@ -45,6 +45,7 @@ public:
     nlohmann::json       metrics() const override;
     bool                 requires_initial_trade_snapshot() const override { return true; }
     bool needs_shfe_price_normalization() const override { return shfe_market_as_limit_; }
+    TradingCalendar::Phase session_phase() const override;
 
     /// 供 IpcClient 调用：把一帧翻译成事件推入 event_output()。
     void on_frame(ReceivedFrame&& frame);
@@ -59,6 +60,8 @@ private:
     Channel<TradeEvent>        ch_;
     std::chrono::milliseconds  ack_timeout_;
     bool                       shfe_market_as_limit_ = true;
+    TradingCalendar            calendar_;
+    std::atomic<bool>          connected_{false};
 };
 
 } // namespace ipc

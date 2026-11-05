@@ -98,11 +98,22 @@ void RemoteTdGateway::push(TradeEvent ev) {
         "RemoteTd.push");
 }
 
+TradingCalendar::Phase RemoteTdGateway::session_phase() const {
+    const auto phase = calendar_.phase_at(std::chrono::system_clock::now());
+    if ((phase == TradingCalendar::Phase::Open || phase == TradingCalendar::Phase::Break ||
+         phase == TradingCalendar::Phase::PreOpen) &&
+        !connected_.load(std::memory_order_relaxed)) {
+        return TradingCalendar::Phase::Reconnecting;
+    }
+    return phase;
+}
+
 void RemoteTdGateway::on_frame(ReceivedFrame&& frame) {
     switch (frame.type) {
     case FrameType::TradeSnapshot: {
         try {
-            auto       body = decode_as<FrameType::TradeSnapshot>(frame);
+            auto body = decode_as<FrameType::TradeSnapshot>(frame);
+            connected_.store(true, std::memory_order_relaxed);
             TradeEvent ev;
             ev.kind    = TradeEvent::Kind::Snapshot;
             ev.payload = std::move(body.data);
@@ -115,7 +126,8 @@ void RemoteTdGateway::on_frame(ReceivedFrame&& frame) {
     }
     case FrameType::TradePush: {
         try {
-            auto       body = decode_as<FrameType::TradePush>(frame);
+            auto body = decode_as<FrameType::TradePush>(frame);
+            connected_.store(true, std::memory_order_relaxed);
             TradeEvent ev;
             ev.kind    = TradeEvent::Kind::Diff;
             ev.payload = std::move(body.data);
@@ -129,7 +141,8 @@ void RemoteTdGateway::on_frame(ReceivedFrame&& frame) {
         // 命令级即时回执：IpcClient 已完成 send_command_and_wait 的关联；
         // 这里额外把 Ack 作为 TradeEvent::Kind::Ack 推给上层（TqApi 可选消费）。
         try {
-            auto       body = decode_as<FrameType::CommandAck>(frame);
+            auto body = decode_as<FrameType::CommandAck>(frame);
+            connected_.store(true, std::memory_order_relaxed);
             TradeEvent ev;
             ev.kind = TradeEvent::Kind::Ack;
             ev.ack  = body.ack;
@@ -143,7 +156,11 @@ void RemoteTdGateway::on_frame(ReceivedFrame&& frame) {
         try {
             auto body = decode_as<FrameType::GatewayEvent>(frame);
             if (body.kind == GatewayEventKind::Connected) {
+                connected_.store(true, std::memory_order_relaxed);
                 return;
+            }
+            if (body.kind == GatewayEventKind::Disconnected) {
+                connected_.store(false, std::memory_order_relaxed);
             }
             TradeEvent ev;
             if (body.kind == GatewayEventKind::Disconnected) {

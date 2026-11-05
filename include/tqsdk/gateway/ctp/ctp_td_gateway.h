@@ -31,9 +31,10 @@ public:
                                                     const OrderId&        rid) override;
     boost::asio::awaitable<CommandAck> cancel_order(const CancelOrderReq& req) override;
 
-    nlohmann::json snapshot() const override;
-    bool           snapshot_ready() const override;
-    bool           needs_shfe_price_normalization() const override { return true; }
+    nlohmann::json         snapshot() const override;
+    bool                   snapshot_ready() const override;
+    bool                   needs_shfe_price_normalization() const override { return true; }
+    TradingCalendar::Phase session_phase() const override;
 
     Channel<TradeEvent>& event_output() override { return ch_; }
 
@@ -167,11 +168,12 @@ private:
     bool logged_in_      = false;
     bool initial_loaded_ = false;
 
-    int         front_id_   = 0;
-    int         session_id_ = 0;
-    int         request_id_ = 0;
-    int         ref_seq_    = 0;
-    std::string trading_day_;
+    int             front_id_   = 0;
+    int             session_id_ = 0;
+    int             request_id_ = 0;
+    int             ref_seq_    = 0;
+    std::string     trading_day_;
+    TradingCalendar calendar_;
 
     std::map<OrderId, CachedOrder>             orders_;
     std::map<std::string, nlohmann::json>      trades_;

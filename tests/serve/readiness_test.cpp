@@ -47,6 +47,8 @@ TEST(Readiness, SimGatewayIsReadyAndExposesMetrics) {
     EXPECT_FALSE(ready["md"]["present"]);
     EXPECT_TRUE(ready["td"]["present"]);
     EXPECT_TRUE(ready["td"]["ready"]);
+    EXPECT_EQ(ready["td"]["phase"], "unknown");
+    EXPECT_FALSE(ready["td"]["expected_disconnect"]);
 
     tqsdk::serve::HttpServer server(&api, io.get_executor(), {}, core_ex);
     server.listen("127.0.0.1", 0);
