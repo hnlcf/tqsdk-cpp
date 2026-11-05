@@ -226,3 +226,23 @@ pid:        881836
 
 配置：8 HTTP load 线程、每 1s 报单/撤单、每 10min 重启 gw。24h 结束后
 按上面的验收标准检查 fatal、RSS/FD/线程趋势和重连计数。
+
+### 2026-11-05 10:26 观察
+
+当前 24h soak 已运行约 38,220s（10.6h），未发现异常：
+
+```text
+node_rss_kb: 28080–28336
+node_fds:    19
+http_ok:     541,576,101
+http_err:    0
+ws_messages: 58,161,900
+ws_err:      0
+reconnects:  63（测试脚本主动重启 gw）
+order_ok:    7,537
+order_err:   14（重启窗口内的预期错误）
+```
+
+进程仍在运行，计划运行到约 24h 后生成 CSV/JSON 总结。CTP 账户的每日结算
+断线不会用这个 SimTd soak 掩盖；CTP 恢复/结算测试见
+`docs/SIMNOW_ACCEPTANCE.md` §8。

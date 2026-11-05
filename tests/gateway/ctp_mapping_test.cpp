@@ -149,6 +149,7 @@ TEST(CtpConvert, AccountPositionDepth) {
     pos.PosiDirection  = THOST_FTDC_PD_Long;
     pos.Position       = 2;
     pos.TodayPosition  = 1;
+    pos.YdPosition     = 1;
     pos.OpenCost       = 76'000.0; // 3800 * 10 * 2
     pos.UseMargin      = 7'600.0;
     pos.PositionProfit = 20.0;
@@ -156,6 +157,7 @@ TEST(CtpConvert, AccountPositionDepth) {
     auto pj = position_json("rb2610", agg, spec);
     EXPECT_EQ(pj["volume_long"], 2);
     EXPECT_EQ(pj["volume_long_today"], 1);
+    EXPECT_EQ(pj["volume_long_his"], 1);
     EXPECT_DOUBLE_EQ(pj["open_price_long"], 3800.0);
     EXPECT_DOUBLE_EQ(pj["float_profit_long"], 20.0);
     EXPECT_DOUBLE_EQ(pj["margin_long"], 7600.0);

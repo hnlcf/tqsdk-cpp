@@ -351,3 +351,15 @@ price_decs
 
 CTP 行情回调只保证动态行情字段，静态规格以合约目录为准；这样 UI 价格步进、
 限价校验和验收脚本不再看到 `price_tick=null`。
+
+## 11. 持仓历史字段
+
+CTP `InvestorPositionField.YdPosition` 现在映射为：
+
+```text
+volume_long_his
+volume_short_his
+```
+
+并保留 `volume_long_today` / `volume_short_today`。这是平昨判断和 UI 持仓拆分
+的基础；已有测试覆盖 `CtpConvert.AccountPositionDepth`。

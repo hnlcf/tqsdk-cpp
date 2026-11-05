@@ -376,6 +376,8 @@ struct PositionAgg {
     uint64_t volume_short       = 0;
     uint64_t volume_long_today  = 0;
     uint64_t volume_short_today = 0;
+    uint64_t volume_long_his    = 0;
+    uint64_t volume_short_his   = 0;
     double   cost_long          = 0.0;
     double   cost_short         = 0.0;
     double   margin_long        = 0.0;
@@ -392,12 +394,14 @@ inline void add_position(PositionAgg&                           agg,
     if (p.PosiDirection == THOST_FTDC_PD_Long) {
         agg.volume_long += static_cast<uint64_t>(std::max(0, p.Position));
         agg.volume_long_today += static_cast<uint64_t>(std::max(0, p.TodayPosition));
+        agg.volume_long_his += static_cast<uint64_t>(std::max(0, p.YdPosition));
         agg.cost_long += p.OpenCost;
         agg.margin_long += p.UseMargin;
         agg.profit_long += p.PositionProfit;
     } else if (p.PosiDirection == THOST_FTDC_PD_Short) {
         agg.volume_short += static_cast<uint64_t>(std::max(0, p.Position));
         agg.volume_short_today += static_cast<uint64_t>(std::max(0, p.TodayPosition));
+        agg.volume_short_his += static_cast<uint64_t>(std::max(0, p.YdPosition));
         agg.cost_short += p.OpenCost;
         agg.margin_short += p.UseMargin;
         agg.profit_short += p.PositionProfit;
@@ -417,7 +421,9 @@ position_json(std::string_view symbol, const PositionAgg& p, const InstrumentSpe
         {"volume_long", p.volume_long},
         {"volume_short", p.volume_short},
         {"volume_long_today", p.volume_long_today},
+        {"volume_long_his", p.volume_long_his},
         {"volume_short_today", p.volume_short_today},
+        {"volume_short_his", p.volume_short_his},
         {"open_price_long", open_long},
         {"open_price_short", open_short},
         {"position_price_long", open_long},

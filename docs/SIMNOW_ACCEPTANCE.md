@@ -155,3 +155,69 @@ python3 scripts/test_simnow_acceptance.py
 - 暂不自动验证 CTP 今仓/昨仓平仓策略，平仓验收需要按持仓情况手工执行；
 - 暂不自动重启 gw 做 reconnection 断言，可通过人工重启后再次运行只读检查；
 - 真实 SimNow 验收仍应以柜台回报、成交/持仓查询结果为准，脚本只做自动化探针。
+
+## 8. 恢复与结算专项
+
+### 8.1 gateway / node 重启
+
+`scripts/ctp_recovery_test.sh` 会直接启动 gw/node（避免 `run_live.sh` 在 gw
+退出时连带关闭 node），然后执行：
+
+1. 杀掉 gw；
+2. 确认 node 仍存活，`/readyz` 返回 503；
+3. 重启 gw，等待 CTP 登录、结算确认和初始查询快照；
+4. 重启 node；
+5. 对比 account/positions/orders。
+
+实测：
+
+```text
+gateway down: readyz=503, node_alive=1
+gateway restart: ready=true, 约 9s
+node restart: ready=true, 约 2s
+positions/account/orders before/after 一致
+```
+
+### 8.2 平昨仓
+
+平昨必须跨过 SimNow 每日结算，不能用连续 24h 测试代替。验收流程：
+
+```bash
+# 交易日开一个 1 手 SHFE.rb2701 测试多仓，不自动平仓
+./scripts/ctp_open_overnight_position.sh
+
+# 当日结算后（下一交易日）
+./scripts/ctp_close_yesterday_test.sh
+```
+
+第二个脚本要求 `volume_long_his >= 1`，用 `Offset=CLOSE` 发出平仓单，并检查
+`volume_long_his` 减少。当前已经开好测试仓：
+
+```text
+SHFE.rb2701 long=1 today=1 his=0
+pending: artifacts/ctp_close_yesterday_pending.json
+```
+
+尚未执行“次日平昨”本身，不能标记为 PASS。
+
+### 8.3 部分成交
+
+部分成交取决于 SimNow 撮合和盘口深度，当前活跃合约盘口经常一次性全部成交，
+不属于稳定可复现的验收场景。UI 侧已用模型测试覆盖 `volume_left/volume_origin`
+和回报消息展示；真实 CTP 部分成交需要专门的低流动性合约/撮合窗口，暂不伪造
+PASS。
+
+### 8.4 结算约束
+
+CTP 交易账户不是 24h 可用服务：每日结算期间前置会断开，仓位和结算数据在
+下一交易日恢复。因此 CTP 不能用“连续 24h 不断线”作为验收标准，应改为：
+
+```text
+交易时段 soak
+  -> 收盘/结算前记录快照
+  -> 允许并验证预期断线
+  -> 下一交易时段重连
+  -> 对账 positions/orders/trades/account
+```
+
+当前后台 24h soak 是 SimTd/Ipc 稳定性测试，不是 CTP 连续在线测试。
