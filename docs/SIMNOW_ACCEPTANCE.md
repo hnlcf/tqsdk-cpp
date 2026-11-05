@@ -263,3 +263,36 @@ artifacts/ctp_overnight_close_runner.log
 ```
 
 如果届时仍没有历史仓，脚本会明确退出并保留仓位，不会发送错误的平仓单。
+
+### 8.6 报单在途 gateway 故障
+
+`scripts/ctp_order_fault_test.sh` 已实测：
+
+1. 提交远离盘口的 BUY LIMIT，订单保持 ALIVE；
+2. 杀掉 gateway，node 不退出；
+3. 重启 gateway，订单从 CTP/订单缓存恢复；
+4. 撤销恢复后的订单，确认终态“已撤单”；
+5. 持仓数量前后不变。
+
+本次结果：
+
+```text
+order_before_kill: ALIVE, left=1
+gateway restart:   6s
+order_after_restart: ALIVE, 同一 order_id
+order_final:        FINISHED / 已撤单
+positions:          前后均只有既有测试仓
+```
+
+原始日志：`artifacts/ctp_order_fault_20261105.log`。
+
+### 8.7 交易时段监控
+
+当前 CTP session monitor 正在运行：
+
+```text
+artifacts/ctp_session_20261105_live.jsonl
+```
+
+它按 30s 采样 `/readyz` 的 `phase` 和 account/positions/orders；结算断线会
+记录为 expected，而不是 fatal。
