@@ -128,6 +128,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/SIMNOW_ACCEPTANCE.md](docs/SIMNOW_ACCEPTANCE.md)
 - [docs/SOAK_PERF.md](docs/SOAK_PERF.md)
 - [docs/CTP_WEEKLY_TEST_PLAN.md](docs/CTP_WEEKLY_TEST_PLAN.md)
+- [docs/P6_AUTOMATION.md](docs/P6_AUTOMATION.md)
 
 旧版设计/评审文档已归档到 [docs/archive/](docs/archive/)，只用于历史追溯；
 新实现以本 README 和上述 canonical docs 为准。

@@ -152,7 +152,7 @@ def main() -> int:
         "--node-log", str(node_log),
     ]
     print(json.dumps({"command": cmd}, ensure_ascii=False), flush=True)
-    child = subprocess.Popen(cmd, cwd=ROOT)
+    child = subprocess.Popen(cmd, cwd=ROOT, start_new_session=True)
     interrupted = False
 
     def stop_child(signum: int, _frame: Any) -> None:
