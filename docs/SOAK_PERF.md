@@ -336,3 +336,39 @@ soak node 改为 `[md] kind="none"`，启动等待也从 `/healthz` 改为 `/rea
 
 catalog 未加载是 TD-only soak 未配置 `[instruments]` 的预期行为；需要
 catalog 时使用 live node。
+
+### 2026-11-06 最终结果
+
+SimTd 24h soak 已完成：
+
+```text
+duration:       86400s
+http_ok:        732,370,495
+http_err:       0
+ws_messages:    98,846,797
+ws_err:         0
+order_ok:       17,019
+order_err:      29
+reconnects:     143
+node_max_rss:   34,452KB
+node_max_fds:   20
+gw_max_rss:     27,332KB
+fatal:          ""
+csv:            artifacts/soak_20261106_232425.csv
+```
+
+CTP session monitor：
+
+```text
+2026-11-05 14:07–20:07:
+  samples=720
+  expected_gaps=1（settlement）
+  unexpected_gaps=0
+  fatal=""
+
+2026-11-06 10:35–14:35:
+  samples=480
+  expected_gaps=0
+  unexpected_gaps=0
+  fatal=""
+```
