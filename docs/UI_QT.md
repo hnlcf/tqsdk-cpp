@@ -423,8 +423,9 @@ Qt6::WebSockets
 
 ## 10. 内部架构与测试
 
-各组件、线程模型、数据流、持久化键和测试 target 见
-[`UI_ARCHITECTURE.md`](./UI_ARCHITECTURE.md)。
+各组件、线程模型、数据流和持久化键以
+[ARCHITECTURE.md](ARCHITECTURE.md) 与 [FLOWS.md](FLOWS.md) 为准；旧 UI
+内部设计见 [archive/UI_ARCHITECTURE_LEGACY.md](archive/UI_ARCHITECTURE_LEGACY.md)。
 
 ## UI ↔ node 传输优化
 
