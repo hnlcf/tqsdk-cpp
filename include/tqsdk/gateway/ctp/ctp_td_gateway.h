@@ -3,6 +3,7 @@
 #include "tqsdk/gateway/ctp/ctp_config.h"
 #include "tqsdk/gateway/ctp/ctp_convert.h"
 #include "tqsdk/gateway/ctp/ctp_order_store.h"
+#include "tqsdk/gateway/ctp/ctp_query_pipeline.h"
 #include "tqsdk/gateway/ctp/ctp_spi_impl.h"
 #include "tqsdk/gateway/trading_gateway.h"
 #include "tqsdk/util/async_mutex.h"
@@ -98,26 +99,8 @@ private:
         std::string    instrument_id;
     };
 
-    enum class QueryKind {
-        Account,
-        Position,
-        Order,
-        Trade,
-        InstrumentSymbol, ///< 仅按持仓合约查询规格，避免全市场合约洪峰
-    };
-
-    struct QueryJob {
-        QueryKind   kind;
-        std::string symbol;
-        int         attempts   = 0;
-        int         request_id = 0;
-    };
-
-    struct ActiveQuery {
-        QueryKind   kind;
-        std::string symbol;
-        int         request_id = 0;
-    };
+    using QueryKind = ctp::CtpQueryPipeline::Kind;
+    using QueryJob  = ctp::CtpQueryPipeline::Job;
 
     void                  install_callbacks();
     void                  stop_impl() noexcept;
@@ -126,16 +109,8 @@ private:
     void                  emit(TradeEvent ev);
     void                  schedule_refresh();
     void                  start_queries(bool initial);
-    void                  finish_queries();
-    void                  pump_queries();
-    void                  schedule_query_after(std::chrono::milliseconds delay);
     int                   send_query(QueryJob& job);
-    void                  query_failed(QueryKind kind);
     void                  finish_instrument_query();
-    bool                  active_query_matches(QueryKind kind, int request_id) const;
-    void                  arm_query_watchdog();
-    void                  reset_query_state();
-    void                  complete_queries();
     std::string           make_order_ref(const OrderId& rid);
     std::string           rid_for_ref(std::string_view ref) const;
     CommandAck            send_insert(const InsertOrderReq& req, const OrderId& rid);
@@ -182,26 +157,13 @@ private:
     std::map<std::string, ctp::InstrumentSpec> instruments_;
     nlohmann::json                             account_ = nlohmann::json::object();
 
-    std::map<std::string, std::string>  ref_to_rid_;
-    std::map<std::string, std::string>  rid_to_ref_;
-    std::unique_ptr<ctp::CtpOrderStore> order_store_;
-    std::atomic<bool>                   snapshot_ready_{false};
-
-    int                                   pending_queries_            = 0;
-    bool                                  query_in_flight_            = false;
-    bool                                  query_waiting_              = false;
-    bool                                  query_initial_              = false;
-    bool                                  refresh_pending_            = false;
+    std::map<std::string, std::string>    ref_to_rid_;
+    std::map<std::string, std::string>    rid_to_ref_;
+    std::unique_ptr<ctp::CtpOrderStore>   order_store_;
     bool                                  positions_ready_            = false;
     bool                                  instruments_ready_          = false;
     int                                   pending_instrument_queries_ = 0;
-    uint64_t                              query_generation_           = 0;
-    std::optional<ActiveQuery>            active_query_;
-    std::deque<QueryJob>                  query_queue_;
-    std::chrono::milliseconds             query_timeout_{10'000};
-    boost::asio::steady_timer             refresh_timer_;
-    boost::asio::steady_timer             query_timer_;
-    boost::asio::steady_timer             query_watchdog_;
+    ctp::CtpQueryPipeline                 query_pipeline_;
     AsyncMutex                            order_mutex_;
     boost::asio::steady_timer             order_timer_;
     std::chrono::steady_clock::time_point next_order_at_;

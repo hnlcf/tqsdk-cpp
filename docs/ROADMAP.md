@@ -21,12 +21,17 @@
 
 ### P6.1 CTP 交易会话可靠性
 
-- `CtpQueryPipeline` 从 `CtpTdGateway` 独立：
+- ✅ `CtpQueryPipeline` 已从 `CtpTdGateway` 独立：
   - query generation/watchdog；
   - 查询队列；
   - timeout/retry；
-  - callback -> pipeline -> snapshot。
-- 连续 5 个交易日 CTP session soak（真实交易日，不压缩）。
+  - callback -> pipeline -> snapshot；
+  - 7 项独立单测 + CTP 故障注入回归通过。
+- 连续 5 个交易日 CTP session soak（真实交易日，不压缩）：
+  - 已准备 `scripts/ctp_week_preflight.sh`；
+  - 已准备 `scripts/ctp_week_soak.py`；
+  - 已准备 `scripts/ctp_daily_reconcile.py`；
+  - 执行清单见 [CTP_WEEKLY_TEST_PLAN.md](CTP_WEEKLY_TEST_PLAN.md)。
 - 跨结算重启对账、盘中 CTP front 断线、查询延迟分布。
 
 ### P6.2 交易验收矩阵

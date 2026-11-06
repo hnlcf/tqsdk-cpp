@@ -20,6 +20,7 @@
 | [OPERATIONS.md](OPERATIONS.md) | 依赖、构建、配置、启动、测试、长稳、诊断 |
 | [SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md) | SimNow 真实 CTP 验收流程和报告 |
 | [SOAK_PERF.md](SOAK_PERF.md) | 24h SimTd soak、CTP session monitor、性能基线 |
+| [CTP_WEEKLY_TEST_PLAN.md](CTP_WEEKLY_TEST_PLAN.md) | 连续交易日 CTP soak、每日对账、下周执行清单 |
 | [CTP.md](CTP.md) | CTP 接入、SHFE 价格转换、平今平昨、节假日 |
 | [HA（归档）](archive/HA_LEGACY.md) | 旧版高可用草案，待重写 |
 

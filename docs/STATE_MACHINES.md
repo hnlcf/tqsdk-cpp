@@ -39,6 +39,36 @@ Reconnecting ── CTP API 自动重连 ──> Connecting
 - 结算阶段断线不是故障；`session_phase()` 应优先返回 `Settlement`；
 - 交易时段断线返回 `Reconnecting`。
 
+## 1.1 CTP 查询窗口（CtpQueryPipeline）
+
+```text
+Idle
+  │ start(initial, jobs)
+  ▼
+Running
+  ├─ send(job) == 0 -> Waiting(active request)
+  ├─ send(job) == -2/-3 -> retry 1s (max 8)
+  ├─ send failed -> fail(kind) -> advance
+  ▼
+Waiting
+  ├─ is_last response -> finish()
+  ├─ watchdog timeout -> fail(kind)
+  └─ disconnect/stop -> reset() (generation++，丢弃旧响应)
+  ▼
+Completed
+  ├─ snapshot_ready=true
+  ├─ callback completed(initial)
+  └─ restart_pending -> debounce 200ms -> callback restart
+```
+
+不变式：
+
+- 同一时刻最多一个 CTP 查询在途；
+- A 轮结束后迟到的 response 因 `generation`/`active request` 不匹配被丢弃；
+- `snapshot_ready` 只在本轮所有查询结束或失败后置 true；
+- 查询间至少 300ms 间隔，限流重试至少 1s；
+- 持仓查询可追加 `InstrumentSymbol` 任务，pending 在同一窗口内递增。
+
 ## 2. Node readiness
 
 ```text

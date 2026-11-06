@@ -181,6 +181,7 @@ if(TQSDK_ENABLE_CTP)
         src/gateway/ctp/ctp_td_gateway.cpp
         src/gateway/ctp/ctp_td_orders.cpp
         src/gateway/ctp/ctp_td_queries.cpp
+        src/gateway/ctp/ctp_query_pipeline.cpp
         src/gateway/ctp/ctp_md_gateway.cpp
         src/gateway/ctp/ctp_task_queue.cpp
         src/gateway/ctp/ctp_order_store.cpp
@@ -278,6 +279,7 @@ if(TQSDK_BUILD_TESTS)
     if(TQSDK_ENABLE_CTP)
         target_sources(tqsdk_tests PRIVATE
             tests/gateway/ctp_mapping_test.cpp
+        tests/gateway/ctp_query_pipeline_test.cpp
             tests/gateway/ctp_order_store_test.cpp
             tests/gateway/ctp_fault_injection_test.cpp
         )

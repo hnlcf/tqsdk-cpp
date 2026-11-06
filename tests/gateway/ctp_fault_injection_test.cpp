@@ -18,19 +18,22 @@ protected:
     }
 
     void begin_account_query(int request_id) {
-        gw_->query_in_flight_ = true;
-        gw_->query_waiting_   = true;
-        gw_->pending_queries_ = 1;
-        ++gw_->query_generation_;
-        gw_->active_query_ = tqsdk::CtpTdGateway::ActiveQuery{
-            tqsdk::CtpTdGateway::QueryKind::Account, "", request_id};
+        auto& q    = gw_->query_pipeline_;
+        q.running_ = true;
+        q.waiting_ = true;
+        q.pending_ = 1;
+        ++q.generation_;
+        q.active_ = tqsdk::ctp::CtpQueryPipeline::Active{
+            tqsdk::ctp::CtpQueryPipeline::Kind::Account, "", request_id};
     }
 
-    bool        in_flight() const { return gw_->query_in_flight_; }
-    bool        has_active() const { return gw_->active_query_.has_value(); }
-    int         pending() const { return gw_->pending_queries_; }
-    void        set_timeout(std::chrono::milliseconds timeout) { gw_->query_timeout_ = timeout; }
-    void        arm_watchdog() { gw_->arm_query_watchdog(); }
+    bool in_flight() const { return gw_->query_pipeline_.running_; }
+    bool has_active() const { return gw_->query_pipeline_.has_active(); }
+    int  pending() const { return gw_->query_pipeline_.pending(); }
+    void set_timeout(std::chrono::milliseconds timeout) {
+        gw_->query_pipeline_.set_query_timeout(timeout);
+    }
+    void        arm_watchdog() { gw_->query_pipeline_.arm_watchdog(); }
     std::string make_ref(const std::string& rid) { return gw_->make_order_ref(rid); }
     char        offset_for(std::string_view exchange,
                            std::string_view instrument,
@@ -41,8 +44,8 @@ protected:
     void set_position(const std::string& key, nlohmann::json value) {
         gw_->positions_[key] = std::move(value);
     }
-    void set_snapshot_ready(bool ready) { gw_->snapshot_ready_.store(ready); }
-    bool snapshot_ready() const { return gw_->snapshot_ready_.load(); }
+    void set_snapshot_ready(bool ready) { gw_->query_pipeline_.force_snapshot_ready(ready); }
+    bool snapshot_ready() const { return gw_->query_pipeline_.snapshot_ready(); }
     void set_logged_in(bool logged_in) { gw_->logged_in_ = logged_in; }
     bool logged_in() const { return gw_->logged_in_; }
     void set_all_day_calendar() {

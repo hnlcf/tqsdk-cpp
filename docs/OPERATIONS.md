@@ -270,6 +270,17 @@ python3 scripts/ctp_session_soak.py \
 
 这些脚本使用隔离端口/flow path；先阅读脚本顶部注释。
 
+### 连续交易周（只读）
+
+```bash
+./scripts/ctp_week_preflight.sh
+python3 scripts/ctp_week_soak.py --days 5          # dry-run
+python3 scripts/ctp_week_soak.py --days 5 --execute
+python3 scripts/ctp_daily_reconcile.py --out-dir artifacts/ctp_reconcile
+```
+
+完整验收矩阵见 [CTP_WEEKLY_TEST_PLAN.md](CTP_WEEKLY_TEST_PLAN.md)。
+
 ## 7. 产物与诊断
 
 常见位置：

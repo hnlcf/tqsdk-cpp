@@ -86,6 +86,7 @@ ui/                     NodeClient + Qt Widgets + 指标 sidecar
 | Quote/Order/Trade/Position/Account | node 的 `DataManager` | 单 core strand |
 | KlineStream | `KlineRegistry`（DataManager 内） | core strand |
 | CTP 内部查询/订单缓存 | `CtpTdGateway` | gw 的 gateway strand |
+| CTP 查询窗口状态 | `CtpQueryPipeline` | gw 的 gateway strand |
 | IPC replay buffer | `GatewayIpcServer` | 每连接 strand |
 | WS 客户端订阅/发送缓存 | `WebSocketHub::Client` + `WsEntityFilter` | core/连接 strand |
 | 图表/表格展示数据 | UI 模型 | GUI 线程 |

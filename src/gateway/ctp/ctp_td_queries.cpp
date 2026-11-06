@@ -11,7 +11,7 @@ void CtpTdGateway::handle_qry_order(const CThostFtdcOrderField*   order,
                                     const CThostFtdcRspInfoField* info,
                                     int                           request_id,
                                     bool                          is_last) {
-    if (!active_query_matches(QueryKind::Order, request_id)) {
+    if (!query_pipeline_.active_matches(QueryKind::Order, request_id)) {
         return;
     }
     if (order != nullptr) {
@@ -37,7 +37,7 @@ void CtpTdGateway::handle_qry_order(const CThostFtdcOrderField*   order,
     }
     if (is_last) {
         SPDLOG_DEBUG("[CtpTd] qry order done (info={})", info ? info->ErrorID : 0);
-        finish_queries();
+        query_pipeline_.finish();
     }
 }
 
@@ -46,7 +46,7 @@ void CtpTdGateway::handle_qry_trade(const CThostFtdcTradeField*   trade,
                                     int                           request_id,
                                     bool                          is_last) {
     (void)info;
-    if (!active_query_matches(QueryKind::Trade, request_id)) {
+    if (!query_pipeline_.active_matches(QueryKind::Trade, request_id)) {
         return;
     }
     if (trade != nullptr) {
@@ -64,7 +64,7 @@ void CtpTdGateway::handle_qry_trade(const CThostFtdcTradeField*   trade,
     }
     if (is_last) {
         SPDLOG_DEBUG("[CtpTd] qry trade done (info={})", info ? info->ErrorID : 0);
-        finish_queries();
+        query_pipeline_.finish();
     }
 }
 
@@ -73,7 +73,7 @@ void CtpTdGateway::handle_qry_position(const CThostFtdcInvestorPositionField* po
                                        int                                    request_id,
                                        bool                                   is_last) {
     (void)info;
-    if (!active_query_matches(QueryKind::Position, request_id)) {
+    if (!query_pipeline_.active_matches(QueryKind::Position, request_id)) {
         return;
     }
     if (position != nullptr) {
@@ -99,15 +99,13 @@ void CtpTdGateway::handle_qry_position(const CThostFtdcInvestorPositionField* po
         if (!missing_specs.empty()) {
             instruments_ready_ = false;
             pending_instrument_queries_ += static_cast<int>(missing_specs.size());
-            pending_queries_ += static_cast<int>(missing_specs.size());
-            for (const auto& symbol : missing_specs) {
-                query_queue_.push_back(QueryJob{QueryKind::InstrumentSymbol, symbol});
-            }
+            query_pipeline_.enqueue_specs(
+                std::vector<std::string>(missing_specs.begin(), missing_specs.end()));
         } else {
             instruments_ready_ = true;
             rebuild_positions();
         }
-        finish_queries();
+        query_pipeline_.finish();
     }
 }
 
@@ -116,7 +114,7 @@ void CtpTdGateway::handle_qry_account(const CThostFtdcTradingAccountField* accou
                                       int                                  request_id,
                                       bool                                 is_last) {
     (void)info;
-    if (!active_query_matches(QueryKind::Account, request_id)) {
+    if (!query_pipeline_.active_matches(QueryKind::Account, request_id)) {
         return;
     }
     if (account != nullptr) {
@@ -128,7 +126,7 @@ void CtpTdGateway::handle_qry_account(const CThostFtdcTradingAccountField* accou
         SPDLOG_DEBUG("[CtpTd] qry account done (info={}, record={})",
                      info ? info->ErrorID : 0,
                      account != nullptr);
-        finish_queries();
+        query_pipeline_.finish();
     }
 }
 
@@ -137,7 +135,7 @@ void CtpTdGateway::handle_qry_instrument(const CThostFtdcInstrumentField* instru
                                          int                              request_id,
                                          bool                             is_last) {
     (void)info;
-    if (!active_query_matches(QueryKind::InstrumentSymbol, request_id)) {
+    if (!query_pipeline_.active_matches(QueryKind::InstrumentSymbol, request_id)) {
         return;
     }
     if (instrument != nullptr) {
@@ -149,7 +147,7 @@ void CtpTdGateway::handle_qry_instrument(const CThostFtdcInstrumentField* instru
                      info ? info->ErrorID : 0,
                      instruments_.size());
         finish_instrument_query();
-        finish_queries();
+        query_pipeline_.finish();
     }
 }
 
@@ -179,43 +177,28 @@ void CtpTdGateway::start_queries(bool initial) {
     if (!logged_in_ || api_ == nullptr || stopped_) {
         return;
     }
-    if (query_in_flight_) {
-        refresh_pending_ = !initial;
+    if (query_pipeline_.running()) {
+        if (!initial) {
+            query_pipeline_.schedule_restart();
+        }
         return;
     }
 
-    ++query_generation_;
-    active_query_.reset();
-    query_watchdog_.cancel();
-    if (initial) {
-        snapshot_ready_.store(false, std::memory_order_release);
-    }
-    query_in_flight_ = true;
-    query_initial_   = initial;
-    query_waiting_   = false;
-    query_queue_.clear();
-    pending_instrument_queries_ = 0;
-
     // 不先清空缓存：查询完成前 snapshot() 仍返回上一份可用截面，
     // 避免 node 在 CTP 重连/查询窗口内被空快照清空交易状态。
-    // 不再一次性查询全市场合约（1.7 万条回调会淹没报单/成交回调）；
-    // 仅在有持仓时按合约逐个查规格。
-    instruments_ready_ = true;
-    positions_ready_   = false;
+    // 不一次性查询全市场合约；仅在有持仓时按合约逐个查规格。
+    instruments_ready_          = true;
+    positions_ready_            = false;
+    pending_instrument_queries_ = 0;
     pos_agg_.clear();
 
-    query_queue_.push_back(QueryJob{QueryKind::Account});
-    query_queue_.push_back(QueryJob{QueryKind::Position});
-    query_queue_.push_back(QueryJob{QueryKind::Order});
-    query_queue_.push_back(QueryJob{QueryKind::Trade});
-    pending_queries_ = static_cast<int>(query_queue_.size());
-
-    if (initial) {
-        SPDLOG_INFO("[CtpTd] query snapshot: {} request(s)", pending_queries_);
-    } else {
-        SPDLOG_DEBUG("[CtpTd] refresh snapshot: {} request(s)", pending_queries_);
-    }
-    pump_queries();
+    std::vector<QueryJob> jobs{
+        QueryJob{QueryKind::Account},
+        QueryJob{QueryKind::Position},
+        QueryJob{QueryKind::Order},
+        QueryJob{QueryKind::Trade},
+    };
+    query_pipeline_.start(initial, std::move(jobs));
 }
 
 int CtpTdGateway::send_query(QueryJob& job) {
@@ -257,144 +240,6 @@ int CtpTdGateway::send_query(QueryJob& job) {
     return -1;
 }
 
-bool CtpTdGateway::active_query_matches(QueryKind kind, int request_id) const {
-    return active_query_.has_value() && active_query_->kind == kind &&
-           active_query_->request_id == request_id;
-}
-
-void CtpTdGateway::arm_query_watchdog() {
-    if (!active_query_ || !query_in_flight_ || stopped_) {
-        return;
-    }
-    const uint64_t  gen  = query_generation_;
-    const int       req  = active_query_->request_id;
-    const QueryKind kind = active_query_->kind;
-    query_watchdog_.expires_after(query_timeout_);
-    query_watchdog_.async_wait([this, gen, req, kind](boost::system::error_code ec) {
-        if (ec || stopped_ || !query_in_flight_ || gen != query_generation_) {
-            return;
-        }
-        if (!active_query_ || active_query_->request_id != req) {
-            return;
-        }
-        SPDLOG_WARN("[CtpTd] query kind={} req={} timeout; skip", static_cast<int>(kind), req);
-        active_query_.reset();
-        query_waiting_ = false;
-        query_failed(kind);
-    });
-}
-
-void CtpTdGateway::reset_query_state() {
-    ++query_generation_;
-    active_query_.reset();
-    query_waiting_ = false;
-    query_queue_.clear();
-    query_timer_.cancel();
-    query_watchdog_.cancel();
-}
-
-void CtpTdGateway::pump_queries() {
-    if (!query_in_flight_ || query_waiting_ || stopped_ || !logged_in_) {
-        return;
-    }
-    if (query_queue_.empty()) {
-        return;
-    }
-
-    QueryJob job = query_queue_.front();
-    query_queue_.pop_front();
-    const int ret = send_query(job);
-    SPDLOG_DEBUG("[CtpTd] query send kind={} req={} ret={}",
-                 static_cast<int>(job.kind),
-                 job.request_id,
-                 ret);
-    if (ret == 0) {
-        query_waiting_ = true;
-        active_query_  = ActiveQuery{job.kind, job.symbol, job.request_id};
-        arm_query_watchdog();
-        return;
-    }
-
-    // -2/-3: 未处理请求超过许可数 / 每秒请求数超过许可数。
-    // 保持同一 job 重排队，退避后再发；绝不并发轰炸 CTP 查询接口。
-    if ((ret == -2 || ret == -3) && job.attempts < 8) {
-        ++job.attempts;
-        SPDLOG_WARN("[CtpTd] query kind={} throttled ret={}, retry {}/8",
-                    static_cast<int>(job.kind),
-                    ret,
-                    job.attempts);
-        query_queue_.push_front(job);
-        schedule_query_after(std::chrono::seconds(1));
-        return;
-    }
-
-    SPDLOG_WARN("[CtpTd] query kind={} failed ret={}", static_cast<int>(job.kind), ret);
-    query_failed(job.kind);
-}
-
-void CtpTdGateway::schedule_query_after(std::chrono::milliseconds delay) {
-    if (!query_in_flight_ || stopped_) {
-        return;
-    }
-    query_timer_.expires_after(delay);
-    query_timer_.async_wait([this](boost::system::error_code ec) {
-        if (!ec && !stopped_ && query_in_flight_) {
-            pump_queries();
-        }
-    });
-}
-
-void CtpTdGateway::query_failed(QueryKind kind) {
-    if (kind == QueryKind::InstrumentSymbol) {
-        finish_instrument_query();
-    }
-    if (pending_queries_ > 0) {
-        --pending_queries_;
-    }
-    if (pending_queries_ == 0) {
-        complete_queries();
-    } else {
-        // 给 CTP 一点喘息时间，再发下一条查询。
-        schedule_query_after(std::chrono::milliseconds(300));
-    }
-}
-
-void CtpTdGateway::finish_queries() {
-    if (!query_in_flight_) {
-        return;
-    }
-    active_query_.reset();
-    query_watchdog_.cancel();
-    query_waiting_ = false;
-    if (pending_queries_ > 0) {
-        --pending_queries_;
-    }
-    if (pending_queries_ == 0) {
-        complete_queries();
-    } else {
-        schedule_query_after(std::chrono::milliseconds(300));
-    }
-}
-
-void CtpTdGateway::complete_queries() {
-    const bool initial = query_initial_;
-    if (initial) {
-        SPDLOG_INFO("[CtpTd] initial query snapshot complete");
-    } else {
-        SPDLOG_DEBUG("[CtpTd] refresh query snapshot complete");
-    }
-    query_in_flight_ = false;
-    query_initial_   = false;
-    query_waiting_   = false;
-    snapshot_ready_.store(true, std::memory_order_release);
-    query_queue_.clear();
-    emit_diff(initial);
-    if (refresh_pending_) {
-        refresh_pending_ = false;
-        schedule_refresh();
-    }
-}
-
 void CtpTdGateway::emit_diff(bool initial_snapshot) {
     nlohmann::json orders = nlohmann::json::object();
     for (const auto& [rid, cached] : orders_) {
@@ -416,21 +261,11 @@ void CtpTdGateway::schedule_refresh() {
     if (stopped_ || !logged_in_) {
         return;
     }
-    if (query_in_flight_) {
-        refresh_pending_ = true;
-        return;
-    }
-    refresh_timer_.expires_after(std::chrono::milliseconds(200));
-    refresh_timer_.async_wait([this](boost::system::error_code ec) {
-        if (ec || stopped_ || !logged_in_) {
-            return;
-        }
-        start_queries(false);
-    });
+    query_pipeline_.schedule_restart();
 }
 
 bool CtpTdGateway::snapshot_ready() const {
-    return snapshot_ready_.load(std::memory_order_acquire);
+    return query_pipeline_.snapshot_ready();
 }
 
 TradingCalendar::Phase CtpTdGateway::session_phase() const {

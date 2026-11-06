@@ -16,9 +16,20 @@ CtpTdGateway::CtpTdGateway(asio::any_io_executor ex, CtpConfig cfg)
       cfg_(std::move(cfg)),
       ch_(ex_),
       state_(std::make_shared<TdState>(ex_)),
-      refresh_timer_(ex_),
-      query_timer_(ex_),
-      query_watchdog_(ex_),
+      query_pipeline_(
+          ex_,
+          ctp::CtpQueryPipeline::Callbacks{
+              .send      = [this](ctp::CtpQueryPipeline::Job& job) { return send_query(job); },
+              .completed = [this](bool initial) { emit_diff(initial); },
+              .failed =
+                  [this](ctp::CtpQueryPipeline::Kind kind) {
+                      if (kind == ctp::CtpQueryPipeline::Kind::InstrumentSymbol) {
+                          finish_instrument_query();
+                      }
+                  },
+              .restart = [this]() { start_queries(false); },
+          },
+          std::chrono::seconds(10)),
       order_mutex_(ex_),
       order_timer_(ex_) {}
 
@@ -129,16 +140,15 @@ void CtpTdGateway::stop_impl() noexcept {
         return;
     }
     stopped_ = true;
-    snapshot_ready_.store(false, std::memory_order_release);
+    query_pipeline_.force_snapshot_ready(false);
     state_->alive.store(false, std::memory_order_release);
     {
         std::lock_guard<std::mutex> lock(state_->cb_mu);
         state_->callbacks.reset();
     }
     state_->queue->stop();
-    refresh_timer_.cancel();
     order_timer_.cancel();
-    reset_query_state();
+    query_pipeline_.reset();
     if (api_ != nullptr) {
         api_->RegisterSpi(nullptr);
         api_->Release();
@@ -229,12 +239,8 @@ void CtpTdGateway::handle_front_connected() {
 void CtpTdGateway::handle_front_disconnected(int reason) {
     logged_in_     = false;
     authenticated_ = false;
-    snapshot_ready_.store(false, std::memory_order_release);
-    query_in_flight_ = false;
-    query_waiting_   = false;
-    pending_queries_ = 0;
-    refresh_pending_ = false;
-    reset_query_state();
+    query_pipeline_.force_snapshot_ready(false);
+    query_pipeline_.reset();
     if (stopped_) {
         return;
     }
@@ -286,7 +292,7 @@ void CtpTdGateway::handle_login(const CThostFtdcRspUserLoginField& rsp,
     session_id_  = rsp.SessionID;
     trading_day_ = cstr(rsp.TradingDay);
     logged_in_   = true;
-    snapshot_ready_.store(false, std::memory_order_release);
+    query_pipeline_.force_snapshot_ready(false);
     load_persisted_orders();
     SPDLOG_INFO("[CtpTd] login ok front={} session={} trading_day={}",
                 front_id_,
@@ -313,11 +319,7 @@ void CtpTdGateway::handle_settlement(const CThostFtdcSettlementInfoConfirmField*
         return;
     }
     SPDLOG_INFO("[CtpTd] settlement confirmed");
-    query_in_flight_ = false;
-    query_waiting_   = false;
-    pending_queries_ = 0;
-    refresh_pending_ = false;
-    reset_query_state();
+    query_pipeline_.reset();
     start_queries(true);
 }
 

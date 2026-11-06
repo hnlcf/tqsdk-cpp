@@ -437,3 +437,24 @@ https://files.shinnytech.com/shinny_chinese_holiday.json
 实现上 `night_session_allowed()` 会向后寻找下一个交易日；如果途中遇到
 非周末节假日则拒绝当晚夜盘。这个规则比简单“周五夜盘都开”更严格，避免把
 节前夜盘误判为 Open。
+
+## 查询窗口与交易周验证
+
+CTP 查询调度已独立为 `ctp::CtpQueryPipeline`：
+
+- 单查询并发、300ms 间隔；
+- `-2/-3` 限流 1s 退避，最多 8 次；
+- 10s watchdog，超时丢弃迟到响应；
+- generation 使断线后的旧 timer/响应失效；
+- snapshot readiness 由 pipeline 统一维护；
+- 持仓查询可按合约追加 instrument 规格查询。
+
+查询 pipeline 单测：
+
+```bash
+ctest --test-dir build-ui -R CtpQueryPipeline --output-on-failure
+```
+
+真实交易周的只读持续验证、每日对账和报单边界见
+[CTP_WEEKLY_TEST_PLAN.md](CTP_WEEKLY_TEST_PLAN.md)。该验证必须跨真实结算日
+执行，不能用 SimTd 24h soak 替代。

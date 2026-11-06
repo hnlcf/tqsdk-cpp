@@ -127,18 +127,20 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/KLINE_CACHE.md](docs/KLINE_CACHE.md)
 - [docs/SIMNOW_ACCEPTANCE.md](docs/SIMNOW_ACCEPTANCE.md)
 - [docs/SOAK_PERF.md](docs/SOAK_PERF.md)
+- [docs/CTP_WEEKLY_TEST_PLAN.md](docs/CTP_WEEKLY_TEST_PLAN.md)
 
 旧版设计/评审文档已归档到 [docs/archive/](docs/archive/)，只用于历史追溯；
 新实现以本 README 和上述 canonical docs 为准。
 
 ## 当前状态
 
-- `ctest`：293 项通过（以本地构建目录为准）；
+- `ctest`：300 项通过（以本地构建目录为准）；
 - SimTd 24h soak：完成，`http_err=0`、`ws_err=0`、`fatal=""`；
 - SimNow CTP 写验收：15/15 PASS；
 - 平昨自动化：已完成；
 - CTP session monitor：支持结算预期断线；
-- Windows CTP、连续 5 个交易日 CTP soak 仍待后续验证。
+- Windows CTP、连续 5 个交易日 CTP soak 仍待后续验证；
+- 已准备 `ctp_week_soak.py` / `ctp_daily_reconcile.py` / `ctp_week_preflight.sh`。
 
 ## 安全
 

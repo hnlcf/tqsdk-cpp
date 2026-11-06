@@ -115,7 +115,8 @@ gateway/ctp/
   ctp_md_gateway.*
   ctp_td_gateway.*      生命周期/回调桥接
   ctp_td_orders.cpp     订单映射/持久化/报撤
-  ctp_td_queries.cpp    查询/对账/快照
+  ctp_td_queries.cpp    查询结果合并/对账/快照
+  ctp_query_pipeline.*  查询队列/generation/watchdog/retry/restart
   ctp_order_store.*     有界持久化订单
   ctp_convert.h         CTP 字段 -> JSON/领域转换
 ```
