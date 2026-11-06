@@ -104,15 +104,12 @@ void GatewayIpcServer::close() noexcept {
     }
     // 释放本连接在 md 网关上的订阅（引用计数退订）。按值捕获订阅快照，
     // 避免 release 协程运行期间本对象被销毁导致的悬垂访问；md_ 由上层长期持有。
-    if (md_ != nullptr && (!subscribed_symbols_.empty() || !subscribed_klines_.empty())) {
+    auto released = subscriptions_.release_all();
+    if (md_ != nullptr && (!released.symbols.empty() || !released.klines.empty())) {
         auto* md     = md_;
-        auto  syms   = std::move(subscribed_symbols_);
-        auto  klines = std::move(subscribed_klines_);
+        auto  syms   = std::move(released.symbols);
+        auto  klines = std::move(released.klines);
         SPDLOG_TRACE("[Gw] close: releasing {} symbols, {} klines", syms.size(), klines.size());
-        subscribed_symbols_.clear();
-        subscribed_klines_.clear();
-        symbol_use_.clear();
-        subscribed_kline_keys_.clear();
         co_spawn_logged(
             gateway_ex_,
             [md, syms = std::move(syms), klines = std::move(klines)]() -> asio::awaitable<void> {

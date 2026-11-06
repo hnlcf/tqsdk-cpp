@@ -39,10 +39,12 @@ add_library(tqsdk_core SHARED
     src/ipc/remote_md_gateway.cpp
     src/ipc/remote_td_gateway.cpp
     src/ipc/gateway_server.cpp
+    src/ipc/gateway_subscription_book.cpp
     src/ipc/gateway_server_pumps.cpp
     src/ipc/gateway_server_control.cpp
     src/serve/http_server.cpp
     src/serve/http_routes.cpp
+    src/serve/snapshot_service.cpp
     src/instrument/instrument_catalog.cpp
     src/serve/ws_stream.cpp
     src/serve/ws_entity_filter.cpp
@@ -244,6 +246,7 @@ if(TQSDK_BUILD_TESTS)
         tests/ipc/stream_seq_test.cpp
         tests/ipc/ipc_session_test.cpp
         tests/ipc/command_ack_cache_test.cpp
+        tests/ipc/gateway_subscription_book_test.cpp
         tests/ipc/ipc_proxy_test.cpp
         tests/ipc/gateway_server_test.cpp
         tests/config/tqapi_factory_test.cpp

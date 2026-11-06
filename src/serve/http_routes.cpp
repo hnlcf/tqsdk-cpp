@@ -3,6 +3,7 @@
 
 #include "tqsdk/domain/sentinel.h"
 #include "tqsdk/serve/json_convert.h"
+#include "tqsdk/serve/snapshot_service.h"
 #include "tqsdk/util/json_value.h"
 
 namespace tqsdk {
@@ -186,21 +187,7 @@ void HttpServer::setup_routes() {
              co_return out;
          })},
         {http::verb::get, "/trading-snapshot", make_entry([this]() -> asio::awaitable<json> {
-             json out       = json::object();
-             out["account"] = account_to_json(api_->get_account());
-             out["orders"]  = json::object();
-             for (const auto& [oid, order] : api_->data().orders) {
-                 out["orders"][oid] = order_to_json(order);
-             }
-             out["trades"] = json::object();
-             for (const auto& [tid, trade] : api_->data().trades) {
-                 out["trades"][tid] = trade_to_json(trade);
-             }
-             out["positions"] = json::object();
-             for (const auto& [symbol, position] : api_->data().positions) {
-                 out["positions"][symbol] = position_to_json(position);
-             }
-             co_return out;
+             co_return trading_snapshot(*api_);
          })},
         {http::verb::get,
          "/kline/{symbol}/{duration_ns}",
@@ -212,28 +199,13 @@ void HttpServer::setup_routes() {
              co_return account_to_json(api_->get_account());
          })},
         {http::verb::get, "/orders", make_entry([this]() -> asio::awaitable<json> {
-             json out = json::object();
-             for (const auto& [oid, o] : api_->data().orders) {
-                 out[oid] = order_to_json(o);
-             }
-             co_return json{{"orders", out}};
+             co_return orders_snapshot(*api_);
          })},
         {http::verb::get, "/trades", make_entry([this]() -> asio::awaitable<json> {
-             json out = json::object();
-             for (const auto& [tid, t] : api_->data().trades) {
-                 out[tid] = trade_to_json(t);
-             }
-             co_return json{{"trades", out}};
+             co_return trades_snapshot(*api_);
          })},
         {http::verb::get, "/positions", make_entry([this]() -> asio::awaitable<json> {
-             json out = json::object();
-             for (const auto& [sym, p] : api_->data().positions) {
-                 if (p.volume_long == 0 && p.volume_short == 0) {
-                     continue; // 不返回空仓位
-                 }
-                 out[sym] = position_to_json(p);
-             }
-             co_return json{{"positions", out}};
+             co_return positions_snapshot(*api_);
          })},
 
         // ---- 下单 / 撤单 ----

@@ -6,6 +6,7 @@
 #include "tqsdk/gateway/trading_gateway.h"
 #include "tqsdk/ipc/command_ack_cache.h"
 #include "tqsdk/ipc/event_bus.h"
+#include "tqsdk/ipc/gateway_subscription_book.h"
 #include "tqsdk/ipc/ipc_session.h"
 #include "tqsdk/ipc/protocol.h"
 #include "tqsdk/ipc/stream_seq.h"
@@ -155,15 +156,8 @@ private:
     // 命令幂等缓存；key = "<op>:<rid>"，control_loop 单协程访问。
     CommandAckCache command_acks_{4096};
 
-    // 本连接累计订阅的合约与 K 线 (symbol,duration_ns)。close() 时一次性 release 给
-    // 网关，使网关按引用计数释放（多 node 共享同一 md 网关时的正确退订语义）。
-    //
-    // symbol_use_ 统计"本连接内该 symbol 的使用次数"：显式 subscribe +1，
-    // 每个 kline 依赖再 +1。这样显式退订行情但 K 线仍在时不会提前释放合约行情。
-    std::vector<std::string> subscribed_symbols_; // 计数 >0 的 symbol（每 symbol 一次）
-    std::vector<std::pair<std::string, int64_t>> subscribed_klines_;
-    std::map<std::string, int>                   symbol_use_;
-    std::set<std::string>                        subscribed_kline_keys_; // "sym|dur"
+    // 本连接订阅账本；真正的 subscribe/release 在 gateway core strand 执行。
+    GatewaySubscriptionBook subscriptions_;
 
     // 停止信号：pump 在"等待网关事件"与"等待停止"之间做 race，close() 时
     // cancel 本 timer 即可让阻塞在网关 output 上的 pump 立即退出，避免

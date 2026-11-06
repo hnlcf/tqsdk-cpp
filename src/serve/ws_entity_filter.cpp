@@ -1,6 +1,7 @@
 #include "tqsdk/serve/ws_entity_filter.h"
 
 #include "tqsdk/instrument/instrument_catalog.h"
+#include "tqsdk/serve/snapshot_service.h"
 #include "tqsdk/tqapi.h"
 
 namespace tqsdk::serve {

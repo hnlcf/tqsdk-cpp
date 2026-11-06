@@ -77,7 +77,7 @@ bool GatewayIpcServer::filter_md_for_connection(MarketDataEvent& ev) const {
     if (auto qit = j.find("quotes"); qit != j.end() && qit->is_object()) {
         auto& quotes = *qit;
         for (auto it = quotes.begin(); it != quotes.end();) {
-            if (symbol_use_.count(it.key()) != 0) {
+            if (subscriptions_.has_symbol(it.key())) {
                 any = true;
                 ++it;
             } else {
@@ -105,9 +105,7 @@ bool GatewayIpcServer::filter_md_for_connection(MarketDataEvent& ev) const {
                     dit = sit.value().erase(dit);
                     continue;
                 }
-                const auto key = std::make_pair(symbol, dur);
-                if (std::find(subscribed_klines_.begin(), subscribed_klines_.end(), key) !=
-                    subscribed_klines_.end()) {
+                if (subscriptions_.has_kline(symbol, dur)) {
                     any = true;
                     ++dit;
                 } else {
@@ -187,97 +185,57 @@ asio::awaitable<void> GatewayIpcServer::handle_subscribe(const ReceivedFrame& fr
         if (md_ == nullptr) {
             ack.ok    = false;
             ack.error = "no market-data gateway on this connection";
-        } else if (!body.release) {
-            // 订阅：symbol_use_ 做连接内引用计数，显式 symbols 与 kline 依赖各 +1；
-            // 只有 0->1 的 symbol 才向上游 subscribe，与 release 严格对称。
-            std::vector<std::string> new_syms;
-            std::set<std::string>    seen_explicit;
-
-            auto use_symbol = [&](const std::string& s) {
-                if (symbol_use_[s]++ == 0) {
-                    new_syms.push_back(s);
-                    subscribed_symbols_.push_back(s);
-                }
-            };
-
-            for (const auto& s : body.symbols) {
-                if (!seen_explicit.insert(s).second) {
-                    continue;
-                }
-                use_symbol(s);
-            }
-
-            std::vector<KlineSub> new_klines;
-            for (const auto& k : body.klines) {
-                const std::string key = k.symbol + "|" + std::to_string(k.duration_ns);
-                if (!subscribed_kline_keys_.insert(key).second) {
-                    continue; // 同连接重复订阅同一 kline：不重复加计数
-                }
-                use_symbol(k.symbol);
-                new_klines.push_back(k);
-                subscribed_klines_.emplace_back(k.symbol, k.duration_ns);
-            }
-
-            // 共享 md 网关状态在 gateway core strand 上。
-            co_await asio::dispatch(gateway_ex_, asio::use_awaitable);
-            try {
-                if (!new_syms.empty()) {
-                    co_await md_->subscribe(new_syms);
-                }
-                for (const auto& k : new_klines) {
-                    co_await md_->subscribe_kline(k.symbol, k.duration_ns, k.view_width);
-                }
-                ack.ok = true;
-            } catch (const std::exception& e) {
-                ack.ok    = false;
-                ack.error = e.what();
-            }
-            co_await asio::dispatch(ex_, asio::use_awaitable);
         } else {
-            // 退订：显式 symbols 与 kline 依赖各 -1；归零才向上游 release。
-            std::vector<std::string>                     release_syms;
-            std::vector<std::pair<std::string, int64_t>> release_klines;
-
-            auto release_symbol_once = [&](const std::string& s) {
-                auto it = symbol_use_.find(s);
-                if (it == symbol_use_.end()) {
-                    return;
-                }
-                if (--it->second <= 0) {
-                    symbol_use_.erase(it);
-                    std::erase(subscribed_symbols_, s);
-                    release_syms.push_back(s);
-                }
-            };
-
-            std::set<std::string> seen_explicit;
-            for (const auto& s : body.symbols) {
-                if (!seen_explicit.insert(s).second) {
-                    continue;
-                }
-                release_symbol_once(s);
-            }
+            std::vector<GatewaySubscriptionBook::KlineRequest> requests;
+            requests.reserve(body.klines.size());
             for (const auto& k : body.klines) {
-                const std::string key = k.symbol + "|" + std::to_string(k.duration_ns);
-                if (subscribed_kline_keys_.erase(key) == 0) {
-                    continue; // 未订阅过该 kline：忽略，避免重复扣减
-                }
-                std::erase(subscribed_klines_, std::make_pair(k.symbol, k.duration_ns));
-                release_klines.emplace_back(k.symbol, k.duration_ns);
-                release_symbol_once(k.symbol);
+                requests.push_back({k.symbol, k.duration_ns, k.view_width});
             }
 
-            co_await asio::dispatch(gateway_ex_, asio::use_awaitable);
-            try {
-                if (!release_syms.empty() || !release_klines.empty()) {
-                    co_await md_->release(release_syms, release_klines);
+            if (!body.release) {
+                std::set<std::string> existing_klines;
+                for (const auto& k : body.klines) {
+                    if (subscriptions_.has_kline(k.symbol, k.duration_ns)) {
+                        existing_klines.insert(k.symbol + "|" + std::to_string(k.duration_ns));
+                    }
                 }
-                ack.ok = true;
-            } catch (const std::exception& e) {
-                ack.ok    = false;
-                ack.error = e.what();
+                const auto            delta = subscriptions_.subscribe(body.symbols, requests);
+                std::vector<KlineSub> new_klines;
+                for (const auto& k : body.klines) {
+                    const auto key = k.symbol + "|" + std::to_string(k.duration_ns);
+                    if (!existing_klines.contains(key)) {
+                        new_klines.push_back(k);
+                    }
+                }
+
+                co_await asio::dispatch(gateway_ex_, asio::use_awaitable);
+                try {
+                    if (!delta.symbols.empty()) {
+                        co_await md_->subscribe(delta.symbols);
+                    }
+                    for (const auto& k : new_klines) {
+                        co_await md_->subscribe_kline(k.symbol, k.duration_ns, k.view_width);
+                    }
+                    ack.ok = true;
+                } catch (const std::exception& e) {
+                    ack.ok    = false;
+                    ack.error = e.what();
+                }
+                co_await asio::dispatch(ex_, asio::use_awaitable);
+            } else {
+                const auto delta = subscriptions_.unsubscribe(body.symbols, requests);
+                co_await asio::dispatch(gateway_ex_, asio::use_awaitable);
+                try {
+                    if (!delta.symbols.empty() || !delta.klines.empty()) {
+                        co_await md_->release(delta.symbols, delta.klines);
+                    }
+                    ack.ok = true;
+                } catch (const std::exception& e) {
+                    ack.ok    = false;
+                    ack.error = e.what();
+                }
+                co_await asio::dispatch(ex_, asio::use_awaitable);
             }
-            co_await asio::dispatch(ex_, asio::use_awaitable);
         }
     }
 
