@@ -31,6 +31,7 @@ endif()
 # ---------- 核心动态库（CTP 开启时直接并入同一 .so） ----------
 add_library(tqsdk_core SHARED
     src/api/tq_api.cpp
+    src/api/tq_api_order.cpp
     src/ipc/uds_channel.cpp
     src/ipc/tcp_channel.cpp
     src/ipc/ipc_session.cpp
@@ -38,7 +39,10 @@ add_library(tqsdk_core SHARED
     src/ipc/remote_md_gateway.cpp
     src/ipc/remote_td_gateway.cpp
     src/ipc/gateway_server.cpp
+    src/ipc/gateway_server_pumps.cpp
+    src/ipc/gateway_server_control.cpp
     src/serve/http_server.cpp
+    src/serve/http_routes.cpp
     src/instrument/instrument_catalog.cpp
     src/serve/ws_stream.cpp
     src/serve/ws_entity_filter.cpp
@@ -47,6 +51,7 @@ add_library(tqsdk_core SHARED
     src/data/diff_merge_engine.cpp
     src/data/diff_merge_quotes.cpp
     src/data/diff_merge_trade.cpp
+    src/data/diff_merge_positions.cpp
     src/data/diff_merge_klines.cpp
     src/data/kline_store.cpp
     src/gateway/sim/sim_td_gateway.cpp
