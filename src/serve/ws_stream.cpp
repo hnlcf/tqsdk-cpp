@@ -1,4 +1,5 @@
 #include "tqsdk/serve/ws_stream.h"
+#include "tqsdk/serve/ws_entity_filter.h"
 
 #include "tqsdk/serve/json_convert.h"
 #include "tqsdk/util/spawn_logged.h"
@@ -229,11 +230,8 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
     std::map<std::pair<std::string, int64_t>, int> klines; // key -> view_width
     std::set<std::string>                          topics;
     bool                                           topics_initialized = false;
-    // 每客户端最近一次下发的实体 JSON，过滤 CTP 全量查询造成的伪 diff。
-    std::unordered_map<std::string, std::string> sent_order_json;
-    std::unordered_map<std::string, std::string> sent_trade_json;
-    std::unordered_map<std::string, std::string> sent_position_json;
-    std::string                                  sent_account_json;
+    // 与网络 I/O 解耦的快照/增量裁剪器；每个客户端独立缓存已发送实体。
+    WsEntityFilter filter;
 
     uint64_t                    id_;
     ws_t                        ws_;
@@ -569,53 +567,11 @@ asio::awaitable<void> WebSocketHub::remove_client(uint64_t id) {
 }
 
 nlohmann::json WebSocketHub::snapshot_for(Client& client) const {
-    json data = json::object();
-
-    for (const auto& sym : client.symbols) {
-        if (const Quote* q = api_->data().quotes.find(sym)) {
-            data["quotes"][sym] = quote_to_json(*q, catalog_);
-        }
-    }
-    for (const auto& [key, width] : client.klines) {
-        (void)width;
-        if (const KlineStream* s = api_->data().klines.find(key.first, key.second)) {
-            json one = kline_ws_json(*s, true);
-            for (auto& [sym, durs] : one["klines"].items()) {
-                for (auto& [dur, node] : durs.items()) {
-                    data["klines"][sym][dur] = std::move(node);
-                }
-            }
-        }
-    }
-
-    // 交易类快照只发给显式订阅了对应 topic 的客户端；同时记录该客户端
-    // 已经看到的 JSON，防止之后 CTP 全量查询把未变化实体再次当成 diff。
-    if (client.topics.count("account") != 0) {
-        data["account"]          = account_to_json(api_->data().account);
-        client.sent_account_json = data["account"].dump();
-    }
-    if (client.topics.count("orders") != 0) {
-        data["orders"] = json::object();
-        for (const auto& [oid, o] : api_->data().orders) {
-            data["orders"][oid]         = order_to_json(o);
-            client.sent_order_json[oid] = data["orders"][oid].dump();
-        }
-    }
-    if (client.topics.count("trades") != 0) {
-        data["trades"] = json::object();
-        for (const auto& [tid, t] : api_->data().trades) {
-            data["trades"][tid]         = trade_to_json(t);
-            client.sent_trade_json[tid] = data["trades"][tid].dump();
-        }
-    }
-    if (client.topics.count("positions") != 0) {
-        data["positions"] = json::object();
-        for (const auto& [sym, p] : api_->data().positions) {
-            data["positions"][sym]         = position_to_json(p);
-            client.sent_position_json[sym] = data["positions"][sym].dump();
-        }
-    }
-    return data;
+    WsEntitySelection selection;
+    selection.symbols = client.symbols;
+    selection.klines  = client.klines;
+    selection.topics  = client.topics;
+    return client.filter.snapshot(*api_, selection, catalog_);
 }
 
 nlohmann::json WebSocketHub::build_diff() const {
@@ -667,78 +623,11 @@ nlohmann::json WebSocketHub::build_diff() const {
 }
 
 nlohmann::json WebSocketHub::filter_diff(Client& client, const nlohmann::json& diff) const {
-    json out = json::object();
-
-    if (auto it = diff.find("quotes"); it != diff.end()) {
-        for (const auto& sym : client.symbols) {
-            if (auto q = it->find(sym); q != it->end()) {
-                out["quotes"][sym] = *q;
-            }
-        }
-    }
-    if (auto it = diff.find("klines"); it != diff.end()) {
-        for (const auto& [key, width] : client.klines) {
-            (void)width;
-            auto sit = it->find(key.first);
-            if (sit == it->end()) {
-                continue;
-            }
-            auto dit = sit->find(std::to_string(key.second));
-            if (dit != sit->end()) {
-                out["klines"][key.first][std::to_string(key.second)] = *dit;
-            }
-        }
-    }
-
-    if (client.topics.count("account") != 0) {
-        if (auto it = diff.find("account"); it != diff.end()) {
-            auto text = it->dump();
-            if (text != client.sent_account_json) {
-                client.sent_account_json = std::move(text);
-                out["account"]           = *it;
-            }
-        }
-    }
-    if (client.topics.count("orders") != 0) {
-        if (auto it = diff.find("orders"); it != diff.end()) {
-            for (const auto& [oid, order] : it->items()) {
-                auto text              = order.dump();
-                auto [cache, inserted] = client.sent_order_json.try_emplace(oid, text);
-                if (!inserted && cache->second == text) {
-                    continue;
-                }
-                cache->second      = std::move(text);
-                out["orders"][oid] = order;
-            }
-        }
-    }
-    if (client.topics.count("trades") != 0) {
-        if (auto it = diff.find("trades"); it != diff.end()) {
-            for (const auto& [tid, trade] : it->items()) {
-                auto text              = trade.dump();
-                auto [cache, inserted] = client.sent_trade_json.try_emplace(tid, text);
-                if (!inserted && cache->second == text) {
-                    continue;
-                }
-                cache->second      = std::move(text);
-                out["trades"][tid] = trade;
-            }
-        }
-    }
-    if (client.topics.count("positions") != 0) {
-        if (auto it = diff.find("positions"); it != diff.end()) {
-            for (const auto& [sym, position] : it->items()) {
-                auto text              = position.dump();
-                auto [cache, inserted] = client.sent_position_json.try_emplace(sym, text);
-                if (!inserted && cache->second == text) {
-                    continue;
-                }
-                cache->second         = std::move(text);
-                out["positions"][sym] = position;
-            }
-        }
-    }
-    return out;
+    WsEntitySelection selection;
+    selection.symbols = client.symbols;
+    selection.klines  = client.klines;
+    selection.topics  = client.topics;
+    return client.filter.filter(selection, diff);
 }
 
 void WebSocketHub::broadcast(const nlohmann::json& diff) {

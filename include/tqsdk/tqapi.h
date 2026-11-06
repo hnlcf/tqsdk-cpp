@@ -102,8 +102,9 @@ public:
     asio::awaitable<CommandAck> cancel_order(const CancelOrderReq& req);
 
     // ---- 内部数据访问（测试/调试用）----
-    DataManager& data() noexcept { return data_; }
-    std::string  next_order_id();
+    DataManager&       data() noexcept { return data_; }
+    const DataManager& data() const noexcept { return data_; }
+    std::string        next_order_id();
 
 private:
     asio::awaitable<void> md_loop();

@@ -42,6 +42,10 @@ public:
         auto it = streams_.find(make_key(sym, dur));
         return it == streams_.end() ? nullptr : &it->second;
     }
+    const KlineStream* find(std::string_view sym, int64_t dur) const noexcept {
+        auto it = streams_.find(make_key(sym, dur));
+        return it == streams_.end() ? nullptr : &it->second;
+    }
 
     void clear_changes() noexcept {
         for (auto& [_, s] : streams_) {

@@ -41,9 +41,13 @@ add_library(tqsdk_core SHARED
     src/serve/http_server.cpp
     src/instrument/instrument_catalog.cpp
     src/serve/ws_stream.cpp
+    src/serve/ws_entity_filter.cpp
     src/serve/json_convert.cpp
     src/config/tqapi_factory.cpp
     src/data/diff_merge_engine.cpp
+    src/data/diff_merge_quotes.cpp
+    src/data/diff_merge_trade.cpp
+    src/data/diff_merge_klines.cpp
     src/data/kline_store.cpp
     src/gateway/sim/sim_td_gateway.cpp
     src/gateway/tq/tq_md_protocol.cpp
@@ -168,6 +172,8 @@ if(TQSDK_ENABLE_CTP)
     # CTP 源文件直接编译进唯一的 tqsdk_core 动态库，不再生成第二个库。
     target_sources(tqsdk_core PRIVATE
         src/gateway/ctp/ctp_td_gateway.cpp
+        src/gateway/ctp/ctp_td_orders.cpp
+        src/gateway/ctp/ctp_td_queries.cpp
         src/gateway/ctp/ctp_md_gateway.cpp
         src/gateway/ctp/ctp_task_queue.cpp
         src/gateway/ctp/ctp_order_store.cpp
@@ -246,6 +252,7 @@ if(TQSDK_BUILD_TESTS)
         tests/instrument/instrument_catalog_test.cpp
         tests/serve/ws_protocol_test.cpp
         tests/serve/ws_stream_test.cpp
+        tests/serve/ws_entity_filter_test.cpp
         tests/serve/catalog_http_test.cpp
         tests/serve/threading_test.cpp
         tests/serve/readiness_test.cpp
