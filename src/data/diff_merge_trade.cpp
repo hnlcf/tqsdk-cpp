@@ -5,6 +5,48 @@
 
 namespace tqsdk {
 
+namespace {
+
+bool same_double(double a, double b) {
+    if (std::isnan(a) && std::isnan(b)) {
+        return true;
+    }
+    return a == b;
+}
+
+uint64_t order_diff_bits(const Order& before, const Order& after) {
+    uint64_t bits = 0;
+#define ORDER_DIFF(FIELD, EXPR)                                                                    \
+    if (!((EXPR))) {                                                                               \
+        bits |= static_cast<uint64_t>(OrderField::FIELD);                                          \
+    }
+    ORDER_DIFF(order_type, before.order_type == after.order_type)
+    ORDER_DIFF(exchange_id, before.exchange_id == after.exchange_id)
+    ORDER_DIFF(instrument_id, before.instrument_id == after.instrument_id)
+    ORDER_DIFF(direction, before.direction == after.direction)
+    ORDER_DIFF(offset, before.offset == after.offset)
+    ORDER_DIFF(volume_orign, before.volume_orign == after.volume_orign)
+    ORDER_DIFF(volume_left, before.volume_left == after.volume_left)
+    ORDER_DIFF(trade_type, before.trade_type == after.trade_type)
+    ORDER_DIFF(price_type, before.price_type == after.price_type)
+    ORDER_DIFF(limit_price, same_double(before.limit_price, after.limit_price))
+    ORDER_DIFF(time_cond, before.time_cond == after.time_cond)
+    ORDER_DIFF(volume_cond, before.volume_cond == after.volume_cond)
+    ORDER_DIFF(min_volume, before.min_volume == after.min_volume)
+    ORDER_DIFF(hedge_flag, before.hedge_flag == after.hedge_flag)
+    ORDER_DIFF(status, before.status == after.status)
+    ORDER_DIFF(last_msg, before.last_msg == after.last_msg)
+    ORDER_DIFF(insert_date_time, before.insert_date_time == after.insert_date_time)
+    ORDER_DIFF(exchange_order_id, before.exchange_order_id == after.exchange_order_id)
+    ORDER_DIFF(trade_price, same_double(before.trade_price, after.trade_price))
+    ORDER_DIFF(is_error, before.is_error == after.is_error)
+    ORDER_DIFF(is_dead, before.is_dead == after.is_dead)
+#undef ORDER_DIFF
+    return bits;
+}
+
+} // namespace
+
 void DiffMergeEngine::merge_trade(const nlohmann::json& trade) {
     if (!trade.is_object()) {
         return;
@@ -76,7 +118,8 @@ void DiffMergeEngine::merge_one_order(Order& o, const nlohmann::json& diff) {
         return;
     }
 
-    uint64_t bits = 0;
+    const Order before = o;
+    uint64_t    bits   = 0;
     for (auto it = diff.begin(); it != diff.end(); ++it) {
         const auto& v = it.value();
         auto        f = lookup_order_field(it.key());
@@ -227,8 +270,11 @@ void DiffMergeEngine::merge_one_order(Order& o, const nlohmann::json& diff) {
             break;
         }
     }
-    if (bits) {
-        data_.orders.mark_changed(o, bits);
+    // CTP 每次查询都会重发完整订单。不能仅因为字段存在就置 dirty；
+    // 只有与合并前的值真正不同，才进入 wait_update/WS diff。
+    const uint64_t actual_bits = order_diff_bits(before, o);
+    if (actual_bits != 0) {
+        data_.orders.mark_changed(o, actual_bits);
     }
 }
 

@@ -113,6 +113,24 @@ TEST(DiffMerge, OrderLifecycle) {
                   (uint64_t)OrderField::is_dead);
 }
 
+TEST(DiffMerge, RepeatedFullOrderDoesNotMarkDirty) {
+    DataManager     dm;
+    DiffMergeEngine eng(dm);
+    const json      order = json::parse(R"({
+        "trade":{"SHFE.rb2610":{"user":{"orders":{"oid1":{
+            "direction":"BUY","offset":"OPEN","volume_orign":1,
+            "volume_left":1,"status":"ALIVE","is_dead":false,
+            "last_msg":"未成交","limit_price":3800.0
+        }}}}}
+    })");
+    eng.apply(order);
+    auto* o = dm.orders.find("oid1");
+    ASSERT_NE(o, nullptr);
+    dm.clear_all_changes();
+    eng.apply(order); // CTP 全量查询重复同一订单
+    EXPECT_EQ(o->changed_fields, 0u);
+}
+
 TEST(DiffMerge, OrderUnknownEnumDoesNotAbort) {
     DataManager     dm;
     DiffMergeEngine eng(dm);
