@@ -1,5 +1,9 @@
 # TQSDK Qt UI 设计方案
 
+> 专题文档。总体架构/模块/信息流/状态机以 [ARCHITECTURE.md](ARCHITECTURE.md)、
+> [MODULES.md](MODULES.md)、[FLOWS.md](FLOWS.md)、[STATE_MACHINES.md](STATE_MACHINES.md)
+> 和 [PROTOCOLS.md](PROTOCOLS.md) 为准。
+
 > 状态：设计/骨架阶段
 >
 > 结论：放弃 Web/Tauri 前端，采用 **独立进程的 Qt 6 Widgets 桌面客户端**；

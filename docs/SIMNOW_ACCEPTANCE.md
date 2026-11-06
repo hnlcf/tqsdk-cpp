@@ -1,5 +1,9 @@
 # SimNow / CTP 验收检查
 
+> 专题文档。总体架构/模块/信息流/状态机以 [ARCHITECTURE.md](ARCHITECTURE.md)、
+> [MODULES.md](MODULES.md)、[FLOWS.md](FLOWS.md)、[STATE_MACHINES.md](STATE_MACHINES.md)
+> 和 [PROTOCOLS.md](PROTOCOLS.md) 为准。
+
 `scripts/simnow_acceptance.py` 用于在 SimNow 上做可重复的端到端验收，避免
 晚上手工点单后无法回溯“哪一步过了、哪一步失败”。
 

@@ -1,5 +1,9 @@
 # K 线指标插件设计
 
+> 专题文档。总体架构/模块/信息流/状态机以 [ARCHITECTURE.md](ARCHITECTURE.md)、
+> [MODULES.md](MODULES.md)、[FLOWS.md](FLOWS.md)、[STATE_MACHINES.md](STATE_MACHINES.md)
+> 和 [PROTOCOLS.md](PROTOCOLS.md) 为准。
+
 > 状态：Phase B（Python sidecar、单文件指标插件、动态菜单、内置 MA/EMA/BOLL/MACD）已实现；插件签名/依赖管理和 DSL 仍待 Phase C。
 >
 > 目标不是把指标公式塞进 `paintEvent`，而是让指标计算、渲染和生命周期与

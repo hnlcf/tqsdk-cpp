@@ -1,5 +1,9 @@
 # CTP 网关
 
+> 专题文档。总体架构/模块/信息流/状态机以 [ARCHITECTURE.md](ARCHITECTURE.md)、
+> [MODULES.md](MODULES.md)、[FLOWS.md](FLOWS.md)、[STATE_MACHINES.md](STATE_MACHINES.md)
+> 和 [PROTOCOLS.md](PROTOCOLS.md) 为准。
+
 本文说明 tqsdk-gw 的 CTP 行情/交易接入：构建方式、配置、线程桥接、订单/成交映射、
 断线重连与查询对账，以及当前验证边界。
 

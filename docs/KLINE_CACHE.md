@@ -1,5 +1,9 @@
 # node K 线历史缓存（SQLite）
 
+> 专题文档。总体架构/模块/信息流/状态机以 [ARCHITECTURE.md](ARCHITECTURE.md)、
+> [MODULES.md](MODULES.md)、[FLOWS.md](FLOWS.md)、[STATE_MACHINES.md](STATE_MACHINES.md)
+> 和 [PROTOCOLS.md](PROTOCOLS.md) 为准。
+
 > 目标：node 重启后先使用本地历史，避免每次重新从远端拉取完整 200 根 K 线；
 > 本地缓存足够新时，只向上游请求最新 2 根补差。
 

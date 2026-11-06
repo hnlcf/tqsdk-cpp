@@ -1,5 +1,9 @@
 # 标准合约目录（symbol.json / latest.json）
 
+> 专题文档。总体架构/模块/信息流/状态机以 [ARCHITECTURE.md](ARCHITECTURE.md)、
+> [MODULES.md](MODULES.md)、[FLOWS.md](FLOWS.md)、[STATE_MACHINES.md](STATE_MACHINES.md)
+> 和 [PROTOCOLS.md](PROTOCOLS.md) 为准。
+
 > 数据源：天勤 openmd
 >
 > - `https://openmd.shinnytech.com/t/md/symbols/symbol.json`（约 35MB，

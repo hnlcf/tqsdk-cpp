@@ -1,5 +1,9 @@
 # Soak 与性能基线
 
+> 专题文档。总体架构/模块/信息流/状态机以 [ARCHITECTURE.md](ARCHITECTURE.md)、
+> [MODULES.md](MODULES.md)、[FLOWS.md](FLOWS.md)、[STATE_MACHINES.md](STATE_MACHINES.md)
+> 和 [PROTOCOLS.md](PROTOCOLS.md) 为准。
+
 ## 1. Soak 工具
 
 `scripts/soak_two_process.py` 是可配置的两进程长稳工具，默认时长 24h：
