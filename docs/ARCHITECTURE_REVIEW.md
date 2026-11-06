@@ -249,3 +249,42 @@ option(TQSDK_ENABLE_KLINE_CACHE ...)
 - `KlineStore` 目前按每序列 2000 根裁剪，文件 free page 不做 VACUUM；
 - `InstrumentCatalog` 目录重复 id 目前 last-wins，可增加数据质量统计；
 - Web/Tauri 前端已废弃；Qt 6 Widgets 独立前端骨架已加入 `ui/`，见 `docs/UI_QT.md`。
+
+### 3.7 2026-11 重构落地
+
+本轮按“纯移动 + 边界抽取 + 全量回归”完成：
+
+```text
+WebSocket:
+  WsEntityFilter（快照裁剪、topic 过滤、每客户端实体去重）
+  ws_stream.cpp 只保留连接/Hub 编排
+DiffMerge:
+  diff_merge_engine.cpp       路由
+  diff_merge_quotes.cpp
+  diff_merge_trade.cpp
+  diff_merge_positions.cpp
+  diff_merge_klines.cpp
+CTP TD:
+  ctp_td_gateway.cpp          生命周期/登录/回调桥接
+  ctp_td_orders.cpp           订单映射/持久化/报撤单
+  ctp_td_queries.cpp          查询管线/对账/快照
+TqApi:
+  tq_api.cpp                  生命周期/数据消费/订阅
+  tq_api_order.cpp            报单/撤单
+GatewayIpcServer:
+  gateway_server.cpp          生命周期
+  gateway_server_pumps.cpp    md/td push pumps
+  gateway_server_control.cpp  subscribe/command/resume/filter
+HttpServer:
+  http_server.cpp             监听/会话
+  http_routes.cpp             路由表
+```
+
+原则：
+
+- **不改变 wire protocol / REST / WS 外部语义**；
+- hot path 仍是 core strand 串行，不引入锁；
+- WS 每客户端缓存仅保存已发送实体 JSON，容量与订单/持仓数量同阶；
+- 拆分后 289 项回归测试通过，20s 压测 `fatal=""`、HTTP/WS 零错误；
+- 仍可继续拆的高耦合点：`CtpTdGateway` 的查询状态机（QueryPipeline）、
+  `GatewayIpcServer` 的 replay/command 缓存、`HttpServer` 的领域路由分组。
