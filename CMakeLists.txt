@@ -243,6 +243,7 @@ if(TQSDK_BUILD_TESTS)
         tests/ipc/protocol_e2e_test.cpp
         tests/ipc/stream_seq_test.cpp
         tests/ipc/ipc_session_test.cpp
+        tests/ipc/command_ack_cache_test.cpp
         tests/ipc/ipc_proxy_test.cpp
         tests/ipc/gateway_server_test.cpp
         tests/config/tqapi_factory_test.cpp

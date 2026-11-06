@@ -313,8 +313,8 @@ asio::awaitable<void> GatewayIpcServer::handle_command(const ReceivedFrame& fram
 
         bool cached = false;
         if (!cmd_key.empty()) {
-            if (auto it = command_acks_.find(cmd_key); it != command_acks_.end()) {
-                ack    = it->second;
+            if (auto found = command_acks_.find(cmd_key); found.has_value()) {
+                ack    = *found;
                 cached = true;
                 SPDLOG_DEBUG("[Gw.control] duplicate command rid='{}' -> cached ack", body.rid);
             }
@@ -349,12 +349,7 @@ asio::awaitable<void> GatewayIpcServer::handle_command(const ReceivedFrame& fram
             }
 
             if (!cmd_key.empty()) {
-                if (command_acks_.size() >= kMaxCommandAcks && !command_ack_order_.empty()) {
-                    command_acks_.erase(command_ack_order_.front());
-                    command_ack_order_.pop_front();
-                }
-                command_acks_[cmd_key] = ack;
-                command_ack_order_.push_back(cmd_key);
+                command_acks_.put(std::move(cmd_key), ack);
             }
         }
     }

@@ -4,6 +4,7 @@
 
 #include "tqsdk/gateway/market_data_gateway.h"
 #include "tqsdk/gateway/trading_gateway.h"
+#include "tqsdk/ipc/command_ack_cache.h"
 #include "tqsdk/ipc/event_bus.h"
 #include "tqsdk/ipc/ipc_session.h"
 #include "tqsdk/ipc/protocol.h"
@@ -151,12 +152,8 @@ private:
     OutboundStream md_stream_;
     OutboundStream td_stream_;
 
-    // 命令幂等缓存：命令帧可能因 ack 超时被 IpcClient 用同一 rid 重发；
-    // 命中直接复用首次 ack，避免 CTP 等非幂等报单被重复提交。
-    // key = "<op>:<rid>"，容量有界；control_loop 单协程访问，无需加锁。
-    std::unordered_map<std::string, CommandAck> command_acks_;
-    std::deque<std::string>                     command_ack_order_;
-    static constexpr std::size_t                kMaxCommandAcks = 4096;
+    // 命令幂等缓存；key = "<op>:<rid>"，control_loop 单协程访问。
+    CommandAckCache command_acks_{4096};
 
     // 本连接累计订阅的合约与 K 线 (symbol,duration_ns)。close() 时一次性 release 给
     // 网关，使网关按引用计数释放（多 node 共享同一 md 网关时的正确退订语义）。
