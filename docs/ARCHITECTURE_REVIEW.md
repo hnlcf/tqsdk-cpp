@@ -323,3 +323,35 @@ tq_api_order.cpp        102
 
 `WsEntityFilter` 的每客户端 JSON 缓存只保存订单/成交/持仓/账户；行情/K 线不复制。
 DiffMerge 的订单实际字段比较在 core strand 中执行，不增加锁，也不改变 wire protocol。
+
+### 3.9 IPC 命令幂等抽象
+
+`GatewayIpcServer` 的重复 Command 防护已提取为有界 `CommandAckCache`：
+
+```text
+key = "<CommandOp>:<rid>"
+命中 -> 直接复用首次 ack
+超过容量 -> 按插入顺序淘汰最旧项
+```
+
+control loop 仍是单协程访问，不引入锁；新增 `CommandAckCache` 单测和 4096
+容量边界。这样 IPC 重试/幂等语义不再散落在 server 控制代码里。
+
+### 3.10 本轮回归与剩余边界
+
+```text
+291/291 ctest passed
+10s post-refactor soak: http_err=0 ws_err=0 fatal=""
+```
+
+尚未拆完的高耦合点（不建议在同一提交里硬拆）：
+
+- `CtpTdGateway` 查询状态机：`query_in_flight_`/generation/watchdog 可进一步
+  提取为 `CtpQueryPipeline`，但需要把查询回调和 CTP 线程边界一起迁移；
+- `WebSocketHub::Client` 的 reader/writer 与连接生命周期仍和 Hub 同文件；
+- `GatewayIpcServer` 的 symbol/kline 引用计数可提取为
+  `GatewaySubscriptionBook`；
+- `HttpServer` 路由表虽已拆出文件，但路由 handler 仍直接读 `TqApi`，
+  后续可引入 `MarketSnapshotService`/`TradingSnapshotService`。
+
+拆分原则继续保持：先搬代码、保持协议不变、全回归通过，再做状态机级抽象。
