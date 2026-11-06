@@ -288,3 +288,38 @@ HttpServer:
 - 拆分后 289 项回归测试通过，20s 压测 `fatal=""`、HTTP/WS 零错误；
 - 仍可继续拆的高耦合点：`CtpTdGateway` 的查询状态机（QueryPipeline）、
   `GatewayIpcServer` 的 replay/command 缓存、`HttpServer` 的领域路由分组。
+
+### 3.8 拆分后验证数据
+
+```text
+ctp_td_gateway.cpp      324
+ctp_td_orders.cpp       416
+ctp_td_queries.cpp      459
+diff_merge_engine.cpp    28
+diff_merge_trade.cpp    365
+diff_merge_positions.cpp247
+diff_merge_quotes.cpp   119
+diff_merge_klines.cpp   108
+gateway_server.cpp      130
+gateway_server_pumps.cpp181
+gateway_server_control.cpp371
+http_server.cpp         194
+http_routes.cpp         266
+ws_stream.cpp           669
+ws_entity_filter.cpp    142
+tq_api.cpp              469
+tq_api_order.cpp        102
+```
+
+验证：
+
+```text
+290/290 ctest passed
+10s post-refactor soak:
+  http_err=0
+  ws_err=0
+  fatal=""
+```
+
+`WsEntityFilter` 的每客户端 JSON 缓存只保存订单/成交/持仓/账户；行情/K 线不复制。
+DiffMerge 的订单实际字段比较在 core strand 中执行，不增加锁，也不改变 wire protocol。
