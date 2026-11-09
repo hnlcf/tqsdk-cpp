@@ -1,6 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
 project(tqsdk_cpp VERSION 0.1.0 LANGUAGES CXX)
 
+# 包名/版本来由 CMake 生成，避免 C++/脚本/安装包各写一份。
+set(TQSDK_PACKAGE_NAME  "tqsdk-cpp")
+set(TQSDK_PACKAGE_SLUG  "tqsdk_cpp")
+set(TQSDK_PACKAGE_SHORT "tqsdk")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/tqsdk")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/tqsdk/version.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/tqsdk/version.h"
+    @ONLY
+)
+
 # ---------- 全局设置 ----------
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -88,6 +99,7 @@ target_compile_definitions(tqsdk_core PUBLIC SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TR
 
 target_include_directories(tqsdk_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
     $<INSTALL_INTERFACE:include>
 )
 set_target_properties(tqsdk_core PROPERTIES
@@ -355,6 +367,8 @@ install(FILES
 install(DIRECTORY include/
         DESTINATION include
         FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/generated/tqsdk/version.h"
+        DESTINATION include/tqsdk)
 
 # CTP 是唯一需要随包分发的第三方运行时库；其头文件也一并安装，
 # 这样安装后的 tqsdk/gateway/ctp/*.h 仍可被下游编译。
@@ -383,11 +397,11 @@ install(FILES README.md docs/README.md docs/ARCHITECTURE.md docs/MODULES.md
 # ==========================================================
 # CPack：生成 .tar.gz
 # ==========================================================
-set(CPACK_PACKAGE_NAME "tqsdk_cpp")
+set(CPACK_PACKAGE_NAME "${TQSDK_PACKAGE_SLUG}")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "TQSDK C++ core library, gateway and node")
 set(CPACK_PACKAGE_VENDOR "TQSDK")
-set(CPACK_PACKAGE_CONTACT "dev@example.com")
+set(CPACK_PACKAGE_CONTACT "louchangfeng@outlook.com")
 
 set(CPACK_GENERATOR "TGZ")
 set(CPACK_PACKAGE_FILE_NAME

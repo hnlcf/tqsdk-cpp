@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tqsdk/constants.h"
 #include "tqsdk/pch.h"
 
 #include <shared_mutex>
@@ -17,7 +18,7 @@ public:
     struct Config {
         bool                 enabled = false;
         std::string          file    = "symbol.json";
-        std::string          url     = "https://openmd.shinnytech.com/t/md/symbols/symbol.json";
+        std::string          url     = std::string(constants::kTqSymbolUrl);
         std::chrono::seconds refresh_interval{6 * 3600};
         std::chrono::seconds initial_delay{60};
     };

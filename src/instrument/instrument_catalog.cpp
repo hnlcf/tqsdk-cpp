@@ -221,7 +221,8 @@ bool InstrumentCatalog::download_to_file() {
     try {
         SPDLOG_INFO("[Catalog] downloading {}", cfg_.url);
         util::HttpHeaders headers;
-        std::string       user_agent = "tqsdk-node/0.1 instrument-catalog";
+        std::string       user_agent =
+            std::string(constants::kDefaultNodeUserAgent) + " instrument-catalog";
         if (auth_) {
             user_agent               = auth_->user_agent();
             const auto authorization = auth_->authorization_header();

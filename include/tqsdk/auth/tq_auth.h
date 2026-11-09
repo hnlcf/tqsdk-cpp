@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tqsdk/constants.h"
 #include "tqsdk/pch.h"
 
 #include <mutex>
@@ -18,16 +19,16 @@ namespace tqsdk {
 class TqAuth {
 public:
     struct Config {
-        bool         enabled = false;
-        std::string  user_name;
-        std::string  password;
-        std::string  auth_url = "https://auth.shinnytech.com";
-        std::string  ns_url = "https://api.shinnytech.com/ns";
-        std::string  broker_url_prefix = "https://files.shinnytech.com";
-        std::string  client_id = "shinny_tq";
-        std::string  client_secret = "be30b9f4-6862-488a-99ad-21bde0400081";
-        std::string  user_agent = "tqsdk-cpp/0.1";
-        std::string  mode = "real"; ///< "real" / "bt"
+        bool                 enabled = false;
+        std::string          user_name;
+        std::string          password;
+        std::string          auth_url          = std::string(constants::kTqAuthUrl);
+        std::string          ns_url            = std::string(constants::kTqNameServiceUrl);
+        std::string          broker_url_prefix = std::string(constants::kTqBrokerUrlPrefix);
+        std::string          client_id         = std::string(constants::kTqClientId);
+        std::string          client_secret     = std::string(constants::kTqClientSecret);
+        std::string          user_agent        = std::string(constants::kTqUserAgent);
+        std::string          mode = std::string(constants::kTqDefaultMode); ///< "real" / "bt"
         std::chrono::seconds request_timeout{30};
         std::chrono::seconds refresh_margin{30};
     };
@@ -46,7 +47,7 @@ public:
     TqAuth& operator=(const TqAuth&) = delete;
 
     /// 官方 TqAuth.init(mode)；只改变后续名称服务请求的模式。
-    void init(std::string mode = "real");
+    void        init(std::string mode = "real");
     std::string mode() const;
 
     /// 使用账号密码登录；失败返回 false，并通过 last_error() 提供原因。
@@ -63,47 +64,46 @@ public:
 
     /// 查询授权到期时间（带缓存）。
     std::optional<std::chrono::system_clock::time_point> expire_datetime();
-    int         expire_days_left();
-    std::string product_type();
+    int                                                  expire_days_left();
+    std::string                                          product_type();
 
     /// 把期货账户加入当前认证的 grants；成功后刷新 token。
     bool add_account(std::string_view account_id);
 
     /// 获取期货公司交易网关地址；对应官方 _get_td_url。
-    std::optional<TdUrl> get_td_url(std::string_view broker_id,
-                                    std::string_view account_id);
+    std::optional<TdUrl> get_td_url(std::string_view broker_id, std::string_view account_id);
 
     /// 获取行情网关地址；对应官方 _get_md_url。
     std::optional<std::string> get_md_url(bool stock = false, bool backtest = false);
 
-    std::string auth_id() const;
-    std::string grants_json() const;
-    std::string user_agent() const { return cfg_.user_agent; }
-    bool        logged_in() const;
-    std::string last_error() const;
+    std::string   auth_id() const;
+    std::string   grants_json() const;
+    std::string   user_agent() const { return cfg_.user_agent; }
+    bool          logged_in() const;
+    std::string   last_error() const;
     const Config& config() const { return cfg_; }
 
 private:
-    bool post_token(std::string_view body);
-    bool apply_token_response(std::string_view body, std::string_view fallback_error);
-    void apply_claims(std::string_view access_token);
-    bool token_is_fresh() const;
-    void set_error(std::string message);
+    bool        post_token(std::string_view body);
+    bool        apply_token_response(std::string_view body, std::string_view fallback_error);
+    void        apply_claims(std::string_view access_token);
+    bool        token_is_fresh() const;
+    void        set_error(std::string message);
     std::string bearer_header_unlocked() const;
 
-    mutable std::mutex mutex_;
-    Config             cfg_;
-    std::string        access_token_;
-    std::string        refresh_token_;
-    std::string        auth_id_;
-    std::string        grants_json_ = "{\"features\":[],\"accounts\":[]}";
-    std::string        last_error_;
+    mutable std::mutex                    mutex_;
+    Config                                cfg_;
+    std::string                           access_token_;
+    std::string                           refresh_token_;
+    std::string                           auth_id_;
+    std::string                           grants_json_ = "{\"features\":[],\"accounts\":[]}";
+    std::string                           last_error_;
     std::chrono::system_clock::time_point expires_at_{};
 
-    bool        expire_loaded_ = false;
+    bool                                  expire_loaded_ = false;
     std::chrono::system_clock::time_point expire_at_value_{};
-    int         expire_days_left_ = 0;
-    std::string product_type_;
+    int                                   expire_days_left_ = 0;
+    std::string                           product_type_;
 };
 
 /// base64url 解码（用于不验签地读取 JWT claims）；失败返回空串。

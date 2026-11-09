@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tqsdk/constants.h"
 #include "tqsdk/pch.h"
 
 #include <condition_variable>
@@ -20,7 +21,7 @@ public:
     struct Config {
         bool                 enabled = true;
         std::string          file    = "/tmp/tqsdk_holidays.json";
-        std::string          url     = "https://files.shinnytech.com/shinny_chinese_holiday.json";
+        std::string          url     = std::string(constants::kTqHolidayUrl);
         std::chrono::seconds refresh_interval{12 * 3600};
         std::chrono::seconds initial_delay{0};
     };

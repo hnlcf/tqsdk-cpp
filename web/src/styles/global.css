@@ -2707,3 +2707,28 @@ html[data-theme="light"] .indicator-block {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+/* ---- account selector ---- */
+.account-select {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 108px;
+}
+
+.account-select small {
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.account-select select {
+  max-width: 150px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--panel-2);
+  font-family: var(--mono);
+  font-size: 11px;
+}

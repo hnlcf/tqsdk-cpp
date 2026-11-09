@@ -18,6 +18,12 @@
 | HTTP/WS | `kDefaultWsMaxClients`、`kDefaultWsMaxQueue`、`kMaxHttpBodyBytes`、`kDefaultWsHeartbeatSec` |
 | live 端点 | `kDefaultGwPort`、`kDefaultHttpPort` |
 | 行情缓存 | `kDefaultMarketCacheFile` |
+| 天勤地址 | `kTqAuthUrl`、`kTqNameServiceUrl`、`kTqSymbolUrl`、`kTqHolidayUrl`、`kTqMdDefaultHost/Port/Path` |
+| 包名/版本 | `tqsdk::kPackageName`（`tqsdk-cpp`）、`kPackageSlug`（`tqsdk_cpp`）、`kPackageAliases`、`kVersion`、`kVersionMajor/Minor/Patch` |
+
+包名和版本由 `include/tqsdk/version.h.in` 在 CMake configure 阶段生成到
+`build/generated/tqsdk/version.h`；`tqsdk-node --version` / `tqsdk-gw --version`
+和 `/healthz` 使用同一份值。
 
 ## 3. 使用示例
 

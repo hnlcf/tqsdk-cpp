@@ -159,7 +159,7 @@ GET /kline-cache/status
   "enabled": true,
   "ready": true,
   "writer_failed": false,
-  "file": "kline_cache.sqlite3",
+  "file": "market_cache.sqlite3",
   "max_bars_per_series": 2000,
   "flush_interval_ms": 250,
   "fresh_after_sec": 900,

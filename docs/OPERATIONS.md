@@ -346,7 +346,7 @@ python3 scripts/ctp_daily_reconcile.py --out-dir artifacts/ctp_reconcile
 
 ```text
 artifacts/                  soak/验收报告
-run/live/                   live 配置、日志、flow、kline_cache
+run/live/                   live 配置、日志、flow、market_cache.sqlite3
 run/live/logs/              运行日志
 /tmp/tqsdk_holidays.json    节假日缓存
 ```

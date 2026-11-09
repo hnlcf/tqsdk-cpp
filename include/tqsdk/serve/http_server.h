@@ -202,6 +202,10 @@ private:
     void   setup_routes();
     TqApi* account_api(std::string_view account_id) const;
 
+    /// 路由 handler 集合；把大 lambda 从 setup_routes 中移出。
+    struct RouteHandlers;
+    std::shared_ptr<RouteHandlers> route_handlers_;
+
     TqApi*               api_;
     MultiAccountManager* accounts_   = nullptr;
     TickStore*           tick_store_ = nullptr;

@@ -13,6 +13,7 @@ import {
   API_BASE,
   cancelOrder,
   createMarketStream,
+  getAccounts,
   getInstruments,
   getKline,
   getQuote,
@@ -20,6 +21,7 @@ import {
   getTradingSnapshot,
   insertOrder,
   type AccountSnapshot,
+  type AccountsResponse,
   type KlineBar,
   type MarketStream,
   type OrderSnapshot,
@@ -129,6 +131,8 @@ export default function App() {
   const [history, setHistory] = createSignal<OHLCV[]>([]);
   const [liveBars, setLiveBars] = createSignal<OHLCV[]>([]);
   const [ready, setReady] = createSignal<ReadyState>();
+  const [accounts, setAccounts] = createSignal<AccountsResponse>();
+  const [selectedAccount, setSelectedAccount] = createSignal("default");
   const [streamStatus, setStreamStatus] =
     createSignal<"connecting" | "online" | "offline">("connecting");
   const [streamReady, setStreamReady] = createSignal(false);
@@ -164,8 +168,16 @@ export default function App() {
   const chartBars = createMemo(() =>
     liveBars().length > 0 ? mergeBars(history(), liveBars()) : history(),
   );
+  const defaultAccountId = createMemo(() => accounts()?.default ?? "default");
+  const isDefaultAccount = createMemo(() => selectedAccount() === defaultAccountId());
+  const selectedAccountInfo = createMemo(() =>
+    accounts()?.accounts.find((item) => item.account_id === selectedAccount()),
+  );
   const tradingReady = createMemo(
-    () => Boolean(ready()?.ready) && streamStatus() === "online",
+    () =>
+      Boolean(ready()?.ready) &&
+      streamStatus() === "online" &&
+      (isDefaultAccount() || Boolean(selectedAccountInfo()?.ready)),
   );
   const liveFloatProfit = createMemo(() => {
     let total = 0;
@@ -252,9 +264,22 @@ export default function App() {
     }
   }
 
-  async function loadTradingSnapshot() {
+  async function loadAccounts() {
     try {
-      applyTradeData(await getTradingSnapshot(), true);
+      const data = await getAccounts();
+      setAccounts(data);
+      const ids = data.accounts.map((item) => item.account_id);
+      if (!ids.includes(selectedAccount())) {
+        setSelectedAccount(data.default || ids[0] || "default");
+      }
+    } catch {
+      // Keep the last known account list; HTTP health/poll will retry.
+    }
+  }
+
+  async function loadTradingSnapshot(account = selectedAccount()) {
+    try {
+      applyTradeData(await getTradingSnapshot(undefined, account), true);
       snapshotLoaded = true;
     } catch {
       snapshotLoaded = false;
@@ -265,7 +290,7 @@ export default function App() {
     if (tradingRefreshInFlight || !tradingReady()) return;
     tradingRefreshInFlight = true;
     try {
-      applyTradeData(await getTradingSnapshot(), true);
+      applyTradeData(await getTradingSnapshot(undefined, selectedAccount()), true);
       snapshotLoaded = true;
     } catch {
       // Keep the last WS snapshot; the next poll/reconnect will resync.
@@ -403,7 +428,7 @@ export default function App() {
       min_volume: order.volumeCond === "MIN" ? order.minVolume : 0,
       advanced: order.advanced,
       volume: order.volume,
-    });
+    }, selectedAccount());
     if (!result.success) throw new Error(result.error || "报单失败");
     void refreshReady();
     return result.order_id ? `已提交 ${result.order_id}` : "已提交";
@@ -411,7 +436,7 @@ export default function App() {
 
   async function cancelLiveOrder(orderId: string) {
     try {
-      const result = await cancelOrder(orderId);
+      const result = await cancelOrder(orderId, selectedAccount());
       notify(result.success ? `撤单已提交 ${orderId}` : result.error || "撤单失败");
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error));
@@ -425,7 +450,10 @@ export default function App() {
         setQuotes((previous) => ({ ...previous, ...next }));
         for (const [symbol, quote] of Object.entries(next)) recordTape(symbol, quote);
       },
-      onTradeData: (data, snapshot) => applyTradeData(data, snapshot),
+      onTradeData: (data, snapshot) => {
+        if (!isDefaultAccount()) return;
+        applyTradeData(data, snapshot);
+      },
       onKline: (symbol, duration, payload) => {
         if (symbol !== selected() || Number(duration) !== activeDuration()) return;
         const update = payload as { reset?: boolean; bars?: KlineBar[] };
@@ -440,9 +468,11 @@ export default function App() {
     });
     setStreamReady(true);
     void refreshReady();
+    void loadAccounts();
     void loadTradingSnapshot();
     const timer = window.setInterval(() => {
       void refreshReady();
+      void loadAccounts();
       if (!snapshotLoaded && ready()?.ready) void loadTradingSnapshot();
     }, 3000);
     const tradingTimer = window.setInterval(() => {
@@ -462,8 +492,20 @@ export default function App() {
     stream.setSubscription(
       symbols,
       [{ symbol: selected(), duration_ns: activeDuration(), view_width: 600 }],
-      TRADING_TOPICS,
+      isDefaultAccount() ? TRADING_TOPICS : [],
     );
+  });
+
+  createEffect(() => {
+    const account = selectedAccount();
+    untrack(() => {
+      snapshotLoaded = false;
+      setAccount(undefined);
+      setPositions({});
+      setOrders({});
+      setTrades({});
+      void loadTradingSnapshot(account);
+    });
   });
 
   createEffect(() => {
@@ -530,6 +572,9 @@ export default function App() {
         streamStatus={streamStatus()}
         ready={ready()}
         account={displayAccount()}
+        accounts={accounts()}
+        selectedAccount={selectedAccount()}
+        onAccount={setSelectedAccount}
         onView={setView}
         onTheme={() => setTheme(theme() === "dark" ? "light" : "dark")}
       />

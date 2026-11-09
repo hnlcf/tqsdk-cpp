@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tqsdk/constants.h"
 #include "tqsdk/pch.h"
 
 #include <boost/asio/ssl.hpp>
@@ -34,9 +35,9 @@ public:
     /// host + ":" + port 形式的目标地址解析已由构造参数给出 path 前缀。
     /// 默认构造使用官方免费行情地址。
     explicit TqMdGateway(asio::any_io_executor ex,
-                         std::string           host = "free-openmd.shinnytech.com",
-                         std::string           port = "443",
-                         std::string           path = "/t/md/front/mobile");
+                         std::string           host = std::string(constants::kTqMdDefaultHost),
+                         std::string           port = std::string(constants::kTqMdDefaultPort),
+                         std::string           path = std::string(constants::kTqMdDefaultPath));
 
     ~TqMdGateway() override;
 

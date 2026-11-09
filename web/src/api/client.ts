@@ -421,24 +421,36 @@ export function getKline(symbol: string, durationNs: number, signal?: AbortSigna
   );
 }
 
-export function getAccount(signal?: AbortSignal) {
-  return requestJson<AccountSnapshot>("/account", { signal });
+function accountPath(path: string, account?: string): string {
+  if (!account) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}account=${encodeURIComponent(account)}`;
 }
 
-export function getTradingSnapshot(signal?: AbortSignal) {
-  return requestJson<TradingSnapshot>("/trading-snapshot", { signal });
+export function getAccount(signal?: AbortSignal, account?: string) {
+  return requestJson<AccountSnapshot>(accountPath("/account", account), { signal });
 }
 
-export function getPositions(signal?: AbortSignal) {
-  return requestJson<{ positions: Record<string, PositionSnapshot> }>("/positions", { signal });
+export function getTradingSnapshot(signal?: AbortSignal, account?: string) {
+  return requestJson<TradingSnapshot>(accountPath("/trading-snapshot", account), { signal });
 }
 
-export function getOrders(signal?: AbortSignal) {
-  return requestJson<{ orders: Record<string, OrderSnapshot> }>("/orders", { signal });
+export function getPositions(signal?: AbortSignal, account?: string) {
+  return requestJson<{ positions: Record<string, PositionSnapshot> }>(
+    accountPath("/positions", account),
+    { signal },
+  );
 }
 
-export function getTrades(signal?: AbortSignal) {
-  return requestJson<{ trades: Record<string, TradeSnapshot> }>("/trades", { signal });
+export function getOrders(signal?: AbortSignal, account?: string) {
+  return requestJson<{ orders: Record<string, OrderSnapshot> }>(accountPath("/orders", account), {
+    signal,
+  });
+}
+
+export function getTrades(signal?: AbortSignal, account?: string) {
+  return requestJson<{ trades: Record<string, TradeSnapshot> }>(accountPath("/trades", account), {
+    signal,
+  });
 }
 
 export interface InsertOrderRequest {
@@ -456,17 +468,20 @@ export interface InsertOrderRequest {
   min_volume?: number;
 }
 
-export async function insertOrder(body: InsertOrderRequest) {
-  return requestJson<{ success?: boolean; order_id?: string; error?: string }>("/order", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+export async function insertOrder(body: InsertOrderRequest, account?: string) {
+  return requestJson<{ success?: boolean; order_id?: string; error?: string }>(
+    accountPath("/order", account),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
-export async function cancelOrder(orderId: string) {
+export async function cancelOrder(orderId: string, account?: string) {
   return requestJson<{ success?: boolean; order_id?: string; error?: string }>(
-    `/order/${encodeURIComponent(orderId)}`,
+    accountPath(`/order/${encodeURIComponent(orderId)}`, account),
     { method: "DELETE" },
   );
 }

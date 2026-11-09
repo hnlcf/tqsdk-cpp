@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import type { AccountSnapshot, ReadyState } from "../api/client";
+import type { AccountSnapshot, AccountsResponse, ReadyState } from "../api/client";
 import type { Theme, View } from "../lib/storage";
 import { formatMoney } from "../lib/format";
 
@@ -9,6 +9,9 @@ interface Props {
   streamStatus: "connecting" | "online" | "offline";
   ready?: ReadyState;
   account?: AccountSnapshot;
+  accounts?: AccountsResponse;
+  selectedAccount: string;
+  onAccount: (account: string) => void;
   onView: (view: View) => void;
   onTheme: () => void;
 }
@@ -64,6 +67,19 @@ export default function Topbar(props: Props) {
           {tradingReady() ? "LIVE" : "READONLY"}
         </span>
       </div>
+
+      <label class="account-select">
+        <small>账户</small>
+        <select
+          value={props.selectedAccount}
+          onChange={(event) => props.onAccount(event.currentTarget.value)}
+          aria-label="选择交易账户"
+        >
+          <For each={props.accounts?.accounts ?? []}>
+            {(item) => <option value={item.account_id}>{item.account_id}</option>}
+          </For>
+        </select>
+      </label>
 
       <div class="account-strip">
         <div>

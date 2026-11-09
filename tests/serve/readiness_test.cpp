@@ -56,17 +56,26 @@ TEST(Readiness, SimGatewayIsReadyAndExposesMetrics) {
 
     unsigned       status = 0;
     nlohmann::json body;
+    unsigned       health_status = 0;
+    nlohmann::json health_body;
     asio::co_spawn(
         io,
         [&]() -> asio::awaitable<void> {
-            auto [s, b] = co_await get_json(io.get_executor(), port, "/readyz");
-            status      = s;
-            body        = std::move(b);
+            auto [hs, hb] = co_await get_json(io.get_executor(), port, "/healthz");
+            health_status = hs;
+            health_body   = std::move(hb);
+            auto [s, b]   = co_await get_json(io.get_executor(), port, "/readyz");
+            status        = s;
+            body          = std::move(b);
             io.stop();
             co_return;
         },
         asio::detached);
     io.run();
+    EXPECT_EQ(health_status, 200u);
+    EXPECT_EQ(health_body["package"], "tqsdk-cpp");
+    EXPECT_EQ(health_body["version"], tqsdk::kVersion);
+    EXPECT_EQ(health_body["package_aliases"].size(), 4u);
     EXPECT_EQ(status, 200u);
     EXPECT_TRUE(body["ready"]);
     EXPECT_TRUE(body["td"]["ready"]);

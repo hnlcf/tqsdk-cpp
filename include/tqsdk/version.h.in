@@ -1,0 +1,28 @@
+#pragma once
+
+#include <array>
+#include <string_view>
+
+namespace tqsdk {
+
+// 由 CMake configure_file 生成；不要手改构建目录中的 version.h。
+inline constexpr std::string_view kPackageName      = "@TQSDK_PACKAGE_NAME@";
+inline constexpr std::string_view kPackageSlug      = "@TQSDK_PACKAGE_SLUG@";
+inline constexpr std::string_view kPackageShort     = "@TQSDK_PACKAGE_SHORT@";
+inline constexpr std::string_view kCmakeProjectName = "@PROJECT_NAME@";
+inline constexpr std::string_view kVersion          = "@PROJECT_VERSION@";
+inline constexpr std::string_view kVersionString    = "@PROJECT_VERSION@";
+inline constexpr std::string_view kUserAgent        = "@TQSDK_PACKAGE_NAME@/@PROJECT_VERSION@";
+inline constexpr std::string_view kNodeUserAgent    = "tqsdk-node/@PROJECT_VERSION@";
+inline constexpr std::array<std::string_view, 4> kPackageAliases{
+    "@TQSDK_PACKAGE_NAME@",
+    "@TQSDK_PACKAGE_SLUG@",
+    "@TQSDK_PACKAGE_SHORT@",
+    "tqsdkCpp",
+};
+
+inline constexpr int kVersionMajor = @PROJECT_VERSION_MAJOR@;
+inline constexpr int kVersionMinor = @PROJECT_VERSION_MINOR@;
+inline constexpr int kVersionPatch = @PROJECT_VERSION_PATCH@;
+
+} // namespace tqsdk

@@ -21,7 +21,7 @@ std::string trim_url(std::string value) {
 
 std::string url_encode(std::string_view value) {
     static constexpr char hex[] = "0123456789ABCDEF";
-    std::string out;
+    std::string           out;
     out.reserve(value.size() * 3);
     for (const unsigned char c : value) {
         if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
@@ -37,11 +37,14 @@ std::string url_encode(std::string_view value) {
 
 std::optional<json> jwt_claims(std::string_view token) {
     const auto first = token.find('.');
-    if (first == std::string_view::npos) return std::nullopt;
+    if (first == std::string_view::npos)
+        return std::nullopt;
     const auto second = token.find('.', first + 1);
-    if (second == std::string_view::npos) return std::nullopt;
+    if (second == std::string_view::npos)
+        return std::nullopt;
     const auto payload = base64url_decode(token.substr(first + 1, second - first - 1));
-    if (payload.empty()) return std::nullopt;
+    if (payload.empty())
+        return std::nullopt;
     try {
         return json::parse(payload);
     } catch (...) {
@@ -96,31 +99,29 @@ std::string base64url_decode(std::string_view input) {
         normalized.push_back('=');
     }
     static constexpr int8_t table[256] = {
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, -1, -1, 63,
-        52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1,
-        -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
-        15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, -1,
-        -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-        41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62,
+        -1, -1, -1, 63, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1, -1, 0,
+        1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+        23, 24, 25, -1, -1, -1, -1, -1, -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
+        39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
     };
     std::string out;
     out.reserve(normalized.size() / 4 * 3);
     uint32_t value = 0;
     int      bits  = 0;
     for (unsigned char c : normalized) {
-        if (c == '=') break;
+        if (c == '=')
+            break;
         const int decoded = table[c];
-        if (decoded < 0) return {};
+        if (decoded < 0)
+            return {};
         value = (value << 6) | static_cast<uint32_t>(decoded);
         bits += 6;
         if (bits >= 8) {
@@ -133,13 +134,17 @@ std::string base64url_decode(std::string_view input) {
 
 TqAuth::TqAuth(Config config)
     : cfg_(std::move(config)) {
-    if (cfg_.auth_url.empty()) cfg_.auth_url = "https://auth.shinnytech.com";
-    if (cfg_.ns_url.empty()) cfg_.ns_url = "https://api.shinnytech.com/ns";
-    if (cfg_.broker_url_prefix.empty()) cfg_.broker_url_prefix = "https://files.shinnytech.com";
-    cfg_.auth_url = trim_url(cfg_.auth_url);
-    cfg_.ns_url = trim_url(cfg_.ns_url);
+    if (cfg_.auth_url.empty())
+        cfg_.auth_url = std::string(constants::kTqAuthUrl);
+    if (cfg_.ns_url.empty())
+        cfg_.ns_url = std::string(constants::kTqNameServiceUrl);
+    if (cfg_.broker_url_prefix.empty())
+        cfg_.broker_url_prefix = std::string(constants::kTqBrokerUrlPrefix);
+    cfg_.auth_url          = trim_url(cfg_.auth_url);
+    cfg_.ns_url            = trim_url(cfg_.ns_url);
     cfg_.broker_url_prefix = trim_url(cfg_.broker_url_prefix);
-    if (cfg_.mode != "bt") cfg_.mode = "real";
+    if (cfg_.mode != "bt")
+        cfg_.mode = "real";
 }
 
 void TqAuth::init(std::string mode) {
@@ -157,7 +162,8 @@ void TqAuth::set_error(std::string message) {
 }
 
 bool TqAuth::token_is_fresh() const {
-    if (access_token_.empty()) return false;
+    if (access_token_.empty())
+        return false;
     return std::chrono::system_clock::now() + cfg_.refresh_margin < expires_at_;
 }
 
@@ -167,7 +173,8 @@ std::string TqAuth::bearer_header_unlocked() const {
 
 void TqAuth::apply_claims(std::string_view access_token) {
     const auto claims = jwt_claims(access_token);
-    if (!claims) return;
+    if (!claims)
+        return;
     auth_id_ = string_or(*claims, "sub", auth_id_);
     if (claims->contains("grants") && (*claims)["grants"].is_object()) {
         grants_json_ = (*claims)["grants"].dump();
@@ -176,13 +183,13 @@ void TqAuth::apply_claims(std::string_view access_token) {
 
 bool TqAuth::apply_token_response(std::string_view body, std::string_view fallback_error) {
     try {
-        const auto doc = json::parse(body);
+        const auto doc    = json::parse(body);
         const auto access = doc.value("access_token", std::string{});
         if (access.empty()) {
             set_error(std::string{fallback_error} + ": no access_token");
             return false;
         }
-        access_token_ = access;
+        access_token_  = access;
         refresh_token_ = doc.value("refresh_token", refresh_token_);
         expire_loaded_ = false;
         const auto now = std::chrono::system_clock::now();
@@ -203,8 +210,7 @@ bool TqAuth::apply_token_response(std::string_view body, std::string_view fallba
 }
 
 bool TqAuth::post_token(std::string_view body) {
-    const std::string url = cfg_.auth_url +
-                            "/auth/realms/shinnytech/protocol/openid-connect/token";
+    const std::string url = cfg_.auth_url + "/auth/realms/shinnytech/protocol/openid-connect/token";
     try {
         const std::string response = util::http_post_form(
             url,
@@ -231,12 +237,13 @@ bool TqAuth::login() {
     }
     std::lock_guard lock(mutex_);
     SPDLOG_INFO("[TqAuth] login user={}", cfg_.user_name);
-    const std::string body = "grant_type=password&username=" + url_encode(cfg_.user_name) +
-                             "&password=" + url_encode(cfg_.password) +
-                             "&client_id=" + url_encode(cfg_.client_id) +
-                             "&client_secret=" + url_encode(cfg_.client_secret);
-    const bool applied = post_token(body);
-    if (!applied) SPDLOG_WARN("[TqAuth] login failed: {}", last_error_);
+    const std::string body    = "grant_type=password&username=" + url_encode(cfg_.user_name) +
+                                "&password=" + url_encode(cfg_.password) +
+                                "&client_id=" + url_encode(cfg_.client_id) +
+                                "&client_secret=" + url_encode(cfg_.client_secret);
+    const bool        applied = post_token(body);
+    if (!applied)
+        SPDLOG_WARN("[TqAuth] login failed: {}", last_error_);
     return applied;
 }
 
@@ -251,10 +258,10 @@ bool TqAuth::refresh() {
         return false;
     }
     SPDLOG_DEBUG("[TqAuth] refreshing access token");
-    const std::string body = "grant_type=refresh_token&refresh_token=" +
-                             url_encode(refresh_token_) + "&client_id=" +
-                             url_encode(cfg_.client_id) + "&client_secret=" +
-                             url_encode(cfg_.client_secret);
+    const std::string body =
+        "grant_type=refresh_token&refresh_token=" + url_encode(refresh_token_) +
+        "&client_id=" + url_encode(cfg_.client_id) +
+        "&client_secret=" + url_encode(cfg_.client_secret);
     return post_token(body);
 }
 
@@ -262,7 +269,8 @@ std::string TqAuth::ensure_access_token() {
     std::string refresh_token;
     {
         std::lock_guard lock(mutex_);
-        if (token_is_fresh()) return access_token_;
+        if (token_is_fresh())
+            return access_token_;
         refresh_token = refresh_token_;
     }
     if (!refresh_token.empty() && refresh()) {
@@ -277,7 +285,8 @@ std::string TqAuth::ensure_access_token() {
 }
 
 std::string TqAuth::authorization_header() {
-    if (ensure_access_token().empty()) return {};
+    if (ensure_access_token().empty())
+        return {};
     std::lock_guard lock(mutex_);
     return bearer_header_unlocked();
 }
@@ -285,13 +294,14 @@ std::string TqAuth::authorization_header() {
 std::optional<std::chrono::system_clock::time_point> TqAuth::expire_datetime() {
     {
         std::lock_guard lock(mutex_);
-        if (expire_loaded_) return expire_at_value_;
+        if (expire_loaded_)
+            return expire_at_value_;
     }
     const auto authorization = authorization_header();
-    if (authorization.empty()) return std::nullopt;
+    if (authorization.empty())
+        return std::nullopt;
     try {
-        const std::string url =
-            cfg_.auth_url + "/auth/realms/shinnytech/rest/get-grant/tq";
+        const std::string url  = cfg_.auth_url + "/auth/realms/shinnytech/rest/get-grant/tq";
         const std::string body = util::http_get(
             url,
             cfg_.user_agent,
@@ -341,8 +351,7 @@ bool TqAuth::add_account(std::string_view account_id) {
         const auto grants = json::parse(grants_json_);
         if (grants.contains("accounts") && grants["accounts"].is_array()) {
             for (const auto& account : grants["accounts"]) {
-                if (account.is_string() &&
-                    account.get<std::string>() == std::string{account_id}) {
+                if (account.is_string() && account.get<std::string>() == std::string{account_id}) {
                     return true;
                 }
             }
@@ -356,15 +365,14 @@ bool TqAuth::add_account(std::string_view account_id) {
         return false;
     }
     try {
-        const std::string url =
-            cfg_.auth_url + "/auth/realms/shinnytech/rest/update-grant-accounts/" +
-            url_encode(account_id);
-        util::http_put(
-            url,
-            {},
-            cfg_.user_agent,
-            std::chrono::duration_cast<std::chrono::milliseconds>(cfg_.request_timeout),
-            {{"Authorization", authorization}});
+        const std::string url = cfg_.auth_url +
+                                "/auth/realms/shinnytech/rest/update-grant-accounts/" +
+                                url_encode(account_id);
+        util::http_put(url,
+                       {},
+                       cfg_.user_agent,
+                       std::chrono::duration_cast<std::chrono::milliseconds>(cfg_.request_timeout),
+                       {{"Authorization", authorization}});
     } catch (const std::exception& e) {
         set_error(std::string("TqAuth add account failed: ") + e.what());
         return false;
@@ -373,28 +381,28 @@ bool TqAuth::add_account(std::string_view account_id) {
         set_error("TqAuth add account succeeded but refresh_token is empty");
         return false;
     }
-    const std::string body = "grant_type=refresh_token&refresh_token=" +
-                             url_encode(refresh_token_) + "&client_id=" +
-                             url_encode(cfg_.client_id) + "&client_secret=" +
-                             url_encode(cfg_.client_secret);
+    const std::string body =
+        "grant_type=refresh_token&refresh_token=" + url_encode(refresh_token_) +
+        "&client_id=" + url_encode(cfg_.client_id) +
+        "&client_secret=" + url_encode(cfg_.client_secret);
     return post_token(body);
 }
 
 std::optional<TqAuth::TdUrl> TqAuth::get_td_url(std::string_view broker_id,
                                                 std::string_view account_id) {
     const auto authorization = authorization_header();
-    if (authorization.empty()) return std::nullopt;
+    if (authorization.empty())
+        return std::nullopt;
     try {
-        const std::string url = cfg_.broker_url_prefix + "/" +
-                                url_encode(broker_id) + ".json?account_id=" +
-                                url_encode(account_id) + "&auth=" +
-                                url_encode(cfg_.user_name);
+        const std::string url  = cfg_.broker_url_prefix + "/" + url_encode(broker_id) +
+                                 ".json?account_id=" + url_encode(account_id) +
+                                 "&auth=" + url_encode(cfg_.user_name);
         const std::string body = util::http_get(
             url,
             cfg_.user_agent,
             std::chrono::duration_cast<std::chrono::milliseconds>(cfg_.request_timeout),
             {{"Authorization", authorization}});
-        const auto doc = json::parse(body);
+        const auto doc        = json::parse(body);
         const auto broker_key = std::string{broker_id};
         if (!doc.contains(broker_key) || !doc[broker_key].is_object()) {
             std::lock_guard lock(mutex_);
@@ -408,10 +416,10 @@ std::optional<TqAuth::TdUrl> TqAuth::get_td_url(std::string_view broker_id,
             return std::nullopt;
         }
         TdUrl result;
-        result.url = string_or(broker, "url");
+        result.url         = string_or(broker, "url");
         result.broker_type = string_or(broker, "broker_type", "FUTURE");
-        result.smtype = string_or(broker, "smtype");
-        result.smconfig = string_or(broker, "smconfig");
+        result.smtype      = string_or(broker, "smtype");
+        result.smconfig    = string_or(broker, "smconfig");
         if (result.url.empty()) {
             std::lock_guard lock(mutex_);
             set_error("TqAuth broker response has no url");
@@ -427,16 +435,17 @@ std::optional<TqAuth::TdUrl> TqAuth::get_td_url(std::string_view broker_id,
 
 std::optional<std::string> TqAuth::get_md_url(bool stock, bool backtest) {
     const auto authorization = authorization_header();
-    if (authorization.empty()) return std::nullopt;
+    if (authorization.empty())
+        return std::nullopt;
     try {
-        const std::string url = cfg_.ns_url + "?stock=" + (stock ? "true" : "false") +
-                                "&backtest=" + (backtest ? "true" : "false");
+        const std::string url  = cfg_.ns_url + "?stock=" + (stock ? "true" : "false") +
+                                 "&backtest=" + (backtest ? "true" : "false");
         const std::string body = util::http_get(
             url,
             cfg_.user_agent,
             std::chrono::duration_cast<std::chrono::milliseconds>(cfg_.request_timeout),
             {{"Authorization", authorization}});
-        const auto doc = json::parse(body);
+        const auto doc   = json::parse(body);
         const auto mdurl = string_or(doc, "mdurl");
         if (mdurl.empty()) {
             std::lock_guard lock(mutex_);

@@ -93,6 +93,8 @@ int main(int argc, char** argv) {
     app.add_option("-c,--config", config_path, "Path to gw config TOML")->required();
     app.add_option("-l,--log-level", log_level, "Log level (overrides TQSDK_LOG_LEVEL)");
     app.add_option("-t,--threads", threads, "IO worker threads (overrides [runtime].threads)");
+    app.set_version_flag("-v,--version",
+                         std::string(tqsdk::kPackageName) + " " + std::string(tqsdk::kVersion));
     CLI11_PARSE(app, argc, argv);
 
     tqsdk::setup_logging(tqsdk::LogOptions{log_level});
