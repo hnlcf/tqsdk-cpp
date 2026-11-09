@@ -14,7 +14,7 @@
 ```bash
 cd /home/hnlcf/dev/tqsdk_cpp
 cmake --build build-ui --target tqsdk-gw tqsdk-node -j
-./scripts/run_live.sh --no-ui   # 另开终端保持运行
+./scripts/run_live_supervisor.sh   # 另开终端保持运行；异常退出自动重启
 ```
 
 检查：
@@ -22,7 +22,9 @@ cmake --build build-ui --target tqsdk-gw tqsdk-node -j
 ```bash
 curl -s http://127.0.0.1:18081/healthz
 curl -s http://127.0.0.1:18081/readyz
+curl -s http://127.0.0.1:18081/trading-status
 curl -s http://127.0.0.1:18081/catalog/status
+./scripts/live_healthcheck.sh --wait-ready 120
 ```
 
 当前实现的风控/REST 验收接口：
@@ -48,8 +50,10 @@ GET    /tasks
 python3 scripts/p0_simnow_acceptance.py \
   --node-url http://127.0.0.1:18088 \
   --symbol SHFE.rb2701 \
-  --write --yes --target-write
+  --write --yes --target-write --allow-non-trading
 ```
+
+`--allow-non-trading` 只用于本地 Sim；真实 SimNow 不要在非交易阶段写单。
 
 该场景会实际成交 1 手 Sim 仓位；探针结束会撤任务，人工确认后用
 `/order` 平掉，或重启 Sim node 重置内存账户。
@@ -69,7 +73,8 @@ python3 scripts/p0_simnow_acceptance.py \
   --symbol SHFE.rb2701
 ```
 
-写场景（1 手、远价、自动撤单/清理）：
+写场景（1 手、远价、自动撤单/清理）；脚本会先检查 `/trading-status`，
+非交易阶段默认拒绝写入：
 
 ```bash
 python3 scripts/p0_simnow_acceptance.py \

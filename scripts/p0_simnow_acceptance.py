@@ -136,6 +136,8 @@ class Acceptance:
         self.quote: dict[str, Any] = {}
         self.order_ids: list[str] = []
         self.task_ids: list[str] = []
+        self.trading_status: dict[str, Any] = {}
+        self.order_allowed = False
 
     def check(self, name: str, status: str, detail: str = "", evidence: Any = None) -> None:
         self.report.add(name, status, detail, evidence)
@@ -145,10 +147,18 @@ class Acceptance:
             self.check_health()
             ready = self.check_ready()
             self.check_catalog()
+            self.check_trading_status()
             self.check_quote()
             if ready and self.args.write:
                 if not self.args.yes:
                     self.check("write", FAIL, "写场景需要显式 --yes")
+                elif not self.order_allowed:
+                    self.check(
+                        "write",
+                        SKIP,
+                        "当前非交易阶段；拒绝写测试。本地 Sim 可用 --allow-non-trading。",
+                        self.trading_status,
+                    )
                 else:
                     self.cleanup_all()
                     self.check_advanced_orders()
@@ -180,6 +190,27 @@ class Acceptance:
             time.sleep(0.5)
         self.check("readyz", FAIL, "等待 readyz 超时", last)
         return False
+
+    def check_trading_status(self) -> None:
+        status, body, error = self.http.get("/trading-status")
+        if status != 200 or not isinstance(body, dict):
+            self.order_allowed = bool(self.args.allow_non_trading)
+            self.check(
+                "trading_status",
+                WARN,
+                f"HTTP {status}: {error}；写测试默认拒绝",
+                body,
+            )
+            return
+        self.trading_status = body
+        trading = body.get("trading") is True
+        phase = str(body.get("phase", "unknown"))
+        allow_non_trading = bool(self.args.allow_non_trading and not trading)
+        self.order_allowed = trading or allow_non_trading
+        detail = f"phase={phase} trading={str(trading).lower()} session={body.get('session', '')}"
+        if allow_non_trading:
+            detail += "（--allow-non-trading）"
+        self.check("trading_status", PASS if trading else WARN, detail, body)
 
     def check_catalog(self) -> None:
         status, body, _ = self.http.get("/catalog/status")
@@ -251,6 +282,10 @@ class Acceptance:
         }
 
     def submit(self, payload: dict[str, Any], scenario: str) -> tuple[bool, str, Any]:
+        if not self.order_allowed:
+            evidence = {"request": payload, "reason": "trading status gate", "status": self.trading_status}
+            self.check(scenario, SKIP, "非交易阶段，拒绝写请求", evidence)
+            return False, "", evidence
         status, body, error = self.http.post("/order", payload)
         evidence = {"request": payload, "http_status": status, "response": body, "error": error}
         if status != 200 or not isinstance(body, dict):
@@ -453,6 +488,11 @@ def main() -> int:
     parser.add_argument("--yes", action="store_true")
     parser.add_argument("--five-level", action="store_true")
     parser.add_argument("--target-write", action="store_true")
+    parser.add_argument(
+        "--allow-non-trading",
+        action="store_true",
+        help="仅用于本地 Sim 预演；allow writes when trading-status is false",
+    )
     return Acceptance(parser.parse_args()).run()
 
 

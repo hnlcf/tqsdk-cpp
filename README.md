@@ -47,7 +47,8 @@ $EDITOR config/live.local.env
 ```
 
 `run_web.sh` 启动 gw/node + Vite；打开 `http://127.0.0.1:5173`。
-只启动后端使用 `./scripts/run_live.sh`。
+只启动后端使用 `./scripts/run_live.sh`；需要自动重启用 `./scripts/run_live_supervisor.sh`。
+交易前健康检查：`./scripts/live_healthcheck.sh --wait-ready 120`。
 
 只启动 gw/node：
 

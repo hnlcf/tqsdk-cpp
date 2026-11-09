@@ -171,6 +171,29 @@ kind = "none"
 
 `./scripts/run_live.sh --build` 只启动 gw/node；Web 使用 `run_web.sh`。退出顺序由脚本处理。
 
+### Supervisor 与健康检查
+
+```bash
+# 自动重启 gw/node 的最小 supervisor
+./scripts/run_live_supervisor.sh
+
+# 检查 healthz/readyz/trading-status；可等待 ready
+./scripts/live_healthcheck.sh --wait-ready 120
+./scripts/live_healthcheck.sh --require-trading
+```
+
+`run_live_supervisor.sh` 在 `run_live.sh` 退出后按 `--restart-delay` 重启；
+`--max-restarts N` 限制次数。停止可 `touch run/live/supervisor.stop`。
+
+live 期间默认把合约目录后台首次刷新延迟到 3600 秒，避免与交易/结算竞争：
+
+```bash
+INSTRUMENTS_INITIAL_DELAY_SEC=3600 INSTRUMENTS_REFRESH_INTERVAL_SEC=21600 \
+  ./scripts/run_live_supervisor.sh
+```
+
+需要立即更新目录时，在独立维护窗口执行下载/校验后重启 node。
+
 ### 快期账户认证（可选）
 
 在 `config/live.local.env` 中设置：
