@@ -18,6 +18,7 @@
 ./scripts/ci_local.sh --asan
 ./scripts/ci_local.sh --tsan
 ./scripts/ci_local.sh --ubsan
+./scripts/ci_local.sh --e2e
 ```
 
 ## 2. ASan / TSan
@@ -57,5 +58,7 @@ python3 scripts/soak_two_process.py \
 
 - sanitizer 构建独立目录，不污染 `build-ui`；
 - CI 脚本不包含凭据；真实 SimNow/CTP 测试另行使用 `run/live` 配置；
+- Playwright 使用系统 Chrome（`TQSDK_CHROME_PATH` 可覆盖），`--e2e` 需要 node
+  18081 已启动；测试只读，不下单。
 - 版本/包名由 CMake `version.h.in` 注入，`tqsdk-node --version` 和
   `/healthz` 可快速确认构建版本。

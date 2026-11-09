@@ -159,7 +159,13 @@ pnpm typecheck
 pnpm build
 ```
 
-当前 Vitest 覆盖（12 项）：
+当前 Vitest 覆盖（12 项）；Playwright E2E：
+
+- 自选搜索 `SHFE.ao2701` 后大小写不变；
+- 账户选择器可见；
+- 指标设置中自定义指标/EMA6 可见。
+
+Vitest 覆盖：
 
 - SMA/EMA/BOLL/MACD/RSI；
 - China futures session 分时选择；
