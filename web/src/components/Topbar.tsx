@@ -17,6 +17,7 @@ const NAV: Array<{ id: View; label: string }> = [
   { id: "terminal", label: "交易终端" },
   { id: "futures", label: "期货列表" },
   { id: "options", label: "期权链" },
+  { id: "ops", label: "运维" },
 ];
 
 export default function Topbar(props: Props) {

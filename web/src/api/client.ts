@@ -172,6 +172,31 @@ export interface AccountSnapshot {
   currency?: string;
 }
 
+export interface AccountInfo {
+  account_id: string;
+  ready: boolean;
+  account: AccountSnapshot;
+}
+
+export interface AccountsResponse {
+  default: string;
+  accounts: AccountInfo[];
+}
+
+export interface TickCacheStatus {
+  enabled: boolean;
+  ready: boolean;
+  writer_failed?: boolean;
+  file?: string;
+  max_ticks_per_series?: number;
+  accepted?: number;
+  written?: number;
+  dropped?: number;
+  pending?: number;
+  flushes?: number;
+  last_error?: string;
+}
+
 export interface PositionSnapshot {
   instrument_id: string;
   exchange_id?: string;
@@ -302,6 +327,18 @@ export async function getReadyz(signal?: AbortSignal): Promise<ReadyState> {
 
 export function getMetrics(signal?: AbortSignal) {
   return requestJson<Record<string, unknown>>("/metrics", { signal });
+}
+
+export function getAccounts(signal?: AbortSignal) {
+  return requestJson<AccountsResponse>("/accounts", { signal });
+}
+
+export function getTickCacheStatus(signal?: AbortSignal) {
+  return requestJson<TickCacheStatus>("/tick-cache/status", { signal });
+}
+
+export function getKlineCacheStatus(signal?: AbortSignal) {
+  return requestJson<Record<string, unknown>>("/kline-cache/status", { signal });
 }
 
 export function getCatalogStatus(signal?: AbortSignal) {

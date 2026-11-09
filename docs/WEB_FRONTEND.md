@@ -57,6 +57,16 @@ env VITE_PROXY_TARGET=http://127.0.0.1:18082 pnpm dev
 产品/合约/到期选择、T 型报价、组合到期损益、期权与标的 K 线；
 ATM 行权价由后端 Black-Scholes 计算结果驱动，选中合约显示 Greeks/IV。
 
+### 运维
+
+顶部「运维」入口（`?view=ops`）每 3 秒刷新：
+
+- `/readyz` 的 md/td/phase/expected_disconnect；
+- `/accounts` 多账户列表、默认账户、余额/可用/保证金/风险度；
+- `/tick-cache/status` 的 accepted/written/pending/dropped；
+- `/kline-cache/status` 的写入状态和文件路径；
+- 常用 REST 端点速查。
+
 ## 3. 数据流
 
 ```text

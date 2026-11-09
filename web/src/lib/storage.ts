@@ -1,7 +1,7 @@
 import { normalizeIndicatorConfig, type IndicatorConfig } from "../indicators/indicators";
 
 export type Theme = "dark" | "light";
-export type View = "terminal" | "futures" | "options";
+export type View = "terminal" | "futures" | "options" | "ops";
 
 const KEY_THEME = "tqsdk.theme";
 const KEY_WATCHLIST = "tqsdk.watchlist.v1";

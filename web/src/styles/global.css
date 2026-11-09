@@ -2481,3 +2481,153 @@ html[data-theme="light"] .indicator-block {
     grid-template-columns: 1fr;
   }
 }
+/* ---- OpsPage ---- */
+.ops-page {
+  padding: 24px 28px 36px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.ops-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.ops-heading h2 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.ops-heading p {
+  margin: 6px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ops-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ops-error {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(234, 57, 67, 0.35);
+  border-radius: 8px;
+  color: var(--red);
+  background: rgba(234, 57, 67, 0.08);
+  font-size: 12px;
+}
+
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.ops-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 150px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.ops-card small {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ops-card strong {
+  font-size: 15px;
+  letter-spacing: 0.06em;
+}
+
+.ops-card span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ops-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-section {
+  margin-top: 20px;
+}
+
+.ops-section h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ops-account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ops-account {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.ops-account.default {
+  border-color: rgba(79, 140, 255, 0.45);
+}
+
+.ops-account-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.ops-account-title .source-badge {
+  margin-left: auto;
+}
+
+.ops-account-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ops-link-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.ops-link-grid code {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--panel);
+}
+
+.warning-text {
+  color: var(--amber) !important;
+}

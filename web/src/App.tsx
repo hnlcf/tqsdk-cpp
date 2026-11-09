@@ -39,6 +39,7 @@ import TradeTapePanel, { type TapeRow } from "./components/TradeTapePanel";
 import TradingTables from "./components/TradingTables";
 import FuturesPage from "./pages/FuturesPage";
 import OptionsPage from "./pages/OptionsPage";
+import OpsPage from "./pages/OpsPage";
 import {
   DEFAULT_INDICATORS,
   type IndicatorConfig,
@@ -106,7 +107,7 @@ function mergeBars(previous: OHLCV[], incoming: OHLCV[]): OHLCV[] {
 
 function initialView(): View {
   const query = new URLSearchParams(window.location.search).get("view");
-  return query === "futures" || query === "options" ? query : "terminal";
+  return query === "futures" || query === "options" || query === "ops" ? query : "terminal";
 }
 
 export default function App() {
@@ -606,6 +607,9 @@ export default function App() {
         </Match>
         <Match when={view() === "options"}>
           <OptionsPage theme={theme()} />
+        </Match>
+        <Match when={view() === "ops"}>
+          <OpsPage />
         </Match>
       </Switch>
 
