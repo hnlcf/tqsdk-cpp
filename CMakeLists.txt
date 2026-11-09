@@ -56,13 +56,21 @@ add_library(tqsdk_core SHARED
     src/data/diff_merge_positions.cpp
     src/data/diff_merge_klines.cpp
     src/data/kline_store.cpp
+    src/data/data_downloader.cpp
+    src/option/option_analytics.cpp
+    src/multiaccount/multi_account_manager.cpp
+    src/backtest/backtest_engine.cpp
     src/gateway/sim/sim_td_gateway.cpp
     src/gateway/tq/tq_md_protocol.cpp
     src/gateway/tq/tq_md_gateway.cpp
     src/util/log.cpp
     src/util/http_download.cpp
     src/auth/tq_auth.cpp
+    src/auth/dynamic_endpoint.cpp
     src/trading/holiday_calendar.cpp
+    src/trading/risk_manager.cpp
+    src/trading/order_tasks.cpp
+    src/trading/trading_status.cpp
     # src/data/data_manager.cpp
     # src/data/diff_merge_engine.cpp
     # src/channel/channel.cpp
@@ -230,6 +238,10 @@ if(TQSDK_BUILD_TESTS)
         tests/channel/channel_close_test.cpp
         tests/channel/channel_multiplex_test.cpp
         tests/data/data_manager_test.cpp
+        tests/data/data_series_test.cpp
+        tests/option/option_analytics_test.cpp
+        tests/multiaccount/multi_account_test.cpp
+        tests/backtest/backtest_engine_test.cpp
         tests/data/kline_store_test.cpp
         tests/data/kline_cache_integration_test.cpp
         tests/data/diff_merge_test.cpp
@@ -246,6 +258,7 @@ if(TQSDK_BUILD_TESTS)
         tests/ipc/gateway_server_test.cpp
         tests/config/tqapi_factory_test.cpp
         tests/auth/tq_auth_test.cpp
+        tests/auth/dynamic_endpoint_test.cpp
         tests/util/json_value_test.cpp
         tests/util/serde_test.cpp
         tests/util/spawn_logged_test.cpp
@@ -261,7 +274,12 @@ if(TQSDK_BUILD_TESTS)
         tests/serve/catalog_http_test.cpp
         tests/serve/threading_test.cpp
         tests/serve/readiness_test.cpp
+        tests/serve/p0_http_test.cpp
+        tests/serve/option_http_test.cpp
         tests/trading/trading_calendar_test.cpp
+        tests/trading/trading_status_test.cpp
+        tests/trading/risk_manager_test.cpp
+        tests/trading/order_tasks_test.cpp
         tests/trading/tqapi_gateway_fault_test.cpp
         tests/e2e/tq_md_network_test.cpp
     )
@@ -350,12 +368,12 @@ if(TQSDK_ENABLE_CTP)
 endif()
 
 # 示例配置与文档；brokers.json 可能含柜台信息，不随包强制分发。
-install(FILES config/gw.toml config/node.toml
+install(FILES config/gw.toml config/node.toml config/p0_simnode.toml
         DESTINATION share/tqsdk/config)
 install(FILES README.md docs/README.md docs/ARCHITECTURE.md docs/MODULES.md
               docs/FLOWS.md docs/STATE_MACHINES.md docs/PROTOCOLS.md docs/OPERATIONS.md
               docs/CTP.md docs/SOAK_PERF.md docs/WEB_FRONTEND.md docs/WEB_INDICATORS.md docs/TQ_AUTH.md docs/INSTRUMENTS.md
-              docs/KLINE_CACHE.md docs/SIMNOW_ACCEPTANCE.md docs/ROADMAP.md
+              docs/KLINE_CACHE.md docs/SIMNOW_ACCEPTANCE.md docs/P0_SIMNOW_TEST_PLAN.md docs/ORDER_TASKS.md docs/RISK_CONTROL.md docs/TICK_DATA.md docs/OPTION_ANALYTICS.md docs/TRADING_STATUS.md docs/MULTI_ACCOUNT_BACKTEST.md docs/ROADMAP.md
         DESTINATION share/doc/tqsdk)
 
 # ==========================================================

@@ -1,0 +1,51 @@
+# P0 acceptance node: Tq market data + local SimTd.
+# Used by docs/P0_SIMNOW_TEST_PLAN.md before touching SimNow.
+# Run from repository root:
+#   ./build-ui/tqsdk-node -c config/p0_simnode.toml
+# Then:
+#   python3 scripts/p0_simnow_acceptance.py \
+#     --node-url http://127.0.0.1:18088 --symbol SHFE.rb2701 \
+#     --write --yes
+
+[md]
+kind = "tq"
+
+[td]
+kind = "sim"
+initial_balance = 1000000.0
+
+[td.specs."SHFE.rb2701"]
+volume_multiple = 10.0
+price_tick = 1.0
+margin_rate = 0.1
+commission_rate = 0.0
+commission_per_lot = 0.0
+
+# Seed for SimTd immediate matching. Replace with a symbol whose quote is
+# reachable if SHFE.rb2701 is not active.
+[td.last_prices]
+"SHFE.rb2701" = 3037.0
+
+[serve]
+bind = "127.0.0.1"
+port = 18088
+symbols = ["SHFE.rb2701"]
+
+[serve.ws]
+path = "/stream"
+heartbeat_interval_ms = 30000
+max_clients = 64
+max_queue = 256
+
+[instruments]
+enabled = true
+file = "symbol.json"
+refresh_interval_sec = 21600
+initial_delay_sec = 60
+
+[kline_cache]
+enabled = false
+file = "/tmp/p0_simnode_kline.sqlite3"
+
+[runtime]
+threads = 2

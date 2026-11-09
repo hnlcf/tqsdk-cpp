@@ -9,6 +9,8 @@ C++20 期货数据与交易基础设施，目标是把 TqSdk 的“异步数据�
 - `web/` SolidJS + TypeScript + pnpm 独立 Web 终端；
 - TradingView Lightweight Charts K 线/分时/指标；
 - 多自选列表、代码/名称模糊搜索、三键下单、合并持仓、账户权益联动；
+- 高级报单 FAK/FOK、市价/对价/五档价、TargetPosTask/InsertOrderTask、RiskManager 风控；
+- Tick/DataSeries/DataDownloader、期权 ATM+Greeks、TradingStatus/动态 URL、多账户与回测；
 - 合约目录、节假日日历、SQLite K 线缓存；
 - CTP SimNow 验收、交易时段 soak、故障注入。
 
@@ -65,6 +67,7 @@ ws://127.0.0.1:18081/stream
 ```bash
 ctest --test-dir build-ui --output-on-failure
 python3 scripts/test_simnow_acceptance.py
+python3 scripts/p0_simnow_acceptance.py  # P0 高级报单/任务/风控探针
 ```
 
 真实 SimNow 写测试必须显式确认，见
@@ -143,6 +146,13 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/INSTRUMENTS.md](docs/INSTRUMENTS.md)
 - [docs/KLINE_CACHE.md](docs/KLINE_CACHE.md)
 - [docs/SIMNOW_ACCEPTANCE.md](docs/SIMNOW_ACCEPTANCE.md)
+- [docs/P0_SIMNOW_TEST_PLAN.md](docs/P0_SIMNOW_TEST_PLAN.md)
+- [docs/ORDER_TASKS.md](docs/ORDER_TASKS.md)
+- [docs/RISK_CONTROL.md](docs/RISK_CONTROL.md)
+- [docs/TICK_DATA.md](docs/TICK_DATA.md)
+- [docs/OPTION_ANALYTICS.md](docs/OPTION_ANALYTICS.md)
+- [docs/TRADING_STATUS.md](docs/TRADING_STATUS.md)
+- [docs/MULTI_ACCOUNT_BACKTEST.md](docs/MULTI_ACCOUNT_BACKTEST.md)
 - [docs/SOAK_PERF.md](docs/SOAK_PERF.md)
 - [docs/CTP_WEEKLY_TEST_PLAN.md](docs/CTP_WEEKLY_TEST_PLAN.md)
 - [docs/P6_AUTOMATION.md](docs/P6_AUTOMATION.md)
@@ -152,7 +162,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 
 ## 当前状态
 
-- `ctest`：296 项通过（Qt UI 测试已移除，以本地构建目录为准）；
+- `ctest`：329 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
 - Web：`pnpm typecheck`、`pnpm test`、`pnpm build` 通过，连 node 的
   K 线/分时/指标/盘口/三键下单/合并持仓/委托/成交/权益已完成浏览器验证；
 - 合约目录：支持 TqAuth Bearer 下载；本地全量目录加载 29,439 条已验证；

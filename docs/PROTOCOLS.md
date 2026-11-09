@@ -87,6 +87,9 @@ Base URL 默认 `http://127.0.0.1:18081`。
 | GET | `/trades` | `{"trades":{...}}` |
 | GET | `/positions` | `{"positions":{...}}`；REST 隐藏零仓位 |
 | GET | `/trading-snapshot` | account/orders/trades/positions 合并 |
+| GET | `/ticks/{symbol}` | quote 固化 tick 快照 |
+| GET | `/trading-status` | TradingStatus 快照 |
+| GET | `/option/analytics/{underlying}` | ATM + Black-Scholes Greeks |
 
 ### 写
 
@@ -94,6 +97,14 @@ Base URL 默认 `http://127.0.0.1:18081`。
 |---|---|---|
 | POST | `/order` | `InsertOrderReq` JSON |
 | DELETE | `/order/{id}` | 撤单 |
+| POST | `/task/target` | TargetPosTask：`symbol,target_volume,mode,max_volume` |
+| DELETE | `/task/target/{id}` | 取消并删除 target task |
+| POST | `/task/order` | InsertOrderTask：`{order: InsertOrderReq}` |
+| DELETE | `/task/order/{id}` | 取消并删除 order task |
+| GET | `/tasks` | 任务状态列表 |
+| POST | `/risk/rules` | 新增风控规则 |
+| DELETE | `/risk/rules` | 清空风控规则 |
+| GET | `/risk/status` | 当前规则数量 |
 
 `InsertOrderReq` 关键字段：
 
@@ -106,11 +117,15 @@ Base URL 默认 `http://127.0.0.1:18081`。
   "limit_price": 2868.0,
   "time_cond": "IOC",
   "volume_cond": "ANY",
+  "advanced": "FAK",
+  "offset_leg2": "",
   "volume": 1
 }
 ```
 
-枚举按 magic_enum 名称序列化，例如 `BUY/SELL/OPEN/CLOSE/CLOSETODAY/ANY/BEST/LIMIT/IOC/GFD`。
+枚举按 magic_enum 名称序列化，例如 `BUY/SELL/OPEN/CLOSE/CLOSETODAY/ANY/BEST/FIVELEVEL/LIMIT/IOC/GFD/FAK/FOK`。
+`advanced=FAK/FOK` 会由 `apply_advanced_order()` 映射为 `IOC + ANY/ALL`；
+非 LIMIT 价格类型默认 IOC。
 
 ## 3. WebSocket `/stream`
 

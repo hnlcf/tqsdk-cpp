@@ -36,7 +36,7 @@ using namespace tqsdk;
 
 // 持有运行期全部对象，保证生命周期覆盖 io.run()。
 struct NodeRuntime {
-    std::shared_ptr<TqAuth>             auth;
+    std::shared_ptr<TqAuth>            auth;
     std::shared_ptr<InstrumentCatalog> catalog;
     std::shared_ptr<KlineStore>        kline_store;
     std::unique_ptr<TqApi>             api;
@@ -81,8 +81,9 @@ int main(int argc, char** argv) {
             SPDLOG_WARN("[node] TqAuth login failed: {}; catalog will request without token",
                         rt->auth->last_error());
         } else {
-            SPDLOG_INFO("[node] TqAuth logged in as {} (catalog/latest downloads will use Bearer token)",
-                        cfg.tq_auth.user_name);
+            SPDLOG_INFO(
+                "[node] TqAuth logged in as {} (catalog/latest downloads will use Bearer token)",
+                cfg.tq_auth.user_name);
         }
     }
     if (cfg.instruments.enabled) {

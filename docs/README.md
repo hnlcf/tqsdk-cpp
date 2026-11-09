@@ -19,6 +19,7 @@
 |---|---|
 | [OPERATIONS.md](OPERATIONS.md) | 依赖、构建、配置、启动、测试、长稳、诊断 |
 | [SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md) | SimNow 真实 CTP 验收流程和报告 |
+| [P0_SIMNOW_TEST_PLAN.md](P0_SIMNOW_TEST_PLAN.md) | P0 高级报单/执行任务/风控 SimNow 验收清单 |
 | [SOAK_PERF.md](SOAK_PERF.md) | 24h SimTd soak、CTP session monitor、性能基线 |
 | [CTP_WEEKLY_TEST_PLAN.md](CTP_WEEKLY_TEST_PLAN.md) | 连续交易日 CTP soak、每日对账、执行清单 |
 | [P6_AUTOMATION.md](P6_AUTOMATION.md) | 2026-11-09 09:00 P6.1/P6.2/P6.3 自动排期与产物 |
@@ -34,6 +35,12 @@
 | [TQ_AUTH.md](TQ_AUTH.md) | 快期账户 TqAuth、token 刷新和目录下载 Bearer header |
 | [INSTRUMENTS.md](INSTRUMENTS.md) | 合约目录格式、加载与刷新 |
 | [KLINE_CACHE.md](KLINE_CACHE.md) | SQLite K 线缓存、恢复与容量 |
+| [TICK_DATA.md](TICK_DATA.md) | Tick/DataSeries/DataDownloader |
+| [OPTION_ANALYTICS.md](OPTION_ANALYTICS.md) | 期权 ATM、Black-Scholes、Greeks |
+| [TRADING_STATUS.md](TRADING_STATUS.md) | TradingStatus 与动态 MD/TD URL |
+| [MULTI_ACCOUNT_BACKTEST.md](MULTI_ACCOUNT_BACKTEST.md) | 多账户门面与 bar 回测 |
+| [ORDER_TASKS.md](ORDER_TASKS.md) | TargetPosTask / InsertOrderTask 设计与用法 |
+| [RISK_CONTROL.md](RISK_CONTROL.md) | RiskManager、规则接口、REST 验收 |
 
 Web 是当前主前端；旧 Web 方案归档在
 [archive/WEB_FRONTEND_DEFERRED.md](archive/WEB_FRONTEND_DEFERRED.md)。

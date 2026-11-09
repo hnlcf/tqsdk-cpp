@@ -17,6 +17,25 @@
 - 本轮模块重构：WsEntityFilter、SnapshotService、GatewaySubscriptionBook、
   CommandAckCache、DiffMerge/CTP/gateway/http 分文件。
 
+## 2. P0 执行/风控能力（已实现）
+
+- ✅ 高级报单：FAK/FOK、市价、BEST、FIVELEVEL、MIN/ALL、offset_leg2；
+  - `InsertOrderReq/Order`、REST/WS/IPC/CTP 映射、Web 三键下单 UI；
+  - `apply_advanced_order()` 统一转 CTP `IOC+ANY/ALL`；
+- ✅ `TargetPosTask` / `InsertOrderTask` / `InsertOrderUntilAllTradedTask`；
+  - update hook 驱动，兼容 node 无 user wait_update 的场景；
+  - 单任务单在途单、ACTIVE/PASSIVE/CUSTOM、拆单；
+  - REST：`/task/target`、`/task/order`、`/tasks`；
+- ✅ `RiskManager` + OpenCounts/OpenVolumes/OrderRate 规则；
+  - 在网关前拒绝并生成可见的本地错误订单；
+  - REST：`/risk/status`、`/risk/rules`；
+- ✅ 单测/Sim 集成测试和 P0 SimNow 验收脚本：
+  - [P0_SIMNOW_TEST_PLAN.md](P0_SIMNOW_TEST_PLAN.md)
+  - [ORDER_TASKS.md](ORDER_TASKS.md)
+  - [RISK_CONTROL.md](RISK_CONTROL.md)
+
+**下一轮增强**：TargetPosTask 追价节流/任务统计、交易日历日切、多账户风控。
+
 ## 2. 下一优先级（P6）
 
 ### P6.1 CTP 交易会话可靠性
@@ -50,6 +69,14 @@
   - 半帧/超大长度/非法 JSON/重复 seq/epoch 回绕；
 - CTP 查询 watchdog 抖动注入；
 - 内存/FD/线程基线告警。
+
+## 2.1 P1/P2 能力（本轮已实现）
+
+- ✅ P1-1：Tick/DataSeries/DataDownloader、`/ticks/{symbol}`；
+- ✅ P1-2：Black-Scholes/Greeks、ATM 期权链、`/option/analytics/{underlying}`、Web Greeks；
+- ✅ P1-3：TradingStatus、`/trading-status`、Tq MD 动态 URL、TD URL 解析诊断；
+- ✅ P2：`MultiAccountManager`（每账户独立 TqApi）、独立 bar `BacktestEngine`。
+- 待集成：node REST 多账户路由、TqTdGateway、tick 落盘。
 
 ## 3. UI 与可观测性
 
