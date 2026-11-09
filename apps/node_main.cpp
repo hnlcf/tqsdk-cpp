@@ -36,6 +36,7 @@ using namespace tqsdk;
 
 // 持有运行期全部对象，保证生命周期覆盖 io.run()。
 struct NodeRuntime {
+    std::shared_ptr<TqAuth>             auth;
     std::shared_ptr<InstrumentCatalog> catalog;
     std::shared_ptr<KlineStore>        kline_store;
     std::unique_ptr<TqApi>             api;
@@ -74,8 +75,18 @@ int main(int argc, char** argv) {
     auto             core_ex = asio::make_strand(io);
     auto             rt      = std::make_shared<NodeRuntime>();
 
+    if (cfg.tq_auth.enabled) {
+        rt->auth = std::make_shared<TqAuth>(cfg.tq_auth);
+        if (!rt->auth->login()) {
+            SPDLOG_WARN("[node] TqAuth login failed: {}; catalog will request without token",
+                        rt->auth->last_error());
+        } else {
+            SPDLOG_INFO("[node] TqAuth logged in as {} (catalog/latest downloads will use Bearer token)",
+                        cfg.tq_auth.user_name);
+        }
+    }
     if (cfg.instruments.enabled) {
-        rt->catalog = std::make_shared<InstrumentCatalog>(cfg.instruments);
+        rt->catalog = std::make_shared<InstrumentCatalog>(cfg.instruments, rt->auth);
         if (!rt->catalog->load_local()) {
             SPDLOG_WARN(
                 "[node] instrument catalog not available yet; background refresh will retry");

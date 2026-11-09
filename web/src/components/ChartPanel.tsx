@@ -1,10 +1,11 @@
-import { For, Show, createMemo } from "solid-js";
+import { For, Show, createMemo, createSignal } from "solid-js";
 import type { Quote } from "../api/client";
 import { formatPrice, formatVolume, quoteChange } from "../lib/format";
 import { instrumentName } from "../lib/instruments";
 import type { OHLCV, IndicatorConfig } from "../indicators/indicators";
 import KLineChart from "../chart/KLineChart";
 import IntradayChart from "../chart/IntradayChart";
+import IndicatorSettings from "./IndicatorSettings";
 import type { Theme } from "../chart/theme";
 
 export interface PeriodOption {
@@ -29,6 +30,7 @@ interface Props {
 }
 
 export default function ChartPanel(props: Props) {
+  const [settingsOpen, setSettingsOpen] = createSignal(false);
   const last = createMemo(() => props.bars.at(-1));
   const change = createMemo(() => quoteChange(props.quote));
   const maActive = () => props.indicators.maPeriods.length > 0;
@@ -133,6 +135,9 @@ export default function ChartPanel(props: Props) {
           >
             RSI
           </button>
+          <button type="button" class="tool-button indicator-settings-trigger" onClick={() => setSettingsOpen(true)}>
+            指标设置
+          </button>
         </div>
       </div>
 
@@ -169,6 +174,14 @@ export default function ChartPanel(props: Props) {
         <span>VOL {formatVolume(last()?.volume)}</span>
         <span class="chart-credit">Lightweight Charts · Apache-2.0</span>
       </div>
+      <Show when={settingsOpen()}>
+        <IndicatorSettings
+          config={props.indicators}
+          theme={props.theme}
+          onChange={props.onIndicators}
+          onClose={() => setSettingsOpen(false)}
+        />
+      </Show>
     </section>
   );
 }

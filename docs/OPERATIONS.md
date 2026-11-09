@@ -171,6 +171,20 @@ kind = "none"
 
 `./scripts/run_live.sh --build` 只启动 gw/node；Web 使用 `run_web.sh`。退出顺序由脚本处理。
 
+### 快期账户认证（可选）
+
+在 `config/live.local.env` 中设置：
+
+```bash
+TQ_AUTH_ENABLED=1
+TQ_AUTH_USER=your_tq_user
+TQ_AUTH_PASSWORD=your_tq_password
+TQ_AUTH_URL=https://auth.shinnytech.com
+```
+
+`run_live.sh` 会生成 `[tq_auth]`，node 在下载合约目录时携带
+`Authorization: Bearer ...`。详见 [TQ_AUTH.md](TQ_AUTH.md)。
+
 ### 手工启动
 
 ```bash

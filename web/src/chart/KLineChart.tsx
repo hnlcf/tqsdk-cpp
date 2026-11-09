@@ -111,7 +111,7 @@ export default function KLineChart(props: Props) {
     for (let index = 0; index < config.maPeriods.length; index++) {
       const period = config.maPeriods[index];
       addLine(`ma-${period}`, {
-        color: theme.ma[index % theme.ma.length],
+        color: config.maColors?.[index] ?? theme.ma[index % theme.ma.length],
         lineWidth: 1,
         priceLineVisible: false,
         lastValueVisible: false,
@@ -124,7 +124,7 @@ export default function KLineChart(props: Props) {
       addLine(
         "boll-upper",
         {
-          color: theme.bollUpper,
+          color: config.bollColors?.bollUpper ?? theme.bollUpper,
           lineWidth: 1,
           lineStyle: 2,
           priceLineVisible: false,
@@ -137,7 +137,7 @@ export default function KLineChart(props: Props) {
       addLine(
         "boll-middle",
         {
-          color: theme.bollMiddle,
+          color: config.bollColors?.bollMiddle ?? theme.bollMiddle,
           lineWidth: 1,
           priceLineVisible: false,
           lastValueVisible: false,
@@ -149,7 +149,7 @@ export default function KLineChart(props: Props) {
       addLine(
         "boll-lower",
         {
-          color: theme.bollLower,
+          color: config.bollColors?.bollLower ?? theme.bollLower,
           lineWidth: 1,
           lineStyle: 2,
           priceLineVisible: false,
@@ -177,7 +177,7 @@ export default function KLineChart(props: Props) {
       addLine(
         "macd-dif",
         {
-          color: theme.macdDif,
+          color: config.macdColors?.macdDif ?? theme.macdDif,
           lineWidth: 1,
           priceLineVisible: false,
           lastValueVisible: false,
@@ -189,7 +189,7 @@ export default function KLineChart(props: Props) {
       addLine(
         "macd-dea",
         {
-          color: theme.macdDea,
+          color: config.macdColors?.macdDea ?? theme.macdDea,
           lineWidth: 1,
           priceLineVisible: false,
           lastValueVisible: false,
@@ -205,7 +205,7 @@ export default function KLineChart(props: Props) {
       addLine(
         "rsi",
         {
-          color: theme.average,
+          color: config.rsiColors?.rsi ?? theme.average,
           lineWidth: 1,
           priceLineVisible: false,
           lastValueVisible: false,
@@ -229,7 +229,7 @@ export default function KLineChart(props: Props) {
       );
     }
     if (config.boll) {
-      const bands = boll(bars, config.bollPeriod, 2);
+      const bands = boll(bars, config.bollPeriod, config.bollMultiplier);
       indicatorSeries.get("boll-upper")?.setData(
         bands.upper.map((point) => ({ time: point.time as UTCTimestamp, value: point.value })),
       );
@@ -241,7 +241,7 @@ export default function KLineChart(props: Props) {
       );
     }
     if (config.macd) {
-      const values = macd(bars, 12, 26, 9);
+      const values = macd(bars, config.macdFast, config.macdSlow, config.macdSignal);
       const histogram = indicatorSeries.get("macd-histogram");
       const dif = indicatorSeries.get("macd-dif");
       const dea = indicatorSeries.get("macd-dea");
@@ -249,7 +249,10 @@ export default function KLineChart(props: Props) {
         values.histogram.map((point) => ({
           time: point.time as UTCTimestamp,
           value: point.value,
-          color: point.value >= 0 ? theme.positive + "80" : theme.negative + "80",
+          color:
+            point.value >= 0
+              ? config.macdColors?.macdHistUp ?? theme.positive + "80"
+              : config.macdColors?.macdHistDown ?? theme.negative + "80",
         })),
       );
       dif?.setData(

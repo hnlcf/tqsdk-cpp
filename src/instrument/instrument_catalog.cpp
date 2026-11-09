@@ -1,5 +1,7 @@
 #include "tqsdk/instrument/instrument_catalog.h"
 
+#include "tqsdk/auth/tq_auth.h"
+
 #include "tqsdk/util/http_download.h"
 #include "tqsdk/util/json_value.h"
 
@@ -20,8 +22,8 @@ std::string lower_ascii(std::string value) {
 
 } // namespace
 
-InstrumentCatalog::InstrumentCatalog(Config cfg)
-    : cfg_(std::move(cfg)) {}
+InstrumentCatalog::InstrumentCatalog(Config cfg, std::shared_ptr<TqAuth> auth)
+    : cfg_(std::move(cfg)), auth_(std::move(auth)) {}
 
 InstrumentCatalog::~InstrumentCatalog() {
     try {
@@ -217,7 +219,18 @@ bool InstrumentCatalog::download_to_file() {
     }
     try {
         SPDLOG_INFO("[Catalog] downloading {}", cfg_.url);
-        std::string body = util::http_get(cfg_.url, "tqsdk-node/0.1 instrument-catalog");
+        util::HttpHeaders headers;
+        std::string user_agent = "tqsdk-node/0.1 instrument-catalog";
+        if (auth_) {
+            user_agent = auth_->user_agent();
+            const auto authorization = auth_->authorization_header();
+            if (!authorization.empty()) {
+                headers.emplace("Authorization", authorization);
+            } else {
+                SPDLOG_WARN("[Catalog] TqAuth unavailable; downloading without bearer token");
+            }
+        }
+        std::string body = util::http_get(cfg_.url, user_agent, std::chrono::seconds(120), headers);
         const auto  tmp  = cfg_.file + ".tmp";
         {
             std::ofstream out(tmp, std::ios::binary | std::ios::trunc);

@@ -45,6 +45,17 @@ max_clients = 256
 # 单连接待发送队列上限；慢消费者丢最旧行情
 max_queue = 1024
 
+# ---- 快期账户认证 ----
+# 可选：官方 TqSdk 使用快期账号换 access_token，并在下载
+# openmd symbol.json / latest.json 时携带 Authorization: Bearer。
+# 账号密码只放在本机配置或环境变量，不要提交。
+[tq_auth]
+enabled = true
+user_name = "your_tq_user"
+password = "your_tq_password"
+auth_url = "https://auth.shinnytech.com"
+request_timeout_sec = 30
+
 # ---- 标准合约目录 ----
 # 优先加载本地 symbol.json（active 合约，35MB）；不存在时回退 latest.json。
 # 后台线程按 refresh_interval_sec 空闲下载并原子替换；首次缺失时立即尝试下载。

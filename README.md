@@ -135,6 +135,8 @@ docs/             架构、模块、信息流、状态机、运维、专题
 
 - [docs/CTP.md](docs/CTP.md)
 - [docs/WEB_FRONTEND.md](docs/WEB_FRONTEND.md)
+- [docs/WEB_INDICATORS.md](docs/WEB_INDICATORS.md)
+- [docs/TQ_AUTH.md](docs/TQ_AUTH.md)
 - [web/README.md](web/README.md)
 - [docs/archive/UI_QT_LEGACY.md](docs/archive/UI_QT_LEGACY.md)（历史）
 - [docs/archive/INDICATOR_PLUGINS_QT_LEGACY.md](docs/archive/INDICATOR_PLUGINS_QT_LEGACY.md)（历史）
@@ -150,9 +152,10 @@ docs/             架构、模块、信息流、状态机、运维、专题
 
 ## 当前状态
 
-- `ctest`：292 项通过（Qt UI 测试已移除，以本地构建目录为准）；
+- `ctest`：295 项通过（Qt UI 测试已移除，以本地构建目录为准）；
 - Web：`pnpm typecheck`、`pnpm test`、`pnpm build` 通过，连 node 的
-  K 线/分时/指标/盘口/下单/持仓/委托/成交/权益已完成浏览器验证；
+  K 线/分时/指标/盘口/三键下单/合并持仓/委托/成交/权益已完成浏览器验证；
+- 合约目录：支持 TqAuth Bearer 下载；本地全量目录加载 29,439 条已验证；
 - SimTd 24h soak：完成，`http_err=0`、`ws_err=0`、`fatal=""`；
 - SimNow CTP 写验收：15/15 PASS；
 - 平昨自动化：已完成；

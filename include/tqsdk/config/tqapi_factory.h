@@ -3,6 +3,7 @@
 #include "tqsdk/pch.h"
 
 #include "tqsdk/data/kline_store.h"
+#include "tqsdk/auth/tq_auth.h"
 #include "tqsdk/gateway/ctp/ctp_config.h"
 #include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/ipc/protocol.h"
@@ -152,6 +153,9 @@ struct GwConfig {
     };
     std::vector<SpecSeed> specs;
 
+    /// [tq_auth] 快期账户认证（节点下载合约目录等 HTTP 资源时使用）。
+    TqAuth::Config tq_auth;
+
     /// SimTdGateway 的初始撮合价（[td.last_prices]）。用于让市价单/限价单在启动即有
     /// 可撮合价格；对应 on_tick(symbol, price)。
     std::map<std::string, double> last_prices;
@@ -174,6 +178,7 @@ struct NodeConfig {
     uint16_t                  serve_port = 8080;
     std::vector<InstrumentId> symbols;     ///< 启动即预订阅的合约（便于直接 curl 到数据）
     InstrumentCatalog::Config instruments; ///< [instruments] 标准合约目录/刷新
+    TqAuth::Config            tq_auth;     ///< [tq_auth] 快期账户认证
     KlineStore::Config        kline_cache; ///< [kline_cache] 本地 K 线历史缓存
 
     /// [serve.ws]：同一 HTTP 端口上的 WebSocket 实时推送。

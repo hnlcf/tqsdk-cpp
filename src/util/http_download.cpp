@@ -49,21 +49,38 @@ UrlParts parse_url(std::string_view url) {
     return out;
 }
 
-} // namespace
-
-std::string
-http_get(std::string_view url, std::string_view user_agent, std::chrono::milliseconds timeout) {
-    const auto                      parsed = parse_url(url);
-    asio::io_context                io;
-    asio::ip::tcp::resolver         resolver(io);
-    const auto                      endpoints = resolver.resolve(parsed.host, parsed.port);
-    http::request<http::empty_body> req{http::verb::get, parsed.target, 11};
+std::string request_http(std::string_view          url,
+                         http::verb                method,
+                         std::string_view          user_agent,
+                         std::chrono::milliseconds timeout,
+                         std::string_view          body,
+                         std::string_view          content_type,
+                         const HttpHeaders&        headers) {
+    const auto               parsed = parse_url(url);
+    asio::io_context         io;
+    asio::ip::tcp::resolver  resolver(io);
+    const auto               endpoints = resolver.resolve(parsed.host, parsed.port);
+    http::request<http::string_body> req{method, parsed.target, 11};
     req.set(http::field::host, parsed.host);
     req.set(http::field::user_agent, user_agent);
     req.set(http::field::accept, "application/json");
+    if (!body.empty()) {
+        req.set(http::field::content_type, content_type);
+        req.body() = std::string{body};
+        req.prepare_payload();
+    }
+    for (const auto& [key, value] : headers) {
+        if (!key.empty()) {
+            req.set(key, value);
+        }
+    }
 
-    beast::flat_buffer                buffer;
-    http::response<http::string_body> res;
+    beast::flat_buffer                        buffer;
+    http::response<http::string_body>         res;
+    http::response_parser<http::string_body>  parser;
+    // 合约目录 symbol.json 可能超过 10MB，latest.json 更大；Beast 默认
+    // body limit 会提前截断并留下无法解析的文件。该下载器只用于低频刷新。
+    parser.body_limit(512ull * 1024 * 1024);
 
     if (parsed.tls) {
         asio::ssl::context ctx{asio::ssl::context::tls_client};
@@ -78,7 +95,8 @@ http_get(std::string_view url, std::string_view user_agent, std::chrono::millise
         beast::get_lowest_layer(stream).connect(endpoints);
         stream.handshake(asio::ssl::stream_base::client);
         http::write(stream, req);
-        http::read(stream, buffer, res);
+        http::read(stream, buffer, parser);
+        res = parser.release();
         // 不等待 TLS close_notify：部分 CDN 会保持长连接，sync shutdown 可能阻塞
         // 后台刷新线程。socket 析构时会关闭连接。
     } else {
@@ -86,13 +104,38 @@ http_get(std::string_view url, std::string_view user_agent, std::chrono::millise
         stream.expires_after(timeout);
         stream.connect(endpoints);
         http::write(stream, req);
-        http::read(stream, buffer, res);
+        http::read(stream, buffer, parser);
+        res = parser.release();
     }
 
     if (res.result() != http::status::ok) {
         throw std::runtime_error("URL returned HTTP " + std::to_string(res.result_int()));
     }
     return std::move(res.body());
+}
+
+} // namespace
+
+std::string http_get(std::string_view          url,
+                     std::string_view          user_agent,
+                     std::chrono::milliseconds timeout,
+                     const HttpHeaders&        headers) {
+    return request_http(
+        url, http::verb::get, user_agent, timeout, {}, "application/json", headers);
+}
+
+std::string http_post_form(std::string_view          url,
+                           std::string_view          body,
+                           std::string_view          user_agent,
+                           std::chrono::milliseconds timeout,
+                           const HttpHeaders&        headers) {
+    return request_http(url,
+                        http::verb::post,
+                        user_agent,
+                        timeout,
+                        body,
+                        "application/x-www-form-urlencoded",
+                        headers);
 }
 
 } // namespace tqsdk::util

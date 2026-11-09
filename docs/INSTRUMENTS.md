@@ -11,7 +11,9 @@
 > - `https://openmd.shinnytech.com/t/md/symbols/latest.json`（约 350MB，
 >   含历史合约/更完整的字段）
 >
-> 文件均不入库；由 node 在本地加载，空闲时下载更新。
+> 文件均不入库；由 node 在本地加载，空闲时下载更新。带 `[tq_auth]`
+> 配置时，HTTP 下载会携带 `Authorization: Bearer <access_token>`；详见
+> [TQ_AUTH.md](TQ_AUTH.md)。
 
 ## 1. 目录格式
 
@@ -89,7 +91,12 @@ initial_delay_sec = 60
 1. 启动时同步加载本地文件；
 2. 后台线程在空闲窗口下载并原子替换文件；
 3. 解析成功后一次 swap 到读侧，HTTP 查询不阻塞行情/交易线程；
-4. 下载/解析失败保留旧目录。
+4. 下载/解析失败保留旧目录；
+5. 大文件下载使用 512MB body limit，避免 Beast 默认 limit 截断 JSON。
+
+`symbol.json` 下载失败或旧文件损坏时，不会在查询线程里解析半截文件；
+修复文件/重启 node 后才会切换到新快照。建议用 `/catalog/status` 确认
+`loaded=true`、`total` 后再做前端搜索验收。
 
 ## 3. HTTP API
 

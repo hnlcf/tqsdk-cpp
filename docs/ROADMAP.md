@@ -54,6 +54,8 @@
 ## 3. UI 与可观测性
 
 - TQSDK Board：多自选模糊搜索/K 线/分时/盘口/三键下单/合并持仓/委托/成交/权益已落地；
+- 指标参数/颜色设置（MA/BOLL/MACD/RSI）已落地，插件化设计见 WEB_INDICATORS；
+- TqAuth 快期认证与目录 Bearer header 已接入；
 - 图表画线 primitive/overlay 与指标 Worker；
 - 前端 Playwright 端到端（登录/订阅/下单/重连）；
 - 虚拟列表、列宽/排序持久化；

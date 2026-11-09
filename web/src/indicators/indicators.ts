@@ -24,23 +24,72 @@ export interface MacdResult {
   histogram: ValuePoint[];
 }
 
+export interface IndicatorColors {
+  ma?: string[];
+  bollUpper?: string;
+  bollMiddle?: string;
+  bollLower?: string;
+  macdDif?: string;
+  macdDea?: string;
+  macdHistUp?: string;
+  macdHistDown?: string;
+  rsi?: string;
+}
+
 export interface IndicatorConfig {
   maPeriods: number[];
+  maColors?: string[];
   boll: boolean;
   bollPeriod: number;
+  bollMultiplier: number;
+  bollColors?: IndicatorColors;
   macd: boolean;
+  macdFast: number;
+  macdSlow: number;
+  macdSignal: number;
+  macdColors?: IndicatorColors;
   rsi: boolean;
   rsiPeriod: number;
+  rsiColors?: IndicatorColors;
 }
 
 export const DEFAULT_INDICATORS: IndicatorConfig = {
   maPeriods: [5, 10, 20],
   boll: false,
   bollPeriod: 20,
+  bollMultiplier: 2,
   macd: false,
+  macdFast: 12,
+  macdSlow: 26,
+  macdSignal: 9,
   rsi: false,
   rsiPeriod: 14,
 };
+
+function positiveInt(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+/** Normalize persisted/legacy configs without losing user customisations. */
+export function normalizeIndicatorConfig(config: Partial<IndicatorConfig>): IndicatorConfig {
+  const maPeriods = Array.isArray(config.maPeriods)
+    ? config.maPeriods.map((item) => positiveInt(item, 0)).filter((item) => item > 0)
+    : DEFAULT_INDICATORS.maPeriods;
+  return {
+    ...DEFAULT_INDICATORS,
+    ...config,
+    maPeriods: maPeriods.length ? [...new Set(maPeriods)] : [],
+    bollPeriod: positiveInt(config.bollPeriod, DEFAULT_INDICATORS.bollPeriod),
+    bollMultiplier:
+      typeof config.bollMultiplier === "number" && config.bollMultiplier > 0
+        ? config.bollMultiplier
+        : DEFAULT_INDICATORS.bollMultiplier,
+    macdFast: positiveInt(config.macdFast, DEFAULT_INDICATORS.macdFast),
+    macdSlow: positiveInt(config.macdSlow, DEFAULT_INDICATORS.macdSlow),
+    macdSignal: positiveInt(config.macdSignal, DEFAULT_INDICATORS.macdSignal),
+    rsiPeriod: positiveInt(config.rsiPeriod, DEFAULT_INDICATORS.rsiPeriod),
+  };
+}
 
 function validBars(bars: OHLCV[]): boolean {
   return bars.length > 0 && bars.every((bar) => Number.isFinite(bar.close));

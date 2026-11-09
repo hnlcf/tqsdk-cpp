@@ -37,7 +37,7 @@ pnpm preview
 - 自选列表：多列表、新建/重命名/删除、代码/名称模糊搜索、上移/下移、localStorage 持久化、实时 quote；
 - K 线：1m/5m/15m/30m/1h/2h/4h/1d/3d/1w，成交量、十字光标、当前价线；
 - 分时：当前交易日 session，价格面积图、均价线、成交量、昨收线；
-- 指标：MA5/10/20、BOLL、MACD、RSI，可用工具栏切换；
+- 指标：MA/BOLL/MACD/RSI，可增删周期、调参数和颜色，设置自动持久化；
 - 交易表：持仓/委托/成交，持仓由实时 quote 计算浮动盈亏；
 - 盘口：5 档买/卖，点击价格填入下单板；
 - 分笔成交：由 quote volume 增量生成，有界列表；
@@ -47,6 +47,7 @@ pnpm preview
 - 委托、成交：REST/WS 合并，委托撤单；
 - 账户权益：权益、可用、保证金、浮盈、风险度；5s REST 对账与 WS 快照同步；
 - `/readyz` 门禁：未 ready 或 WS 断开时禁止报单；
+- 自选/下单/指标设置完整支持 dark/light 主题；
 - 深链：`?view=futures|options`、`?mode=time|kline`、`?theme=dark|light`、
   `?indicators=ma,boll,macd,rsi`。
 

@@ -594,8 +594,10 @@ export default function App() {
             quotes={quotes()}
             orders={orders()}
             trades={trades()}
+            selected={selected()}
             ready={tradingReady()}
             onCancel={cancelLiveOrder}
+            onSelect={selectSymbol}
           />
         </Match>
         <Match when={view() === "futures"}>

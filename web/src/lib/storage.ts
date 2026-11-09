@@ -1,4 +1,4 @@
-import type { IndicatorConfig } from "../indicators/indicators";
+import { normalizeIndicatorConfig, type IndicatorConfig } from "../indicators/indicators";
 
 export type Theme = "dark" | "light";
 export type View = "terminal" | "futures" | "options";
@@ -205,18 +205,18 @@ export function readIndicators(fallback: IndicatorConfig): IndicatorConfig {
     const requested = new URLSearchParams(window.location.search).get("indicators");
     if (requested !== null) {
       const keys = new Set(requested.split(",").map((item) => item.trim()).filter(Boolean));
-      return {
+      return normalizeIndicatorConfig({
         ...fallback,
         maPeriods: keys.has("ma") ? [5, 10, 20] : [],
         boll: keys.has("boll"),
         macd: keys.has("macd"),
         rsi: keys.has("rsi"),
-      };
+      });
     }
   } catch {
     // fall back to persisted settings
   }
-  return readJson<IndicatorConfig>(KEY_INDICATORS, fallback);
+  return normalizeIndicatorConfig(readJson<Partial<IndicatorConfig>>(KEY_INDICATORS, fallback));
 }
 
 export function saveIndicators(config: IndicatorConfig): void {

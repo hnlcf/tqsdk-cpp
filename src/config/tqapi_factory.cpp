@@ -358,6 +358,24 @@ TqApiConfig::Td parse_gw_td(const toml::table& root) {
     return td;
 }
 
+TqAuth::Config parse_tq_auth(const toml::table& root) {
+    TqAuth::Config auth;
+    if (const auto& t = require_table(root, "tq_auth"); !t.empty()) {
+        auth.enabled = get_bool(t, "enabled", auth.enabled);
+        auth.user_name = get_str(t, "user_name", auth.user_name);
+        auth.password = get_str(t, "password", auth.password);
+        auth.auth_url = get_str(t, "auth_url", auth.auth_url);
+        auth.client_id = get_str(t, "client_id", auth.client_id);
+        auth.client_secret = get_str(t, "client_secret", auth.client_secret);
+        auth.user_agent = get_str(t, "user_agent", auth.user_agent);
+        auth.request_timeout = std::chrono::seconds(
+            std::max<int64_t>(1, get_int(t, "request_timeout_sec", auth.request_timeout.count())));
+        auth.refresh_margin = std::chrono::seconds(
+            std::max<int64_t>(0, get_int(t, "refresh_margin_sec", auth.refresh_margin.count())));
+    }
+    return auth;
+}
+
 RuntimeConfig parse_runtime(const toml::table& root) {
     RuntimeConfig rt;
     if (const auto& t = require_table(root, "runtime"); !t.empty()) {
@@ -386,6 +404,7 @@ GwConfig build_gw_from_toml(const toml::table& root) {
     cfg.md      = parse_gw_md(root);
     cfg.td      = parse_gw_td(root);
     cfg.ctp     = parse_ctp_config(root);
+    cfg.tq_auth = parse_tq_auth(root);
     cfg.runtime = parse_runtime(root);
 
     // [td.specs."SYMBOL"] -> SpecSeed（仅 sim 用）
@@ -474,6 +493,7 @@ NodeConfig build_node_from_toml(const toml::table& root) {
         cfg.kline_cache.fresh_after_sec =
             std::max<int64_t>(0, get_int(t, "fresh_after_sec", cfg.kline_cache.fresh_after_sec));
     }
+    cfg.tq_auth = parse_tq_auth(root);
     cfg.runtime = parse_runtime(root);
     return cfg;
 }

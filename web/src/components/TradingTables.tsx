@@ -17,8 +17,10 @@ interface Props {
   quotes: Record<string, Quote>;
   orders: Record<string, OrderSnapshot>;
   trades: Record<string, TradeSnapshot>;
+  selected: string;
   ready: boolean;
   onCancel: (orderId: string) => Promise<void>;
+  onSelect: (symbol: string) => void;
 }
 
 export interface PositionRow {
@@ -251,7 +253,10 @@ export default function TradingTables(props: Props) {
               <tbody>
                 <For each={positionRows()}>
                   {(row) => (
-                    <tr>
+                    <tr
+                      class={props.selected === row.symbol ? "selected" : ""}
+                      onClick={() => props.onSelect(row.symbol)}
+                    >
                       <td class="mono strong">{row.symbol}</td>
                       <td>{row.name}</td>
                       <td
@@ -327,7 +332,10 @@ export default function TradingTables(props: Props) {
                           <button
                             type="button"
                             class="table-action"
-                            onClick={() => void props.onCancel(row.order_id)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void props.onCancel(row.order_id);
+                            }}
                           >
                             撤单
                           </button>

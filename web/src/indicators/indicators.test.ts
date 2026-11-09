@@ -4,6 +4,7 @@ import {
   chinaTimeLabel,
   ema,
   intradayBars,
+  normalizeIndicatorConfig,
   macd,
   rsi,
   sma,
@@ -47,6 +48,20 @@ describe("indicators", () => {
     const result = rsi(bars, 2);
     expect(result.length).toBe(3);
     expect(result[0].value).toBe(100);
+  });
+
+  it("normalizes legacy and invalid indicator parameters", () => {
+    const config = normalizeIndicatorConfig({
+      maPeriods: [5, 5, 0],
+      bollPeriod: 0,
+      bollMultiplier: -1,
+      macdFast: 0,
+      rsiPeriod: 0,
+    });
+    expect(config.maPeriods).toEqual([5]);
+    expect(config.bollPeriod).toBe(20);
+    expect(config.bollMultiplier).toBe(2);
+    expect(config.rsiPeriod).toBe(14);
   });
 
   it("keeps the current China futures session for intraday charts", () => {

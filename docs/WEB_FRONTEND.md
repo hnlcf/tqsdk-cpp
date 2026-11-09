@@ -81,7 +81,14 @@ node WS /stream snapshot/diff
 - REST 快照与 WS snapshot 合并，交易数据不使用 mock 冒充；
 - 分时 session 固定使用 China Standard Time，不依赖浏览器时区。
 
-## 4. K 线与 TradingView
+## 4. 指标配置
+
+- 指标设置弹层支持 MA 周期/颜色、BOLL 周期/倍数/颜色、
+  MACD 快慢信号/颜色、RSI 周期/颜色；
+- 配置写入 `localStorage`，并保留旧 v1 配置迁移；
+- 详细的自定义指标/插件化路线见 [WEB_INDICATORS.md](WEB_INDICATORS.md)。
+
+## 5. K 线与 TradingView
 
 当前使用 **Lightweight Charts**：
 
@@ -96,7 +103,7 @@ node WS /stream snapshot/diff
 TradingView **Advanced Charts / Charting Library** 提供完整指标和画线，但
 是专有许可，不是开源依赖。若需要这些能力，应单独评估许可，不应默认打包。
 
-## 5. 代码结构
+## 6. 代码结构
 
 ```text
 web/src/
@@ -111,7 +118,7 @@ web/src/
   styles/global.css
 ```
 
-## 6. 测试
+## 7. 测试
 
 ```fish
 pnpm test
@@ -119,7 +126,7 @@ pnpm typecheck
 pnpm build
 ```
 
-当前 Vitest 覆盖（8 项）：
+当前 Vitest 覆盖（9 项）：
 
 - SMA/EMA/BOLL/MACD/RSI；
 - China futures session 分时选择；
@@ -129,7 +136,7 @@ pnpm build
 真实行情/下单验证需要 node 和网关；浏览器截图只能证明界面/渲染，不等于
 CTP 验收。
 
-## 7. 后续
+## 8. 后续
 
 - 画线 primitive/overlay；
 - 指标 Worker（大数据量）；

@@ -75,6 +75,10 @@ HTTP_PORT=18081
 TQ_MD_HOST="free-openmd.shinnytech.com"
 TQ_MD_PORT="443"
 TQ_MD_PATH="/t/md/front/mobile"
+TQ_AUTH_ENABLED=0
+TQ_AUTH_USER=""
+TQ_AUTH_PASSWORD=""
+TQ_AUTH_URL="https://auth.shinnytech.com"
 CTP_BROKER_ID="9999"
 CTP_USER_ID=""
 CTP_PASSWORD=""
@@ -163,7 +167,7 @@ if ! grep -Eq '^TQSDK_ENABLE_CTP:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
 fi
 
 # 用 Python 写 TOML，避免手工拼接字符串/数组时出现引号问题。
-export GW_PORT HTTP_PORT TQ_MD_HOST TQ_MD_PORT TQ_MD_PATH
+export GW_PORT HTTP_PORT TQ_MD_HOST TQ_MD_PORT TQ_MD_PATH TQ_AUTH_ENABLED TQ_AUTH_USER TQ_AUTH_PASSWORD TQ_AUTH_URL
 export CTP_BROKER_ID CTP_USER_ID CTP_PASSWORD CTP_AUTH_CODE CTP_APP_ID
 export CTP_TD_FRONT CTP_MD_FRONT SYMBOLS INSTRUMENTS_FILE FLOW_PATH
 python3 - "$GW_CONFIG" "$NODE_CONFIG" "$RUN_DIR" <<'PY'
@@ -247,6 +251,12 @@ heartbeat_interval_ms = 30000
 max_clients = 256
 max_queue = 1024
 coalesce_ms = 10
+
+[tq_auth]
+enabled = {str(os.environ.get("TQ_AUTH_ENABLED", "0")).lower() in ("1", "true", "yes", "on")}
+user_name = {q("TQ_AUTH_USER")}
+password = {q("TQ_AUTH_PASSWORD")}
+auth_url = {q("TQ_AUTH_URL")}
 
 [instruments]
 enabled = true

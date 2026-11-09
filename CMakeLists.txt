@@ -61,6 +61,7 @@ add_library(tqsdk_core SHARED
     src/gateway/tq/tq_md_gateway.cpp
     src/util/log.cpp
     src/util/http_download.cpp
+    src/auth/tq_auth.cpp
     src/trading/holiday_calendar.cpp
     # src/data/data_manager.cpp
     # src/data/diff_merge_engine.cpp
@@ -244,6 +245,7 @@ if(TQSDK_BUILD_TESTS)
         tests/ipc/ipc_proxy_test.cpp
         tests/ipc/gateway_server_test.cpp
         tests/config/tqapi_factory_test.cpp
+        tests/auth/tq_auth_test.cpp
         tests/util/json_value_test.cpp
         tests/util/serde_test.cpp
         tests/util/spawn_logged_test.cpp
@@ -352,7 +354,7 @@ install(FILES config/gw.toml config/node.toml
         DESTINATION share/tqsdk/config)
 install(FILES README.md docs/README.md docs/ARCHITECTURE.md docs/MODULES.md
               docs/FLOWS.md docs/STATE_MACHINES.md docs/PROTOCOLS.md docs/OPERATIONS.md
-              docs/CTP.md docs/SOAK_PERF.md docs/WEB_FRONTEND.md docs/INSTRUMENTS.md
+              docs/CTP.md docs/SOAK_PERF.md docs/WEB_FRONTEND.md docs/WEB_INDICATORS.md docs/TQ_AUTH.md docs/INSTRUMENTS.md
               docs/KLINE_CACHE.md docs/SIMNOW_ACCEPTANCE.md docs/ROADMAP.md
         DESTINATION share/doc/tqsdk)
 
