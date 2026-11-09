@@ -220,17 +220,31 @@ curl -s -X DELETE http://127.0.0.1:18081/risk/rules
 
 ## 7. 验收通过标准
 
-- [ ] `/readyz` 200，catalog loaded；
-- [ ] FAK/FOK 字段和订单终态正确，无残留挂单；
-- [ ] 市价/BEST/FIVELEVEL 的 `limit_price=0` 路径正确；
-- [ ] TargetPosTask 朝净目标收敛，无重复在途单；
-- [ ] 风控拒绝原因可见且不落到柜台；
-- [ ] 所有测试订单已撤、风险规则已清理、任务已删除；
-- [ ] `artifacts/p0_simnow_*.md` 已生成并归档。
+- [x] `/readyz` 200，catalog loaded；
+- [x] FAK/FOK 字段和订单终态正确，无残留挂单；
+- [x] 市价/BEST 的 `limit_price=0` 路径手动验证；FIVELEVEL 待 CFFEX 场景；
+- [x] TargetPosTask 朝净目标收敛，无重复在途单；
+- [x] 风控拒绝原因可见且不落到柜台（第二笔本地拒绝）；
+- [x] 所有测试订单已撤、风险规则已清理、任务已删除；
+- [x] `artifacts/p0_simnow_*.md` 已生成并归档。
+
+## 7.1 2026-11-09 夜间 SimNow 实测
+
+- 服务器阶段：`open / night / trading=true`；
+- 只读探针：PASS；
+- 写场景：`advanced.fak`、`advanced.fok`、`risk.open_count_limit` PASS，target task 生命周期 PASS；
+- TargetPosTask 写场景：12/12 PASS，目标净持仓达到 1 手；
+- 手动验证 `price_type=ANY` 和 `BEST`：订单成交/撤单正常，SHFE 自动转换为可报限价；
+- 测试后活动委托 0、任务列表空，TargetPosTask 产生的 1 手多仓已平掉；
+- 账户原有隔夜空仓未做改动；
+- 首轮测试曾因账户可用资金较低被 CTP 拒绝（资金不足），随后在可用资金恢复后通过；该拒绝路径也验证了柜台错误能被订单 `last_msg` 观测。
+- FIVELEVEL 未在本次夜间场景断言，需 CFFEX 合约确认。
+
+报告目录：`artifacts/p0_simnow_evening_readonly/`、`artifacts/p0_simnow_evening_write2/`、`artifacts/p0_simnow_evening_target/`。
 
 ## 8. 已知限制
 
-- TargetPosTask v1 不自动追价/撤单重报；
+- TargetPosTask v1 已实现基础 Cancel/Replace，但未做任务级执行统计；
 - 风控按中国时区自然日近似交易日，夜盘跨交易日场景后续接入 `TradingCalendar`；
 - FIVELEVEL 只在 CFFEX 合约断言成功；
 - SimNow 的可用合约、夜盘和交易阶段会变化，脚本以 `/readyz` 和 `/quote` 为准，不假定固定合约一定可交易。
