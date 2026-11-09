@@ -26,7 +26,7 @@ cmake -S "$ROOT" -B "$BUILD" -G Ninja \
     -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" \
     -DTQSDK_ENABLE_CTP=ON \
     -DTQSDK_BUILD_TESTS=ON \
-    -DTQSDK_BUILD_EXAMPLES=OFF \
+    -DTQSDK_BUILD_EXAMPLES=OFF
 rc=$?
 echo "configure_rc=$rc"
 ((rc == 0)) || exit "$rc"
