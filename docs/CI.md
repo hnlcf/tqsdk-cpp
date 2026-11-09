@@ -34,7 +34,7 @@ artifacts/tsan/tsan.log
 ```
 
 2026-11-09 当前结果：ASan 338/338、TSan 338/338（2 项 TqMdNetwork 网络测试按环境跳过；
-新增 Tick UI 测试后 Web 为 10 项）。
+新增 Tick UI 测试后 Web 为 12 项）。
 
 ## 3. 短 soak
 

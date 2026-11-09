@@ -159,7 +159,7 @@ pnpm typecheck
 pnpm build
 ```
 
-当前 Vitest 覆盖（10 项）：
+当前 Vitest 覆盖（12 项）：
 
 - SMA/EMA/BOLL/MACD/RSI；
 - China futures session 分时选择；
