@@ -2631,3 +2631,79 @@ html[data-theme="light"] .indicator-block {
 .warning-text {
   color: var(--amber) !important;
 }
+/* ---- stable position columns ---- */
+.trading-tables .positions-table {
+  table-layout: fixed;
+  min-width: 1120px;
+}
+
+.trading-tables .positions-table th:nth-child(1),
+.trading-tables .positions-table td:nth-child(1) {
+  width: 136px;
+}
+
+.trading-tables .positions-table th:nth-child(2),
+.trading-tables .positions-table td:nth-child(2) {
+  width: 132px;
+}
+
+.trading-tables .positions-table th:nth-child(3),
+.trading-tables .positions-table td:nth-child(3) {
+  width: 58px;
+  text-align: center;
+}
+
+.trading-tables .positions-table th:nth-child(4),
+.trading-tables .positions-table td:nth-child(4) {
+  width: 78px;
+  text-align: right;
+}
+
+.trading-tables .positions-table th:nth-child(5),
+.trading-tables .positions-table td:nth-child(5) {
+  width: 96px;
+  text-align: right;
+}
+
+.trading-tables .positions-table th:nth-child(6),
+.trading-tables .positions-table td:nth-child(6) {
+  width: 96px;
+  text-align: right;
+}
+
+.trading-tables .positions-table th:nth-child(7),
+.trading-tables .positions-table td:nth-child(7) {
+  width: 108px;
+  text-align: right;
+}
+
+.trading-tables .positions-table th:nth-child(8),
+.trading-tables .positions-table td:nth-child(8) {
+  width: 108px;
+  text-align: right;
+}
+
+.trading-tables .positions-table th:nth-child(9),
+.trading-tables .positions-table td:nth-child(9) {
+  width: 92px;
+  text-align: right;
+}
+
+.trading-tables .positions-table th:nth-child(10),
+.trading-tables .positions-table td:nth-child(10) {
+  width: 112px;
+  text-align: right;
+}
+
+.trading-tables .positions-table th:nth-child(11),
+.trading-tables .positions-table td:nth-child(11) {
+  width: 92px;
+  text-align: right;
+}
+
+.trading-tables .positions-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

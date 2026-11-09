@@ -544,9 +544,14 @@ NodeConfig build_node_from_toml(const toml::table& root) {
         cfg.instruments.initial_delay = std::chrono::seconds(
             get_int(t, "initial_delay_sec", cfg.instruments.initial_delay.count()));
     }
+    bool kline_file_set = false;
+    bool tick_file_set  = false;
     if (const auto& t = require_table(root, "kline_cache"); !t.empty()) {
-        cfg.kline_cache.enabled             = get_bool(t, "enabled", true);
-        cfg.kline_cache.file                = get_str(t, "file", cfg.kline_cache.file);
+        cfg.kline_cache.enabled = get_bool(t, "enabled", true);
+        if (auto* file = t.get("file")) {
+            cfg.kline_cache.file = file->value<std::string>().value_or(cfg.kline_cache.file);
+            kline_file_set       = true;
+        }
         cfg.kline_cache.max_bars_per_series = static_cast<int>(std::max<int64_t>(
             1, get_int(t, "max_bars_per_series", cfg.kline_cache.max_bars_per_series)));
         cfg.kline_cache.flush_interval_ms   = static_cast<int>(std::max<int64_t>(
@@ -557,8 +562,11 @@ NodeConfig build_node_from_toml(const toml::table& root) {
             std::max<int64_t>(0, get_int(t, "fresh_after_sec", cfg.kline_cache.fresh_after_sec));
     }
     if (const auto& t = require_table(root, "tick_cache"); !t.empty()) {
-        cfg.tick_cache.enabled              = get_bool(t, "enabled", cfg.tick_cache.enabled);
-        cfg.tick_cache.file                 = get_str(t, "file", cfg.tick_cache.file);
+        cfg.tick_cache.enabled = get_bool(t, "enabled", cfg.tick_cache.enabled);
+        if (auto* file = t.get("file")) {
+            cfg.tick_cache.file = file->value<std::string>().value_or(cfg.tick_cache.file);
+            tick_file_set       = true;
+        }
         cfg.tick_cache.max_ticks_per_series = static_cast<std::size_t>(std::max<int64_t>(
             1, get_int(t, "max_ticks_per_series", cfg.tick_cache.max_ticks_per_series)));
         cfg.tick_cache.flush_interval_ms    = static_cast<int>(std::max<int64_t>(
@@ -566,6 +574,13 @@ NodeConfig build_node_from_toml(const toml::table& root) {
         cfg.tick_cache.max_pending_ticks    = static_cast<std::size_t>(std::max<int64_t>(
             1, get_int(t, "max_pending_ticks", cfg.tick_cache.max_pending_ticks)));
     }
+    if (const auto& m = require_table(root, "market_cache"); !m.empty()) {
+        cfg.market_cache_file = get_str(m, "file", cfg.market_cache_file);
+    }
+    if (!kline_file_set)
+        cfg.kline_cache.file = cfg.market_cache_file;
+    if (!tick_file_set)
+        cfg.tick_cache.file = cfg.market_cache_file;
     cfg.tq_auth = parse_tq_auth(root);
     cfg.runtime = parse_runtime(root);
     return cfg;

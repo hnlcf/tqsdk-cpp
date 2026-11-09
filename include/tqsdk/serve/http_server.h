@@ -2,6 +2,8 @@
 
 #include "tqsdk/pch.h"
 
+#include "tqsdk/constants.h"
+
 #include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/multiaccount/multi_account_manager.h"
 #include "tqsdk/serve/router.h"
@@ -217,7 +219,7 @@ private:
     Router                        router_;
     std::shared_ptr<WebSocketHub> ws_;
 
-    static constexpr std::size_t kMaxBody = 1u << 20; // 1MB
+    static constexpr std::size_t kMaxBody = constants::kMaxHttpBodyBytes;
 };
 
 } // namespace serve

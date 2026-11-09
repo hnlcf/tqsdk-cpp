@@ -2,6 +2,7 @@
 
 #include "tqsdk/pch.h"
 
+#include "tqsdk/constants.h"
 #include "tqsdk/domain/kline.h"
 
 namespace SQLite {
@@ -21,13 +22,13 @@ class KlineStore {
 public:
     struct Config {
         bool        enabled             = false;
-        std::string file                = "kline_cache.sqlite3";
-        int         max_bars_per_series = 2000;
-        int         flush_interval_ms   = 250;
-        std::size_t max_pending_bars    = 50'000;
+        std::string file                = std::string(constants::kDefaultMarketCacheFile);
+        int         max_bars_per_series = constants::kDefaultKlineMaxBars;
+        int         flush_interval_ms   = constants::kDefaultKlineFlushMs;
+        std::size_t max_pending_bars    = constants::kDefaultKlinePendingBars;
         /// 缓存最近一次写入距现在不超过该秒数时，远端只请求最新 2 根；
         /// 超过则请求完整 view_width，避免停机期间缺失太多 bar。
-        int64_t fresh_after_sec = 900;
+        int64_t fresh_after_sec = constants::kDefaultKlineFreshSec;
     };
 
     struct SeriesMeta {

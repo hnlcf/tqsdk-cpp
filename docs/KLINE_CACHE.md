@@ -124,9 +124,11 @@ CREATE TABLE kline_series (
 `config/node.toml`：
 
 ```toml
+[market_cache]
+file = "market_cache.sqlite3"   # K 线与 tick 共用同一个 SQLite
+
 [kline_cache]
 enabled = true
-file = "kline_cache.sqlite3"
 max_bars_per_series = 2000
 flush_interval_ms = 250
 max_pending_bars = 50000
@@ -138,7 +140,7 @@ fresh_after_sec = 900
 | 字段 | 说明 |
 |---|---|
 | `enabled` | 关闭后完全不影响主链路 |
-| `file` | SQLite 路径；相对路径按 node 工作目录解析 |
+| `file` | 未设置时继承 `[market_cache].file`；相对路径按 node 工作目录解析 |
 | `max_bars_per_series` | 每个 `(symbol,duration)` 保留上限，写入后裁剪 |
 | `flush_interval_ms` | writer 批量落盘周期 |
 | `max_pending_bars` | 未落盘队列上限，超限丢弃并计数 |

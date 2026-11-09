@@ -1,10 +1,13 @@
 #include "tqsdk/pch.h"
 
+#include "tqsdk/data/kline_store.h"
 #include "tqsdk/data/tick_store.h"
 
 #include <gtest/gtest.h>
 
 using tqsdk::Tick;
+using tqsdk::KlineBar;
+using tqsdk::KlineStore;
 using tqsdk::TickStore;
 
 namespace {
@@ -93,6 +96,53 @@ TEST(TickStoreTest, AppendLoadPruneAndJsonRoundtrip) {
         EXPECT_EQ(ticks.back().bid_volume[0], 10u);
         reopened.stop();
     }
+    std::filesystem::remove(path);
+    std::filesystem::remove(path + "-wal");
+    std::filesystem::remove(path + "-shm");
+}
+
+TEST(TickStoreTest, SharesSqliteFileWithKlineStore) {
+    const std::string path = temp_db_path();
+
+    TickStore::Config tick_cfg;
+    tick_cfg.enabled           = true;
+    tick_cfg.file              = path;
+    tick_cfg.flush_interval_ms = 5;
+    KlineStore::Config kline_cfg;
+    kline_cfg.enabled           = true;
+    kline_cfg.file              = path;
+    kline_cfg.flush_interval_ms = 5;
+
+    {
+        TickStore  tick_store(tick_cfg);
+        KlineStore kline_store(kline_cfg);
+        ASSERT_TRUE(tick_store.ready());
+        ASSERT_TRUE(kline_store.ready());
+
+        tick_store.append(make_tick("2026-11-09 21:00:00.000000", 3000, 1));
+        KlineBar bar;
+        bar.datetime = 1'000'000'000;
+        bar.open = bar.high = bar.low = bar.close = 3000;
+        bar.volume                                = 1;
+        kline_store.put_bars("SHFE.rb2701", 60'000'000'000LL, {bar});
+
+        tick_store.flush();
+        kline_store.flush();
+        tick_store.stop();
+        kline_store.stop();
+    }
+
+    {
+        TickStore  tick_store(tick_cfg);
+        KlineStore kline_store(kline_cfg);
+        ASSERT_TRUE(tick_store.ready());
+        ASSERT_TRUE(kline_store.ready());
+        EXPECT_EQ(tick_store.load_recent("SHFE.rb2701", 10).size(), 1u);
+        EXPECT_EQ(kline_store.load_recent("SHFE.rb2701", 60'000'000'000LL, 10).bars.size(), 1u);
+        tick_store.stop();
+        kline_store.stop();
+    }
+
     std::filesystem::remove(path);
     std::filesystem::remove(path + "-wal");
     std::filesystem::remove(path + "-shm");

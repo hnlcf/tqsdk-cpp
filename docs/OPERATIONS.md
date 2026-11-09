@@ -132,9 +132,14 @@ coalesce_ms = 10
 enabled = true
 file = "symbol.json"
 
+[market_cache]
+file = "run/live/market_cache.sqlite3"
+
 [kline_cache]
 enabled = true
-file = "run/live/kline_cache.sqlite3"
+
+[tick_cache]
+enabled = false
 
 [runtime]
 threads = 4

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tqsdk/constants.h"
 #include "tqsdk/data/data_series.h"
 #include "tqsdk/domain/quote.h"
 #include "tqsdk/domain/tick.h"
@@ -10,19 +11,21 @@ namespace tqsdk {
 ///
 /// tick 由 quote 快照固化而来；同一快照重复到达时不会产生重复元素。
 struct TickSeries {
-    InstrumentId instrument_id;
-    std::uint64_t capacity = 200;
-    DataSeries<Tick> data{200};
+    InstrumentId     instrument_id;
+    std::uint64_t    capacity = constants::kDefaultTickCapacity;
+    DataSeries<Tick> data{constants::kDefaultTickCapacity};
 
     /// 用于去重的上一份 quote 指纹。
-    Datetime last_datetime;
-    double   last_price  = kUnknownDouble;
-    double   last_bid1   = kUnknownDouble;
-    double   last_ask1   = kUnknownDouble;
+    Datetime      last_datetime;
+    double        last_price  = kUnknownDouble;
+    double        last_bid1   = kUnknownDouble;
+    double        last_ask1   = kUnknownDouble;
     std::uint64_t last_volume = 0;
 
-    explicit TickSeries(std::string symbol = {}, std::size_t cap = 200)
-        : instrument_id(std::move(symbol)), capacity(cap), data(cap) {}
+    explicit TickSeries(std::string symbol = {}, std::size_t cap = constants::kDefaultTickCapacity)
+        : instrument_id(std::move(symbol)),
+          capacity(cap),
+          data(cap) {}
 
     bool append_quote(const Quote& q) {
         if (!std::isfinite(q.last_price)) {
@@ -47,9 +50,9 @@ struct TickSeries {
         capacity = cap;
         data.reset(cap);
         last_datetime.clear();
-        last_price = kUnknownDouble;
-        last_bid1  = kUnknownDouble;
-        last_ask1  = kUnknownDouble;
+        last_price  = kUnknownDouble;
+        last_bid1   = kUnknownDouble;
+        last_ask1   = kUnknownDouble;
         last_volume = 0;
     }
 };

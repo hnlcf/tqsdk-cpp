@@ -2,6 +2,8 @@
 
 #include "tqsdk/pch.h"
 
+#include "tqsdk/constants.h"
+
 #include "tqsdk/serve/ws_protocol.h"
 #include "tqsdk/tqapi.h"
 
@@ -24,13 +26,13 @@ struct WsOptions {
     std::string path = "/stream";
 
     /// 服务端 WebSocket ping 间隔（前端应据此设置 pong 超时）。
-    std::chrono::milliseconds heartbeat_interval{std::chrono::seconds(30)};
+    std::chrono::milliseconds heartbeat_interval{std::chrono::seconds(constants::kDefaultWsHeartbeatSec)};
 
     /// 同时在线连接上限；超过后升级请求返回 503。
-    std::size_t max_clients = 256;
+    std::size_t max_clients = constants::kDefaultWsMaxClients;
 
     /// 单连接待发送队列上限；慢消费者丢最旧消息（行情可丢，避免拖垮进程）。
-    std::size_t max_queue = 1024;
+    std::size_t max_queue = constants::kDefaultWsMaxQueue;
 
     /// 数据面合并窗口：wait_update 后在 core strand 上短暂等待，把同一窗口
     /// 内的行情/交易变化合并为一帧 diff。0 表示不额外延迟（测试默认）。

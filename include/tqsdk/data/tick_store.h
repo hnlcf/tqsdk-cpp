@@ -2,6 +2,7 @@
 
 #include "tqsdk/pch.h"
 
+#include "tqsdk/constants.h"
 #include "tqsdk/domain/tick.h"
 
 namespace SQLite {
@@ -24,10 +25,10 @@ class TickStore {
 public:
     struct Config {
         bool        enabled              = false;
-        std::string file                 = "tick_cache.sqlite3";
-        std::size_t max_ticks_per_series = 1'000'000;
-        int         flush_interval_ms    = 250;
-        std::size_t max_pending_ticks    = 50'000;
+        std::string file                 = std::string(constants::kDefaultMarketCacheFile);
+        std::size_t max_ticks_per_series = constants::kDefaultTickMaxPerSeries;
+        int         flush_interval_ms    = constants::kDefaultTickFlushMs;
+        std::size_t max_pending_ticks    = constants::kDefaultTickPending;
     };
 
     struct SeriesMeta {

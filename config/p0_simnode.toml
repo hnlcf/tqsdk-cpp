@@ -43,9 +43,11 @@ file = "symbol.json"
 refresh_interval_sec = 21600
 initial_delay_sec = 60
 
+[market_cache]
+file = "/tmp/p0_simnode_market.sqlite3"
+
 [kline_cache]
 enabled = false
-file = "/tmp/p0_simnode_kline.sqlite3"
 
 [runtime]
 threads = 2

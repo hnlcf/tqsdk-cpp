@@ -139,11 +139,11 @@ pnpm typecheck
 pnpm build
 ```
 
-当前 Vitest 覆盖（9 项）：
+当前 Vitest 覆盖（10 项）：
 
 - SMA/EMA/BOLL/MACD/RSI；
 - China futures session 分时选择；
-- China time 标签；
+- China time 标签与 K 线 tick mark；
 - 合约名/乘数/本地模糊搜索 fallback。
 
 真实行情/下单验证需要 node 和网关；浏览器截图只能证明界面/渲染，不等于

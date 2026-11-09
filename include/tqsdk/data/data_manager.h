@@ -2,6 +2,7 @@
 
 #include "tqsdk/pch.h"
 
+#include "tqsdk/constants.h"
 #include "tqsdk/data/entity_store.h"
 #include "tqsdk/data/tick_series.h"
 #include "tqsdk/domain/account.h"
@@ -68,7 +69,8 @@ private:
 
 class TickRegistry {
 public:
-    TickSeries& get_or_create(std::string_view sym, int capacity = 200) {
+    TickSeries& get_or_create(std::string_view sym,
+                              int              capacity = constants::kDefaultTickCapacity) {
         auto [it, inserted] = streams_.try_emplace(std::string(sym));
         if (inserted) {
             it->second = TickSeries(std::string(sym), static_cast<std::size_t>(capacity));

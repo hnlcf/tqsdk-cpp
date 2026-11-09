@@ -35,6 +35,7 @@
 | [TQ_AUTH.md](TQ_AUTH.md) | 快期账户 TqAuth、token 刷新和目录下载 Bearer header |
 | [INSTRUMENTS.md](INSTRUMENTS.md) | 合约目录格式、加载与刷新 |
 | [KLINE_CACHE.md](KLINE_CACHE.md) | SQLite K 线缓存、恢复与容量 |
+| [CONSTANTS.md](CONSTANTS.md) | 跨模块默认值/容量/协议上限 |
 | [TICK_DATA.md](TICK_DATA.md) | Tick/DataSeries/DataDownloader |
 | [OPTION_ANALYTICS.md](OPTION_ANALYTICS.md) | 期权 ATM、Black-Scholes、Greeks |
 | [TRADING_STATUS.md](TRADING_STATUS.md) | TradingStatus 与动态 MD/TD URL |

@@ -2,6 +2,8 @@
 
 #include "tqsdk/pch.h"
 
+#include "tqsdk/constants.h"
+
 #include "tqsdk/data/data_manager.h"
 #include "tqsdk/data/diff_merge_engine.h"
 #include "tqsdk/data/kline_store.h"
@@ -89,7 +91,8 @@ public:
     Account&       get_account();
     const Account& get_account() const;
     /// 获取 tick 序列（由订阅到的 quote 快照固化）。首次调用会订阅该合约行情。
-    TickSeries* get_tick_serial(std::string_view symbol, int view_width = 200);
+    TickSeries* get_tick_serial(std::string_view symbol,
+                                int              view_width = constants::kDefaultTickCapacity);
     /// 每条新 tick 固化后调用；用于 node 侧 TickStore 持久化。
     using TickSink = std::function<void(const Tick&)>;
     void set_tick_sink(TickSink sink);
@@ -100,8 +103,9 @@ public:
     //   - 若该 (symbol, duration) 序列尚不存在，则在本地创建空流并发起订阅；
     //   - 返回序列指针（非空），后续通过 wait_update() + 本指针读取 bars。
     // view_width 为期望保留的 bar 根数（同时决定订阅请求的宽度）。
-    KlineStream*
-    get_kline_serial(std::string_view symbol, int64_t duration_ns, int view_width = 200);
+    KlineStream* get_kline_serial(std::string_view symbol,
+                                  int64_t          duration_ns,
+                                  int              view_width = constants::kDefaultKlineViewWidth);
 
     // ---- 显式订阅管理（供 serve 层做多客户端引用计数聚合）----
     // 与 get_quote/get_kline_serial 的"首次创建才订阅"不同，这些接口每次调用都

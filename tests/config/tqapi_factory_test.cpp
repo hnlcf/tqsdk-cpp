@@ -321,6 +321,30 @@ fresh_after_sec = 60
     EXPECT_FALSE(disabled.kline_cache.enabled);
 }
 
+TEST(TqApiFactoryConfig, MarketCacheFileIsSharedUnlessExplicit) {
+    auto cfg = parse_node_config(R"(
+[market_cache]
+file = "/tmp/market.sqlite3"
+[kline_cache]
+enabled = true
+[tick_cache]
+enabled = true
+)");
+    EXPECT_EQ(cfg.kline_cache.file, "/tmp/market.sqlite3");
+    EXPECT_EQ(cfg.tick_cache.file, "/tmp/market.sqlite3");
+
+    auto explicit_cfg = parse_node_config(R"(
+[market_cache]
+file = "/tmp/market.sqlite3"
+[kline_cache]
+file = "/tmp/kline-only.sqlite3"
+[tick_cache]
+file = "/tmp/tick-only.sqlite3"
+)");
+    EXPECT_EQ(explicit_cfg.kline_cache.file, "/tmp/kline-only.sqlite3");
+    EXPECT_EQ(explicit_cfg.tick_cache.file, "/tmp/tick-only.sqlite3");
+}
+
 TEST(TqApiFactoryConfig, ParsesNodeTickCache) {
     auto cfg = parse_node_config(R"(
 [tick_cache]

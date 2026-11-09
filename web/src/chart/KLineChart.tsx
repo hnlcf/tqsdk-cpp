@@ -11,7 +11,9 @@ import {
   type IPriceLine,
   type ISeriesApi,
   type SeriesType,
+  type Time,
   type UTCTimestamp,
+  TickMarkType,
 } from "lightweight-charts";
 import {
   boll,
@@ -22,11 +24,14 @@ import {
   type OHLCV,
 } from "../indicators/indicators";
 import { chartColors, type Theme } from "./theme";
+import { chinaDateTime, chinaTickMark } from "./time";
 
 interface Props {
   bars: OHLCV[];
   last?: OHLCV;
   symbol: string;
+  /// 切换合约/周期时变化；只在该 key 变化时 fitContent。
+  resetKey?: string;
   theme: Theme;
   priceDecimals?: number;
   indicators?: IndicatorConfig;
@@ -55,6 +60,8 @@ export default function KLineChart(props: Props) {
   let volume: ISeriesApi<"Histogram"> | undefined;
   let priceLine: IPriceLine | undefined;
   let dataKey = "";
+  let appliedResetKey = "";
+  let fitPending = true;
   const indicatorSeries = new Map<string, AnySeries>();
   const [ready, setReady] = createSignal(false);
   const [hover, setHover] = createSignal<OHLCV | undefined>();
@@ -272,8 +279,24 @@ export default function KLineChart(props: Props) {
 
   function updateSeriesData(forceFit: boolean) {
     if (!chart || !candle || !volume) return;
+    const resetKey = `${props.symbol}|${props.resetKey ?? ""}`;
+    if (resetKey !== appliedResetKey) {
+      appliedResetKey = resetKey;
+      dataKey = "";
+      fitPending = true;
+      candle.setData([]);
+      volume.setData([]);
+      if (priceLine) {
+        candle.removePriceLine(priceLine);
+        priceLine = undefined;
+      }
+      updateIndicators([]);
+    }
+    if (forceFit) fitPending = true;
+
     const bars = props.bars;
     if (bars.length === 0) {
+      dataKey = "";
       candle.setData([]);
       volume.setData([]);
       if (priceLine) {
@@ -283,7 +306,7 @@ export default function KLineChart(props: Props) {
       updateIndicators([]);
       return;
     }
-    const nextKey = `${props.symbol}|${bars.length}|${bars[0].time}`;
+    const nextKey = `${props.symbol}|${props.resetKey ?? ""}|${bars.length}|${bars[0].time}`;
     if (nextKey !== dataKey) {
       dataKey = nextKey;
       candle.setData(bars.map(toCandlestick));
@@ -294,7 +317,10 @@ export default function KLineChart(props: Props) {
           color: bar.close >= bar.open ? colors().volumeUp : colors().volumeDown,
         })),
       );
-      if (forceFit) chart.timeScale().fitContent();
+      if (fitPending) {
+        chart.timeScale().fitContent();
+        fitPending = false;
+      }
     } else {
       const last = props.last ?? bars[bars.length - 1];
       candle.update(toCandlestick(last));
@@ -351,10 +377,13 @@ export default function KLineChart(props: Props) {
         secondsVisible: false,
         rightOffset: 8,
         barSpacing: 7,
+        tickMarkFormatter: (time: Time, type: TickMarkType) => chinaTickMark(time, type),
       },
       localization: {
         locale: "zh-CN",
         priceFormatter: (price: number) => price.toFixed(decimals()),
+        timeFormatter: (time: Time) =>
+          typeof time === "number" ? chinaDateTime(time) : "",
       },
     });
 
@@ -426,8 +455,15 @@ export default function KLineChart(props: Props) {
         horzLine: { color: theme.crosshair, labelBackgroundColor: theme.crosshairLabel },
       },
       rightPriceScale: { borderColor: theme.border },
-      timeScale: { borderColor: theme.border },
-      localization: { priceFormatter: (price: number) => price.toFixed(decimals()) },
+      timeScale: {
+        borderColor: theme.border,
+        tickMarkFormatter: (time: Time, type: TickMarkType) => chinaTickMark(time, type),
+      },
+      localization: {
+        priceFormatter: (price: number) => price.toFixed(decimals()),
+        timeFormatter: (time: Time) =>
+          typeof time === "number" ? chinaDateTime(time) : "",
+      },
     });
     candle.applyOptions({
       upColor: theme.up,
@@ -443,9 +479,10 @@ export default function KLineChart(props: Props) {
 
   createEffect(() => {
     if (!ready() || !chart) return;
-    // Depend on symbol, data shape, config and theme so indicator series are
+    // Depend on symbol/reset key, config and theme so indicator series are
     // rebuilt only when their definition changes.
     props.symbol;
+    props.resetKey;
     JSON.stringify(props.indicators ?? {});
     colors();
     rebuildIndicators();
@@ -453,9 +490,12 @@ export default function KLineChart(props: Props) {
 
   createEffect(() => {
     if (!ready()) return;
+    props.symbol;
+    props.resetKey;
     props.bars;
     props.last;
-    updateSeriesData(true);
+    // 实时更新不能 fitContent；只有 symbol/resetKey 切换或首次数据才重置缩放。
+    updateSeriesData(false);
   });
 
   return (

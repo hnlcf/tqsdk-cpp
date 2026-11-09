@@ -3,6 +3,7 @@
 #include "tqsdk/pch.h"
 
 #include "tqsdk/auth/tq_auth.h"
+#include "tqsdk/constants.h"
 #include "tqsdk/data/kline_store.h"
 #include "tqsdk/data/tick_store.h"
 #include "tqsdk/gateway/ctp/ctp_config.h"
@@ -201,13 +202,16 @@ struct NodeConfig {
         uint16_t    gw_port = 0;
     };
     std::vector<AccountEndpoint> accounts;
-    std::string                  serve_bind = "127.0.0.1";
-    uint16_t                     serve_port = 8080;
-    std::vector<InstrumentId>    symbols;     ///< 启动即预订阅的合约（便于直接 curl 到数据）
-    InstrumentCatalog::Config    instruments; ///< [instruments] 标准合约目录/刷新
-    TqAuth::Config               tq_auth;     ///< [tq_auth] 快期账户认证
-    KlineStore::Config           kline_cache; ///< [kline_cache] 本地 K 线历史缓存
-    TickStore::Config            tick_cache;  ///< [tick_cache] 本地 tick 快照缓存
+
+    /// 统一行情缓存文件；未显式设置 [kline_cache].file/[tick_cache].file 时共用。
+    std::string               market_cache_file = std::string(constants::kDefaultMarketCacheFile);
+    std::string               serve_bind        = "127.0.0.1";
+    uint16_t                  serve_port        = 8080;
+    std::vector<InstrumentId> symbols;     ///< 启动即预订阅的合约（便于直接 curl 到数据）
+    InstrumentCatalog::Config instruments; ///< [instruments] 标准合约目录/刷新
+    TqAuth::Config            tq_auth;     ///< [tq_auth] 快期账户认证
+    KlineStore::Config        kline_cache; ///< [kline_cache] 本地 K 线历史缓存
+    TickStore::Config         tick_cache;  ///< [tick_cache] 本地 tick 快照缓存
 
     /// [serve.ws]：同一 HTTP 端口上的 WebSocket 实时推送。
     struct Ws {

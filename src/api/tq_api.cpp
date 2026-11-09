@@ -369,7 +369,7 @@ void TqApi::set_tick_sink(TickSink sink) {
 
 TickSeries* TqApi::get_tick_serial(std::string_view symbol, int view_width) {
     if (view_width <= 0)
-        view_width = 200;
+        view_width = constants::kDefaultTickCapacity;
     auto& series = data_.ticks.get_or_create(symbol, view_width);
     if (static_cast<int>(series.capacity) < view_width) {
         series.reset(static_cast<std::size_t>(view_width));

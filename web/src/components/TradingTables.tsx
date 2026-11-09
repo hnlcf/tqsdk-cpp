@@ -234,7 +234,7 @@ export default function TradingTables(props: Props) {
 
         <Show when={tab() === "positions"}>
           <div class="table-scroll">
-            <table>
+            <table class="positions-table">
               <thead>
                 <tr>
                   <th>合约</th>

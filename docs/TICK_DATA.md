@@ -46,9 +46,11 @@ GET /tick-cache/status                      # 缓存状态
 `TickStore` 把每条新 `Tick` 异步写入 SQLite（WAL），供重启后回放/分析：
 
 ```toml
+[market_cache]
+file = "market_cache.sqlite3"   # K 线与 tick 共用同一个 SQLite
+
 [tick_cache]
 enabled = true
-file = "tick_cache.sqlite3"
 max_ticks_per_series = 200000
 flush_interval_ms = 250
 max_pending_ticks = 50000

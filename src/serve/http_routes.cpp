@@ -317,8 +317,9 @@ void HttpServer::setup_routes() {
         {http::verb::get,
          "/ticks/{symbol}",
          make_entry([this](std::string symbol, Query<TickQuery> query) -> asio::awaitable<json> {
-             const std::size_t limit = query_size(query.value.limit, 200, 20000);
-             json              ticks = json::array();
+             const std::size_t limit =
+                 query_size(query.value.limit, constants::kDefaultTickCapacity, 20000);
+             json ticks = json::array();
              if (query.value.source == "cache" && tick_store_ != nullptr) {
                  for (const auto& tick : tick_store_->load_recent(symbol, limit)) {
                      ticks.push_back(tick);

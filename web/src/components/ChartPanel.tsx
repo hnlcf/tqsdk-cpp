@@ -159,6 +159,7 @@ export default function ChartPanel(props: Props) {
             bars={props.bars}
             last={last()}
             symbol={props.symbol}
+            resetKey={`${props.symbol}|${props.period}|${props.mode}`}
             theme={props.theme}
             priceDecimals={props.decimals}
             indicators={props.indicators}
