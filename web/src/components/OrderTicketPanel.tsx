@@ -4,12 +4,17 @@ import { formatMoney, formatPrice } from "../lib/format";
 
 export type TicketSide = "BUY" | "SELL";
 export type TicketOffset = "OPEN" | "CLOSE" | "CLOSETODAY" | "CLOSEYESTERDAY";
-export type TicketPriceType = "LIMIT" | "BEST" | "ANY";
+export type TicketPriceType = "LIMIT" | "BEST" | "ANY" | "FIVELEVEL";
+export type TicketAdvanced = "NONE" | "FAK" | "FOK";
+export type TicketVolumeCond = "ANY" | "MIN";
 
 export interface TicketOrder {
   side: TicketSide;
   offset: TicketOffset;
   priceType: TicketPriceType;
+  advanced: TicketAdvanced;
+  volumeCond: TicketVolumeCond;
+  minVolume: number;
   price: number;
   volume: number;
 }
@@ -29,6 +34,7 @@ const PRICE_TYPES: Array<{ value: TicketPriceType; label: string; hint: string }
   { value: "LIMIT", label: "限价", hint: "指定价格" },
   { value: "BEST", label: "对价", hint: "买一/卖一" },
   { value: "ANY", label: "市价", hint: "市价成交" },
+  { value: "FIVELEVEL", label: "五档价", hint: "最优五档" },
 ];
 
 const ACTIONS: Array<{
@@ -45,6 +51,9 @@ const ACTIONS: Array<{
 
 export default function OrderTicketPanel(props: Props) {
   const [priceType, setPriceType] = createSignal<TicketPriceType>("LIMIT");
+  const [advanced, setAdvanced] = createSignal<TicketAdvanced>("NONE");
+  const [volumeCond, setVolumeCond] = createSignal<TicketVolumeCond>("ANY");
+  const [minVolume, setMinVolume] = createSignal(1);
   const [volume, setVolume] = createSignal(1);
   const [message, setMessage] = createSignal("设置价格与数量后，直接点三键下单");
   const [busy, setBusy] = createSignal(false);
@@ -60,7 +69,9 @@ export default function OrderTicketPanel(props: Props) {
           props.quote?.ask_price1,
           props.decimals,
         )}`
-      : "以对手价/市价成交";
+      : priceType() === "FIVELEVEL"
+        ? "最优五档价"
+        : "以对手价/市价成交";
 
   function stepPrice(direction: -1 | 1) {
     const next = Math.max(tick(), props.price + direction * tick());
@@ -84,6 +95,9 @@ export default function OrderTicketPanel(props: Props) {
         side: action.side,
         offset: action.offset,
         priceType: priceType(),
+        advanced: advanced(),
+        volumeCond: volumeCond(),
+        minVolume: Math.max(1, Math.floor(minVolume())),
         price: isLimit() ? props.price : 0,
         volume: qty,
       });
@@ -128,6 +142,41 @@ export default function OrderTicketPanel(props: Props) {
             </For>
           </select>
         </label>
+
+        <label class="field">
+          <span>指令</span>
+          <select
+            value={advanced()}
+            onChange={(event) => setAdvanced(event.currentTarget.value as TicketAdvanced)}
+          >
+            <option value="NONE">普通</option>
+            <option value="FAK">FAK · 剩余撤销</option>
+            <option value="FOK">FOK · 全成或全撤</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>数量条件</span>
+          <select
+            value={volumeCond()}
+            onChange={(event) => setVolumeCond(event.currentTarget.value as TicketVolumeCond)}
+          >
+            <option value="ANY">ANY · 任意数量</option>
+            <option value="MIN">MIN · 最小数量</option>
+          </select>
+        </label>
+
+        <Show when={volumeCond() === "MIN"}>
+          <label class="field">
+            <span>最小成交</span>
+            <input
+              type="number"
+              min="1"
+              value={minVolume()}
+              onInput={(event) => setMinVolume(Math.max(1, Number(event.currentTarget.value)))}
+            />
+          </label>
+        </Show>
 
         <label class="field">
           <span>价格</span>

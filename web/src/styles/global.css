@@ -1205,6 +1205,44 @@ tbody tr:hover {
   background: rgba(79, 140, 255, 0.07);
 }
 
+.option-greeks-panel {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.option-greeks-panel .panel-heading {
+  padding: 0;
+}
+
+.greek-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.greek-strip > div {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+
+.greek-strip span {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.greek-strip strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
 .option-footnote {
   display: flex;
   justify-content: space-between;

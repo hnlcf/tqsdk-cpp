@@ -321,6 +321,41 @@ fresh_after_sec = 60
     EXPECT_FALSE(disabled.kline_cache.enabled);
 }
 
+TEST(TqApiFactoryConfig, ParsesAutoUrlFlags) {
+    auto cfg = parse_tqapi_config("[md]\nkind = \"tq\"\nauto_url = true\n[td]\nauto_url = true\n");
+    EXPECT_TRUE(cfg.md.auto_url);
+    EXPECT_TRUE(cfg.td.auto_url);
+
+    auto gw = parse_gw_config("[md]\nkind = \"tq\"\nauto_url = true\n[td]\nauto_url = true\n");
+    EXPECT_TRUE(gw.md.auto_url);
+    EXPECT_TRUE(gw.td.auto_url);
+}
+
+TEST(TqApiFactoryConfig, ParsesSimSpecsAndSeedPrices) {
+    auto cfg = parse_tqapi_config(R"(
+[td]
+kind = "sim"
+initial_balance = 200000.0
+
+[td.specs."SHFE.rb2701"]
+volume_multiple = 10.0
+price_tick = 1.0
+margin_rate = 0.12
+commission_per_lot = 2.5
+
+[td.last_prices]
+"SHFE.rb2701" = 3037.0
+)");
+    EXPECT_EQ(cfg.td.kind, TdKind::Sim);
+    EXPECT_DOUBLE_EQ(cfg.td.initial_balance, 200000.0);
+    ASSERT_EQ(cfg.td.specs.size(), 1u);
+    EXPECT_EQ(cfg.td.specs[0].symbol, "SHFE.rb2701");
+    EXPECT_DOUBLE_EQ(cfg.td.specs[0].volume_multiple, 10.0);
+    EXPECT_DOUBLE_EQ(cfg.td.specs[0].margin_rate, 0.12);
+    EXPECT_DOUBLE_EQ(cfg.td.specs[0].commission_per_lot, 2.5);
+    EXPECT_DOUBLE_EQ(cfg.td.last_prices.at("SHFE.rb2701"), 3037.0);
+}
+
 TEST(TqApiFactoryConfig, ParsesCtpSection) {
     const char* toml = R"(
 [md]

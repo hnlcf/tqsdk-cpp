@@ -2,8 +2,8 @@
 
 #include "tqsdk/pch.h"
 
-#include "tqsdk/data/kline_store.h"
 #include "tqsdk/auth/tq_auth.h"
+#include "tqsdk/data/kline_store.h"
 #include "tqsdk/gateway/ctp/ctp_config.h"
 #include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/ipc/protocol.h"
@@ -70,12 +70,26 @@ struct TqApiConfig {
 
         // kind == Remote 时的实例名（Hello.name）
         std::string name = "gw-md";
+
+        /// kind == Tq：启动时通过 TqAuth 名称服务解析 wss 地址。
+        bool auto_url = false;
     } md;
 
     struct Td {
         TdKind kind = TdKind::None;
 
-        // kind == Sim
+        // kind == Sim 的合约规格与初始行情种子。
+        struct Spec {
+            std::string symbol;
+            double      volume_multiple    = 1.0;
+            double      price_tick         = 0.0;
+            double      margin_rate        = 0.1;
+            double      commission_rate    = 0.0;
+            double      commission_per_lot = 0.0;
+        };
+        std::vector<Spec>             specs;
+        std::map<std::string, double> last_prices;
+
         double initial_balance = 1'000'000.0;
 
         // kind == Remote
@@ -86,6 +100,9 @@ struct TqApiConfig {
         std::chrono::milliseconds ack_timeout{std::chrono::seconds(10)};
         /// 远程网关（通常为 CTP）是否启用 SHFE 市价/对价限价转换。
         bool shfe_market_as_limit = true;
+
+        /// 预留：通过 TqAuth 解析 Tq 交易网关 URL；当前 CTP 网关不消费该字段。
+        bool auto_url = false;
     } td;
 
     /// [ctp] 柜台参数（md.kind/td.kind == ctp 时使用）。

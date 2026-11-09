@@ -194,6 +194,8 @@ nlohmann::json order_to_json(const Order& o) {
     j["limit_price"]       = jnum(o.limit_price);
     j["time_cond"]         = enum_str(o.time_cond);
     j["volume_cond"]       = enum_str(o.volume_cond);
+    j["advanced"]          = enum_str(o.advanced);
+    j["offset_leg2"]       = o.offset_leg2;
     j["min_volume"]        = o.min_volume;
     j["hedge_flag"]        = o.hedge_flag;
     j["status"]            = enum_str(o.status);

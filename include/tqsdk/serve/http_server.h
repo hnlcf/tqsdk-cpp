@@ -6,6 +6,7 @@
 #include "tqsdk/serve/router.h"
 #include "tqsdk/serve/ws_stream.h"
 #include "tqsdk/tqapi.h"
+#include "tqsdk/trading/order_tasks.h"
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -39,6 +40,56 @@ inline void from_json(const json& j, CatalogQuery& q) {
     q.include_expired = j.value("include_expired", std::string{});
     q.limit           = j.value("limit", std::string{});
     q.offset          = j.value("offset", std::string{});
+}
+
+/// 执行任务 REST 配置。
+struct TargetTaskRequest {
+    std::string   symbol;
+    std::int64_t  target_volume = 0;
+    std::string   mode          = "ACTIVE";
+    std::uint64_t max_volume    = 0;
+};
+inline void from_json(const json& j, TargetTaskRequest& r) {
+    r.symbol        = j.value("symbol", std::string{});
+    r.target_volume = j.value("target_volume", std::int64_t{0});
+    r.mode          = j.value("mode", std::string{"ACTIVE"});
+    r.max_volume    = j.value("max_volume", std::uint64_t{0});
+}
+
+struct OrderTaskRequest {
+    InsertOrderReq order;
+};
+inline void from_json(const json& j, OrderTaskRequest& r) {
+    r.order = j.value("order", InsertOrderReq{});
+}
+
+struct RiskRuleRequest {
+    std::string              type;
+    std::uint64_t            limit = 0;
+    std::vector<std::string> symbols;
+    std::uint64_t            window_ms = 1000;
+};
+inline void from_json(const json& j, RiskRuleRequest& r) {
+    r.type      = j.value("type", std::string{});
+    r.limit     = j.value("limit", std::uint64_t{0});
+    r.symbols   = j.value("symbols", std::vector<std::string>{});
+    r.window_ms = j.value("window_ms", std::uint64_t{1000});
+}
+
+/// `/option/analytics/{underlying}` 的估值查询参数。
+struct OptionAnalyticsQuery {
+    std::string spot;
+    std::string rate;
+    std::string dividend;
+    std::string vol;
+    std::string window;
+};
+inline void from_json(const json& j, OptionAnalyticsQuery& q) {
+    q.spot     = j.value("spot", std::string{});
+    q.rate     = j.value("rate", std::string{});
+    q.dividend = j.value("dividend", std::string{});
+    q.vol      = j.value("vol", std::string{});
+    q.window   = j.value("window", std::string{});
 }
 
 /// `/quotes?symbols=A,B,C` 的批量行情查询参数。
@@ -124,8 +175,13 @@ private:
     /// 注册全部路由（构造时调用一次）。
     void setup_routes();
 
-    TqApi*                        api_;
-    InstrumentCatalog*            catalog_ = nullptr;
+    TqApi*             api_;
+    InstrumentCatalog* catalog_ = nullptr;
+
+    std::uint64_t                                                     task_seq_ = 0;
+    std::unordered_map<std::string, std::shared_ptr<TargetPosTask>>   target_tasks_;
+    std::unordered_map<std::string, std::shared_ptr<InsertOrderTask>> order_tasks_;
+
     asio::any_io_executor         io_ex_;
     asio::any_io_executor         data_ex_;
     tcp::acceptor                 acceptor_;

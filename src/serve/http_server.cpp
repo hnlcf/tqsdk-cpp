@@ -59,6 +59,8 @@ void HttpServer::stop() noexcept {
     if (stopped_.exchange(true, std::memory_order_acq_rel)) {
         return;
     }
+    target_tasks_.clear();
+    order_tasks_.clear();
     if (ws_) {
         ws_->stop();
     }

@@ -23,7 +23,8 @@ std::string lower_ascii(std::string value) {
 } // namespace
 
 InstrumentCatalog::InstrumentCatalog(Config cfg, std::shared_ptr<TqAuth> auth)
-    : cfg_(std::move(cfg)), auth_(std::move(auth)) {}
+    : cfg_(std::move(cfg)),
+      auth_(std::move(auth)) {}
 
 InstrumentCatalog::~InstrumentCatalog() {
     try {
@@ -220,9 +221,9 @@ bool InstrumentCatalog::download_to_file() {
     try {
         SPDLOG_INFO("[Catalog] downloading {}", cfg_.url);
         util::HttpHeaders headers;
-        std::string user_agent = "tqsdk-node/0.1 instrument-catalog";
+        std::string       user_agent = "tqsdk-node/0.1 instrument-catalog";
         if (auth_) {
-            user_agent = auth_->user_agent();
+            user_agent               = auth_->user_agent();
             const auto authorization = auth_->authorization_header();
             if (!authorization.empty()) {
                 headers.emplace("Authorization", authorization);
@@ -231,7 +232,16 @@ bool InstrumentCatalog::download_to_file() {
             }
         }
         std::string body = util::http_get(cfg_.url, user_agent, std::chrono::seconds(120), headers);
-        const auto  tmp  = cfg_.file + ".tmp";
+        // 下载必须先在内存中完成 JSON 校验，再原子替换；否则网络截断会把
+        // 旧的可用 symbol.json 覆盖成半截文件。
+        if (body.empty()) {
+            throw std::runtime_error("empty response");
+        }
+        const auto parsed = nlohmann::json::parse(body);
+        if (!parsed.is_object() || parsed.empty()) {
+            throw std::runtime_error("response is not a non-empty JSON object");
+        }
+        const auto tmp = cfg_.file + ".tmp";
         {
             std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
             if (!out.is_open()) {

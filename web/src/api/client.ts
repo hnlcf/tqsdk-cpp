@@ -96,6 +96,39 @@ export interface OptionChain {
   puts: OptionChainItem[];
 }
 
+export interface OptionGreeks {
+  delta: number;
+  gamma: number;
+  vega: number;
+  theta: number;
+  rho: number;
+}
+
+export interface OptionAnalyticsRow {
+  instrument_id: string;
+  right: "CALL" | "PUT";
+  strike: number;
+  time_to_expiry: number;
+  market_price: number | null;
+  implied_volatility: number | null;
+  price: number;
+  intrinsic: number;
+  time_value: number;
+  greeks: OptionGreeks;
+}
+
+export interface OptionAnalytics {
+  underlying: string;
+  spot: number;
+  expire_datetime: number;
+  time_to_expiry: number;
+  rate: number;
+  dividend: number;
+  vol: number;
+  atm_strike: number;
+  rows: OptionAnalyticsRow[];
+}
+
 export interface CatalogStatus {
   enabled: boolean;
   loaded: boolean;
@@ -315,6 +348,24 @@ export function getOptionChain(underlying: string, signal?: AbortSignal) {
   );
 }
 
+export async function getOptionAnalytics(
+  underlying: string,
+  params: { spot?: number; rate?: number; dividend?: number; vol?: number; window?: number } = {},
+  signal?: AbortSignal,
+): Promise<OptionAnalytics> {
+  const query = new URLSearchParams();
+  if (params.spot !== undefined && Number.isFinite(params.spot)) query.set("spot", String(params.spot));
+  if (params.rate !== undefined) query.set("rate", String(params.rate));
+  if (params.dividend !== undefined) query.set("dividend", String(params.dividend));
+  if (params.vol !== undefined) query.set("vol", String(params.vol));
+  if (params.window !== undefined) query.set("window", String(params.window));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return requestJson<OptionAnalytics>(
+    `/option/analytics/${encodeURIComponent(underlying)}${suffix}`,
+    { signal },
+  );
+}
+
 export function getQuote(symbol: string, signal?: AbortSignal) {
   return requestJson<Quote>(`/quote/${encodeURIComponent(symbol)}`, { signal });
 }
@@ -358,10 +409,12 @@ export interface InsertOrderRequest {
   exchange_id?: string;
   direction: "BUY" | "SELL";
   offset: "OPEN" | "CLOSE" | "CLOSETODAY" | "CLOSEYESTERDAY";
-  price_type: "LIMIT" | "ANY" | "BEST";
+  price_type: "LIMIT" | "ANY" | "BEST" | "FIVELEVEL";
   limit_price: number;
-  time_cond: "GFD" | "IOC";
-  volume_cond: "ANY";
+  time_cond: "GFD" | "IOC" | "FOK";
+  volume_cond: "ANY" | "ALL" | "MIN";
+  advanced?: "NONE" | "FAK" | "FOK";
+  offset_leg2?: string;
   volume: number;
   min_volume?: number;
 }

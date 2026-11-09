@@ -160,6 +160,7 @@ TqApiConfig build_from_toml(const toml::table& root) {
         cfg.md.tcp_host = get_str(md_t, "tcp_host", "");
         cfg.md.tcp_port = static_cast<uint16_t>(get_int(md_t, "tcp_port", 0));
         cfg.md.name     = get_str(md_t, "name", cfg.md.name);
+        cfg.md.auto_url = get_bool(md_t, "auto_url", cfg.md.auto_url);
     }
 
     if (const auto& td_t = require_table(root, "td"); !td_t.empty()) {
@@ -172,6 +173,33 @@ TqApiConfig build_from_toml(const toml::table& root) {
         cfg.td.ack_timeout     = std::chrono::milliseconds(get_int(td_t, "ack_timeout_ms", 10000));
         cfg.td.shfe_market_as_limit =
             get_bool(td_t, "shfe_market_as_limit", cfg.td.shfe_market_as_limit);
+        cfg.td.auto_url = get_bool(td_t, "auto_url", cfg.td.auto_url);
+        if (auto* specs_tv = td_t.get("specs"); specs_tv && specs_tv->is_table()) {
+            const auto& specs_t = *specs_tv->as_table();
+            for (auto&& [k, v] : specs_t) {
+                const auto* sub = v.as_table();
+                if (!sub)
+                    continue;
+                TqApiConfig::Td::Spec spec;
+                spec.symbol          = std::string(k.str());
+                spec.volume_multiple = get_double(*sub, "volume_multiple", spec.volume_multiple);
+                spec.price_tick      = get_double(*sub, "price_tick", spec.price_tick);
+                spec.margin_rate     = get_double(*sub, "margin_rate", spec.margin_rate);
+                spec.commission_rate = get_double(*sub, "commission_rate", spec.commission_rate);
+                spec.commission_per_lot =
+                    get_double(*sub, "commission_per_lot", spec.commission_per_lot);
+                cfg.td.specs.push_back(std::move(spec));
+            }
+        }
+        if (auto* lp_tv = td_t.get("last_prices"); lp_tv && lp_tv->is_table()) {
+            for (auto&& [k, v] : *lp_tv->as_table()) {
+                if (auto d = v.value<double>()) {
+                    cfg.td.last_prices[std::string(k.str())] = *d;
+                } else if (auto i = v.value<int64_t>()) {
+                    cfg.td.last_prices[std::string(k.str())] = static_cast<double>(*i);
+                }
+            }
+        }
     }
 
     cfg.ctp = parse_ctp_config(root);
@@ -302,9 +330,23 @@ asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context&           c
     case TdKind::Mock:
         td = nullptr;
         break;
-    case TdKind::Sim:
-        td = std::make_unique<SimTdGateway>(ex, cfg.td.initial_balance);
+    case TdKind::Sim: {
+        auto sim = std::make_unique<SimTdGateway>(ex, cfg.td.initial_balance);
+        for (const auto& seed : cfg.td.specs) {
+            ContractSpec spec;
+            spec.volume_multiple    = seed.volume_multiple;
+            spec.price_tick         = seed.price_tick;
+            spec.margin_rate        = seed.margin_rate;
+            spec.commission_rate    = seed.commission_rate;
+            spec.commission_per_lot = seed.commission_per_lot;
+            sim->set_contract_spec(seed.symbol, spec);
+        }
+        for (const auto& [symbol, price] : cfg.td.last_prices) {
+            sim->on_tick(symbol, price);
+        }
+        td = std::move(sim);
         break;
+    }
     case TdKind::Ctp:
         // CTP 只在 gw 进程中构造。
         td = nullptr;
@@ -341,10 +383,11 @@ namespace {
 TqApiConfig::Md parse_gw_md(const toml::table& root) {
     TqApiConfig::Md md;
     if (const auto& t = require_table(root, "md"); !t.empty()) {
-        md.kind = parse_md_kind(get_str(t, "kind", "none"));
-        md.host = get_str(t, "host", md.host);
-        md.port = get_str(t, "port", md.port);
-        md.path = get_str(t, "path", md.path);
+        md.kind     = parse_md_kind(get_str(t, "kind", "none"));
+        md.host     = get_str(t, "host", md.host);
+        md.port     = get_str(t, "port", md.port);
+        md.path     = get_str(t, "path", md.path);
+        md.auto_url = get_bool(t, "auto_url", md.auto_url);
     }
     return md;
 }
@@ -354,6 +397,7 @@ TqApiConfig::Td parse_gw_td(const toml::table& root) {
     if (const auto& t = require_table(root, "td"); !t.empty()) {
         td.kind            = parse_td_kind(get_str(t, "kind", "none"));
         td.initial_balance = get_double(t, "initial_balance", td.initial_balance);
+        td.auto_url        = get_bool(t, "auto_url", td.auto_url);
     }
     return td;
 }
@@ -361,18 +405,17 @@ TqApiConfig::Td parse_gw_td(const toml::table& root) {
 TqAuth::Config parse_tq_auth(const toml::table& root) {
     TqAuth::Config auth;
     if (const auto& t = require_table(root, "tq_auth"); !t.empty()) {
-        auth.enabled = get_bool(t, "enabled", auth.enabled);
-        auth.user_name = get_str(t, "user_name", auth.user_name);
-        auth.password = get_str(t, "password", auth.password);
-        auth.auth_url = get_str(t, "auth_url", auth.auth_url);
-        auth.ns_url = get_str(t, "ns_url", auth.ns_url);
-        auth.broker_url_prefix =
-            get_str(t, "broker_url_prefix", auth.broker_url_prefix);
-        auth.mode = get_str(t, "mode", auth.mode);
-        auth.client_id = get_str(t, "client_id", auth.client_id);
-        auth.client_secret = get_str(t, "client_secret", auth.client_secret);
-        auth.user_agent = get_str(t, "user_agent", auth.user_agent);
-        auth.request_timeout = std::chrono::seconds(
+        auth.enabled           = get_bool(t, "enabled", auth.enabled);
+        auth.user_name         = get_str(t, "user_name", auth.user_name);
+        auth.password          = get_str(t, "password", auth.password);
+        auth.auth_url          = get_str(t, "auth_url", auth.auth_url);
+        auth.ns_url            = get_str(t, "ns_url", auth.ns_url);
+        auth.broker_url_prefix = get_str(t, "broker_url_prefix", auth.broker_url_prefix);
+        auth.mode              = get_str(t, "mode", auth.mode);
+        auth.client_id         = get_str(t, "client_id", auth.client_id);
+        auth.client_secret     = get_str(t, "client_secret", auth.client_secret);
+        auth.user_agent        = get_str(t, "user_agent", auth.user_agent);
+        auth.request_timeout   = std::chrono::seconds(
             std::max<int64_t>(1, get_int(t, "request_timeout_sec", auth.request_timeout.count())));
         auth.refresh_margin = std::chrono::seconds(
             std::max<int64_t>(0, get_int(t, "refresh_margin_sec", auth.refresh_margin.count())));

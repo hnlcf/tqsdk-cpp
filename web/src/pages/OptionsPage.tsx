@@ -3,11 +3,14 @@ import KLineChart from "../chart/KLineChart";
 import {
   createMarketStream,
   getKline,
+  getOptionAnalytics,
   getOptionChain,
   getOptionProducts,
   type InstrumentMeta,
   type KlineBar,
   type MarketStream,
+  type OptionAnalytics,
+  type OptionAnalyticsRow,
   type OptionChain,
   type OptionChainItem,
   type OptionProduct,
@@ -47,6 +50,8 @@ export default function OptionsPage(props: Props) {
   const [product, setProduct] = createSignal("");
   const [underlying, setUnderlying] = createSignal("");
   const [chain, setChain] = createSignal<OptionChain>();
+  const [analytics, setAnalytics] = createSignal<OptionAnalytics>();
+  const [analyticsError, setAnalyticsError] = createSignal("");
   const [selected, setSelected] = createSignal<OptionChainItem[]>([]);
   const [quotes, setQuotes] = createSignal<Record<string, Quote>>({});
   const [optionBars, setOptionBars] = createSignal<Bar[]>([]);
@@ -81,6 +86,21 @@ export default function OptionsPage(props: Props) {
     if (!item) return undefined;
     return quotes()[item.instrument_id] ?? item.quote;
   };
+
+  const analyticsBySymbol = createMemo(() => {
+    const map = new Map<string, OptionAnalyticsRow>();
+    for (const row of analytics()?.rows ?? []) map.set(row.instrument_id, row);
+    return map;
+  });
+
+  const atmIv = createMemo(() => {
+    const atm = analytics()?.atm_strike;
+    if (atm === undefined) return undefined;
+    const row = (analytics()?.rows ?? []).find(
+      (item) => item.strike === atm && item.implied_volatility !== null,
+    );
+    return row?.implied_volatility ?? analytics()?.vol;
+  });
 
   onMount(async () => {
     stream = createMarketStream({
@@ -161,10 +181,29 @@ export default function OptionsPage(props: Props) {
         seed[item.instrument_id] = item.quote;
       }
       setQuotes((previous) => ({ ...previous, ...seed }));
+      void loadAnalytics(target, response);
       setStatus("live");
     } catch (error) {
       setStatus("error");
       setLoadError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function loadAnalytics(target: string, response: OptionChain) {
+    const spot = priceOf(response.underlying_quote, response.underlying_contract);
+    try {
+      const result = await getOptionAnalytics(target, {
+        spot: spot > 0 ? spot : undefined,
+        rate: 0.02,
+        dividend: 0,
+        vol: 0.2,
+        window: 6,
+      });
+      setAnalytics(result);
+      setAnalyticsError("");
+    } catch (error) {
+      setAnalytics(undefined);
+      setAnalyticsError(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -299,7 +338,8 @@ export default function OptionsPage(props: Props) {
         </div>
         <div class="option-summary">
           <span>认沽/认购 <strong>{chain() ? ((chain()!.calls.length / Math.max(1, chain()!.puts.length)) * 100).toFixed(0) : "—"}%</strong></span>
-          <span>平值隐波 <strong>—</strong></span>
+          <span>平值行权价 <strong>{analytics()?.atm_strike ?? "—"}</strong></span>
+          <span>平值隐波 <strong>{atmIv() !== undefined ? `${(atmIv()! * 100).toFixed(1)}%` : "—"}</strong></span>
           <span>总持仓 <strong>{chain() ? (chain()!.calls.length + chain()!.puts.length).toLocaleString("zh-CN") : "—"}</strong></span>
         </div>
         <span class={`source-badge ${status() === "live" ? "live" : ""}`}>{loadError() || (status() === "live" ? "实时行情" : "等待后端")}</span>
@@ -326,7 +366,7 @@ export default function OptionsPage(props: Props) {
           <tbody>
             <For each={chainRows()}>
               {(row) => (
-                <tr class={row.strike === 3000 ? "option-atm-row" : ""}>
+                <tr class={row.strike === analytics()?.atm_strike ? "option-atm-row" : ""}>
                   <td><input type="checkbox" checked={isSelected(row.call)} onChange={() => row.call && toggleOption(row.call)} /></td>
                   <td class="mono positive">{priceOf(quoteOf(row.call), row.call).toFixed(2)}</td>
                   <td class={quoteChange(row.call) >= 0 ? "positive" : "negative"}>{formatChange(row.call)}</td>
@@ -402,6 +442,39 @@ export default function OptionsPage(props: Props) {
           ) : (
             <div class="empty-state">没有标的 K 线</div>
           )}
+        </div>
+      </div>
+
+      <div class="option-greeks-panel">
+        <div class="panel-heading compact">
+          <div>
+            <span class="eyebrow">GREEKS</span>
+            <h2>{firstSelected()?.instrument_id ?? "选中期权"}</h2>
+          </div>
+          <span class="muted">{analyticsError() || "ATM ±6 档 · BS 理论值"}</span>
+        </div>
+        <div class="greek-strip">
+          <For each={[
+            ["DELTA", analyticsBySymbol().get(firstSelected()?.instrument_id ?? "")?.greeks.delta],
+            ["GAMMA", analyticsBySymbol().get(firstSelected()?.instrument_id ?? "")?.greeks.gamma],
+            ["VEGA", analyticsBySymbol().get(firstSelected()?.instrument_id ?? "")?.greeks.vega],
+            ["THETA", analyticsBySymbol().get(firstSelected()?.instrument_id ?? "")?.greeks.theta],
+            ["RHO", analyticsBySymbol().get(firstSelected()?.instrument_id ?? "")?.greeks.rho],
+            [
+              "IV",
+              analyticsBySymbol().get(firstSelected()?.instrument_id ?? "")?.implied_volatility ??
+                undefined,
+            ],
+          ]}>
+            {(entry) => (
+              <div>
+                <span>{entry[0]}</span>
+                <strong class="mono">
+                  {typeof entry[1] === "number" ? entry[1].toFixed(4) : "—"}
+                </strong>
+              </div>
+            )}
+          </For>
         </div>
       </div>
 

@@ -397,10 +397,11 @@ export default function App() {
       offset: order.offset,
       price_type: order.priceType,
       limit_price: order.priceType === "LIMIT" ? order.price : 0,
-      time_cond: order.priceType === "LIMIT" ? "GFD" : "IOC",
-      volume_cond: "ANY",
+      time_cond: order.priceType === "LIMIT" && order.advanced === "NONE" ? "GFD" : "IOC",
+      volume_cond: order.advanced === "FOK" ? "ALL" : order.volumeCond,
+      min_volume: order.volumeCond === "MIN" ? order.minVolume : 0,
+      advanced: order.advanced,
       volume: order.volume,
-      min_volume: 0,
     });
     if (!result.success) throw new Error(result.error || "报单失败");
     void refreshReady();

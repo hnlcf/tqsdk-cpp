@@ -1,5 +1,7 @@
 #include "tqsdk/pch.h"
 
+#include "tqsdk/auth/dynamic_endpoint.h"
+#include "tqsdk/auth/tq_auth.h"
 #include "tqsdk/config/tqapi_factory.h"
 #include "tqsdk/gateway/sim/sim_td_gateway.h"
 #include "tqsdk/gateway/tq/tq_md_gateway.h"
@@ -111,9 +113,41 @@ int main(int argc, char** argv) {
     // 所有网关/会话共享同一条 core strand：多 worker 下状态更新严格串行。
     auto ex = asio::make_strand(io);
 
+    // 可选：通过 TqAuth 名称服务解析动态 MD URL。解析失败时保留静态配置。
+    TqApiConfig::Md md_cfg = cfg.md;
+    if (md_cfg.kind == MdKind::Tq && md_cfg.auto_url && cfg.tq_auth.enabled) {
+        TqAuth auth(cfg.tq_auth);
+        if (!auth.login()) {
+            SPDLOG_WARN("[gw] dynamic md url: TqAuth login failed: {}", auth.last_error());
+        } else {
+            DynamicEndpointResolver resolver(auth);
+            if (auto endpoint = resolver.md()) {
+                md_cfg.host = endpoint->host;
+                md_cfg.port = std::to_string(endpoint->port);
+                md_cfg.path = endpoint->path;
+                SPDLOG_INFO("[gw] dynamic md url resolved: {}", endpoint->to_string());
+            } else {
+                SPDLOG_WARN("[gw] dynamic md url unavailable: {}", auth.last_error());
+            }
+        }
+    }
+
     // 真实网关（进程生命周期内常驻，被所有连接共享）。
-    auto md = make_real_md(cfg.md, cfg.ctp, ex);
+    auto md = make_real_md(md_cfg, cfg.ctp, ex);
     auto td = make_real_td(cfg.td, cfg.ctp, ex);
+
+    // Tq 交易网关 URL 目前只做解析/诊断，CTP TD 仍使用 ctp.td_front。
+    if (cfg.td.auto_url && cfg.tq_auth.enabled) {
+        TqAuth auth(cfg.tq_auth);
+        if (auth.login()) {
+            DynamicEndpointResolver resolver(auth);
+            if (auto url = resolver.td(cfg.ctp.broker_id, cfg.ctp.user_id)) {
+                SPDLOG_INFO("[gw] dynamic td url resolved (ctp front unchanged): {}", *url);
+            } else {
+                SPDLOG_WARN("[gw] dynamic td url unavailable: {}", auth.last_error());
+            }
+        }
+    }
 
     // 若交易网关是 Sim：按配置灌入合约规格与初始撮合价，使其可直接撮合。
     if (auto* sim = dynamic_cast<SimTdGateway*>(td.get()); sim != nullptr) {

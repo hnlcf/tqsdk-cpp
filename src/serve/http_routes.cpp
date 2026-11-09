@@ -1,5 +1,8 @@
+#include "tqsdk/option/option_analytics.h"
+#include "tqsdk/trading/trading_status.h"
 #include "tqsdk/serve/http_server.h"
 #include "tqsdk/trading/holiday_calendar.h"
+#include "tqsdk/trading/trading_status.h"
 
 #include "tqsdk/domain/sentinel.h"
 #include "tqsdk/serve/json_convert.h"
@@ -55,6 +58,12 @@ void HttpServer::setup_routes() {
          })},
         {http::verb::get, "/holiday/status", make_entry([]() -> asio::awaitable<json> {
              co_return HolidayCalendar::global().status_json();
+         })},
+        {http::verb::get, "/trading-status", make_entry([this]() -> asio::awaitable<json> {
+             co_return TradingStatus::from_phase(api_->session_phase()).to_json();
+         })},
+        {http::verb::get, "/trading-status", make_entry([this]() -> asio::awaitable<json> {
+             co_return TradingStatus::from_phase(api_->session_phase()).to_json();
          })},
         {http::verb::get, "/catalog/status", make_entry([this]() -> asio::awaitable<Response> {
              if (catalog_ == nullptr) {
@@ -154,6 +163,100 @@ void HttpServer::setup_routes() {
                  {"puts", std::move(puts)},
              };
          })},
+        {http::verb::get,
+         "/option/analytics/{underlying}",
+         make_entry([this](std::string                 underlying,
+                           Query<OptionAnalyticsQuery> query) -> asio::awaitable<json> {
+             if (catalog_ == nullptr) {
+                 throw HttpError{http::status::service_unavailable, catalog_not_ready()};
+             }
+             const auto contracts = catalog_->option_contracts(underlying, 5000);
+             if (contracts.empty()) {
+                 throw HttpError{http::status::not_found,
+                                 json{{"error", "option chain not found"}}};
+             }
+
+             auto   spot_opt = json_value::detail::parse_double(query.value.spot);
+             double spot     = spot_opt.value_or(kUnknownDouble);
+             if (!std::isfinite(spot)) {
+                 spot = api_->get_quote(underlying).last_price;
+             }
+             if (!std::isfinite(spot) || spot <= 0) {
+                 throw HttpError{
+                     http::status::bad_request,
+                     json{{"error", "spot is required or underlying quote unavailable"}}};
+             }
+             const double rate = json_value::detail::parse_double(query.value.rate).value_or(0.0);
+             const double dividend =
+                 json_value::detail::parse_double(query.value.dividend).value_or(0.0);
+             const double vol    = json_value::detail::parse_double(query.value.vol).value_or(0.2);
+             const int    window = static_cast<int>(std::clamp<int64_t>(
+                 json_value::detail::parse_integer<int64_t>(query.value.window).value_or(5),
+                 0,
+                 50));
+             const double now_sec =
+                 std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch())
+                     .count();
+             double expire = contracts.front().expire_datetime;
+             double t      = expire > now_sec ? (expire - now_sec) / (365.25 * 86400.0) : 1e-6;
+
+             std::vector<double>                                                   strikes;
+             std::unordered_map<std::string, double>                               market_prices;
+             std::unordered_map<std::string, const InstrumentCatalog::Instrument*> by_strike_right;
+             for (const auto& c : contracts) {
+                 if (c.strike_price <= 0)
+                     continue;
+                 strikes.push_back(c.strike_price);
+                 const auto quote = api_->get_quote(c.instrument_id);
+                 if (std::isfinite(quote.last_price) && quote.last_price > 0) {
+                     market_prices[c.instrument_id] = quote.last_price;
+                 }
+                 by_strike_right[std::to_string(
+                                     static_cast<int64_t>(std::llround(c.strike_price))) +
+                                 "|" + c.option_class] = &c;
+             }
+             std::sort(strikes.begin(), strikes.end());
+             strikes.erase(std::unique(strikes.begin(), strikes.end()), strikes.end());
+             auto rows = compute_option_chain(
+                 spot, strikes, t, rate, dividend, vol, market_prices, underlying, window);
+             json out_rows = json::array();
+             for (auto& row : rows) {
+                 const auto key = std::to_string(static_cast<int64_t>(std::llround(row.strike))) +
+                                  "|" + (row.right == OptionRight::CALL ? "CALL" : "PUT");
+                 if (auto it = by_strike_right.find(key); it != by_strike_right.end()) {
+                     row.instrument_id = it->second->instrument_id;
+                 }
+                 out_rows.push_back(json{
+                     {"instrument_id", row.instrument_id},
+                     {"right", row.right == OptionRight::CALL ? "CALL" : "PUT"},
+                     {"strike", row.strike},
+                     {"time_to_expiry", row.time_to_expiry},
+                     {"market_price",
+                      row.has_market_price ? json(row.market_price) : json(nullptr)},
+                     {"implied_volatility",
+                      row.implied_volatility ? json(*row.implied_volatility) : json(nullptr)},
+                     {"price", row.valuation.price},
+                     {"intrinsic", row.valuation.intrinsic},
+                     {"time_value", row.valuation.time_value},
+                     {"greeks",
+                      json{{"delta", row.valuation.greeks.delta},
+                           {"gamma", row.valuation.greeks.gamma},
+                           {"vega", row.valuation.greeks.vega},
+                           {"theta", row.valuation.greeks.theta},
+                           {"rho", row.valuation.greeks.rho}}},
+                 });
+             }
+             co_return json{{"underlying", underlying},
+                            {"spot", spot},
+                            {"expire_datetime", expire},
+                            {"time_to_expiry", t},
+                            {"rate", rate},
+                            {"dividend", dividend},
+                            {"vol", vol},
+                            {"atm_strike", atm_strike(spot, strikes).value_or(0.0)},
+                            {"rows", std::move(out_rows)}};
+         })},
+
         {http::verb::get, "/kline-cache/status", make_entry([this]() -> asio::awaitable<json> {
              co_return api_->kline_cache_status();
          })},
@@ -185,6 +288,18 @@ void HttpServer::setup_routes() {
                  begin = end + 1;
              }
              co_return out;
+         })},
+        {http::verb::get,
+         "/ticks/{symbol}",
+         make_entry([this](std::string symbol) -> asio::awaitable<json> {
+             TickSeries* series = api_->get_tick_serial(symbol, 200);
+             json        ticks  = json::array();
+             if (series != nullptr) {
+                 for (const auto& tick : series->data) {
+                     ticks.push_back(tick);
+                 }
+             }
+             co_return json{{"instrument_id", symbol}, {"ticks", std::move(ticks)}};
          })},
         {http::verb::get, "/trading-snapshot", make_entry([this]() -> asio::awaitable<json> {
              co_return trading_snapshot(*api_);
@@ -224,6 +339,110 @@ void HttpServer::setup_routes() {
              CommandAck ack = co_await api_->cancel_order(CancelOrderReq{oid, ""});
              co_return json{
                  {"success", ack.success}, {"order_id", ack.order_id}, {"error", ack.error_msg}};
+         })},
+
+        // ---- 执行任务：供 SimNow/实盘验收和策略端复用 ----
+        {http::verb::post,
+         "/task/target",
+         make_entry([this](TargetTaskRequest r) -> asio::awaitable<json> {
+             if (r.symbol.empty()) {
+                 throw HttpError{http::status::bad_request, json{{"error", "symbol is required"}}};
+             }
+             api_->get_quote(r.symbol);
+             TargetPosPriceMode mode = TargetPosPriceMode::ACTIVE;
+             if (r.mode == "PASSIVE") {
+                 mode = TargetPosPriceMode::PASSIVE;
+             } else if (r.mode == "CUSTOM") {
+                 throw HttpError{http::status::bad_request,
+                                 json{{"error", "CUSTOM mode requires a C++ price_provider"}}};
+             } else if (r.mode != "ACTIVE") {
+                 throw HttpError{http::status::bad_request, json{{"error", "unknown task mode"}}};
+             }
+             TargetPosOptions options;
+             options.max_volume = r.max_volume;
+             const auto id      = "target-" + std::to_string(++task_seq_);
+             auto task = std::make_shared<TargetPosTask>(*api_, r.symbol, mode, std::move(options));
+             task->set_target_volume(r.target_volume);
+             target_tasks_[id] = std::move(task);
+             co_return json{{"success", true},
+                            {"task_id", id},
+                            {"symbol", r.symbol},
+                            {"target_volume", r.target_volume}};
+         })},
+        {http::verb::delete_,
+         "/task/target/{id}",
+         make_entry([this](std::string id) -> asio::awaitable<json> {
+             auto it = target_tasks_.find(id);
+             if (it == target_tasks_.end()) {
+                 throw HttpError{http::status::not_found, json{{"error", "target task not found"}}};
+             }
+             it->second->cancel();
+             target_tasks_.erase(it);
+             co_return json{{"success", true}, {"task_id", id}};
+         })},
+        {http::verb::post,
+         "/task/order",
+         make_entry([this](OrderTaskRequest r) -> asio::awaitable<json> {
+             if (r.order.instrument_id.empty() || r.order.volume == 0) {
+                 throw HttpError{http::status::bad_request, json{{"error", "invalid order task"}}};
+             }
+             const auto id    = "order-" + std::to_string(++task_seq_);
+             auto       task  = std::make_shared<InsertOrderTask>(*api_, std::move(r.order));
+             order_tasks_[id] = std::move(task);
+             co_return json{{"success", true}, {"task_id", id}};
+         })},
+        {http::verb::delete_,
+         "/task/order/{id}",
+         make_entry([this](std::string id) -> asio::awaitable<json> {
+             auto it = order_tasks_.find(id);
+             if (it == order_tasks_.end()) {
+                 throw HttpError{http::status::not_found, json{{"error", "order task not found"}}};
+             }
+             it->second->cancel();
+             order_tasks_.erase(it);
+             co_return json{{"success", true}, {"task_id", id}};
+         })},
+        {http::verb::get, "/tasks", make_entry([this]() -> asio::awaitable<json> {
+             json targets = json::array();
+             for (const auto& [id, task] : target_tasks_) {
+                 targets.push_back(json{{"task_id", id},
+                                        {"active", task->active()},
+                                        {"target_volume", task->target_volume()}});
+             }
+             json orders = json::array();
+             for (const auto& [id, task] : order_tasks_) {
+                 orders.push_back(json{{"task_id", id},
+                                       {"active", task->active()},
+                                       {"filled_volume", task->filled_volume()}});
+             }
+             co_return json{{"targets", std::move(targets)}, {"orders", std::move(orders)}};
+         })},
+
+        // ---- 风控规则：运行时可增配；用于 SimNow 验收 ----
+        {http::verb::get, "/risk/status", make_entry([this]() -> asio::awaitable<json> {
+             co_return json{{"rules", api_->risk_manager().size()}};
+         })},
+        {http::verb::delete_, "/risk/rules", make_entry([this]() -> asio::awaitable<json> {
+             api_->risk_manager().clear();
+             co_return json{{"success", true}, {"rules", 0}};
+         })},
+        {http::verb::post,
+         "/risk/rules",
+         make_entry([this](RiskRuleRequest r) -> asio::awaitable<json> {
+             std::shared_ptr<RiskRule> rule;
+             if (r.type == "OPEN_COUNT_LIMIT") {
+                 rule = std::make_shared<OpenCountsLimitRule>(r.limit, r.symbols);
+             } else if (r.type == "OPEN_VOLUME_LIMIT") {
+                 rule = std::make_shared<OpenVolumesLimitRule>(r.limit, r.symbols);
+             } else if (r.type == "ORDER_RATE_LIMIT") {
+                 rule = std::make_shared<OrderRateLimitRule>(
+                     r.limit, std::chrono::milliseconds(r.window_ms));
+             } else {
+                 throw HttpError{http::status::bad_request, json{{"error", "unknown risk rule"}}};
+             }
+             api_->risk_manager().add(rule);
+             co_return json{
+                 {"success", true}, {"type", r.type}, {"rules", api_->risk_manager().size()}};
          })},
 
         // ---- WebSocket 入口：普通 GET 给 426，提示必须走 Upgrade ----

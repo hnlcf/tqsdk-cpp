@@ -234,3 +234,40 @@ TEST(MockE2E, IsChangingVisibleUntilNextWait) {
     f.api->close();
     f.finish_and_check();
 }
+
+// quote diff -> TickSeries 固化快照；重复相同快照不会重复追加。
+TEST(MockE2E, TickSeriesAppendsQuoteSnapshots) {
+    Fixture f;
+    auto*   ticks = f.api->get_tick_serial("SHFE.rb2610", 3);
+    ASSERT_NE(ticks, nullptr);
+    f.md->inject(quote_diff("SHFE.rb2610",
+                            {{"datetime", "2026-11-09 21:00:00.000000"},
+                             {"last_price", 3800.0},
+                             {"volume", 42},
+                             {"bid_price1", 3799.0},
+                             {"ask_price1", 3801.0}}));
+    f.pump(30);
+    ASSERT_EQ(ticks->data.size(), 1u);
+    EXPECT_EQ(ticks->data.back()->last_price, 3800.0);
+    EXPECT_EQ(ticks->data.back()->bid_price[0], 3799.0);
+    EXPECT_EQ(ticks->data.back()->ask_price[0], 3801.0);
+
+    f.md->inject(quote_diff("SHFE.rb2610",
+                            {{"datetime", "2026-11-09 21:00:00.000000"},
+                             {"last_price", 3800.0},
+                             {"volume", 42},
+                             {"bid_price1", 3799.0},
+                             {"ask_price1", 3801.0}}));
+    f.pump(30);
+    EXPECT_EQ(ticks->data.size(), 1u);
+
+    f.md->inject(quote_diff("SHFE.rb2610",
+                            {{"datetime", "2026-11-09 21:00:01.000000"},
+                             {"last_price", 3802.0},
+                             {"volume", 43},
+                             {"bid_price1", 3801.0},
+                             {"ask_price1", 3803.0}}));
+    f.pump(30);
+    ASSERT_EQ(ticks->data.size(), 2u);
+    EXPECT_EQ(ticks->data.back()->last_price, 3802.0);
+}
