@@ -45,7 +45,8 @@ def main() -> int:
     data["p61_reports"] = p61_reports
 
     p62 = {}
-    for name in ("p62_acceptance_readonly.json", "p62_acceptance_write.json"):
+    for name in ("p62_acceptance_readonly.json", "p62_acceptance_write.json",
+                 "p62_acceptance_write_retry.json"):
         value = read_json(d / name)
         if value is not None:
             p62[name] = value
