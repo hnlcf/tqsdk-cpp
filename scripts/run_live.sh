@@ -1,27 +1,25 @@
 #!/usr/bin/env bash
 #
-# 一键启动 Tq 行情 + CTP 交易的 gw/node/UI 开发环境。
+# 启动 Tq 行情 + CTP 交易的 gw/node 后端。
 #
 # 默认读取 config/live.local.env（已加入 .gitignore）；可复制
 # config/live.local.env.example 后填写自己的 CTP 账号。
 #
 # 用法:
-#   ./scripts/run_live.sh                 # 使用 build-ui，启动 gw/node/UI
-#   ./scripts/run_live.sh --build         # 先构建三个目标
-#   ./scripts/run_live.sh --no-ui         # 只启动 gw/node，便于 curl
+#   ./scripts/run_live.sh                 # 启动 gw/node（build-ui）
+#   ./scripts/run_live.sh --build         # 先构建 gw/node
+#   ./scripts/run_live.sh --no-ui         # 兼容参数，等价于默认行为
 #   ./scripts/run_live.sh --help
 #
-# 退出: Ctrl-C，或关闭 UI 窗口。脚本会按 UI -> node -> gw 的顺序清理。
+# Web UI 请用 ./scripts/run_web.sh；退出时按 node -> gw 清理。
 
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export TQSDK_INDICATOR_SIDECAR="${TQSDK_INDICATOR_SIDECAR:-$ROOT/ui/indicator_sidecar/indicator_sidecar.py}"
 BUILD_DIR="${TQSDK_BUILD_DIR:-$ROOT/build-ui}"
 CONFIG_FILE="${TQSDK_LIVE_CONFIG:-$ROOT/config/live.local.env}"
 RUN_DIR="${TQSDK_RUN_DIR:-$ROOT/run/live}"
 BUILD_REQUESTED=0
-START_UI=1
 CLI_GW_PORT=""
 CLI_HTTP_PORT=""
 CLI_SYMBOLS=""
@@ -37,7 +35,6 @@ while [[ $# -gt 0 ]]; do
         shift
         ;;
     --no-ui)
-        START_UI=0
         shift
         ;;
     --config)
@@ -136,14 +133,12 @@ mkdir -p "$RUN_DIR" "$RUN_DIR/logs" "$FLOW_PATH"
 
 GW_BIN="${TQSDK_GW_BIN:-$BUILD_DIR/tqsdk-gw}"
 NODE_BIN="${TQSDK_NODE_BIN:-$BUILD_DIR/tqsdk-node}"
-UI_BIN="${TQSDK_UI_BIN:-$BUILD_DIR/bin/tqsdk-ui}"
 GW_CONFIG="$RUN_DIR/gw.toml"
 NODE_CONFIG="$RUN_DIR/node.toml"
 GW_LOG="$RUN_DIR/logs/gw.log"
 NODE_LOG="$RUN_DIR/logs/node.log"
-UI_LOG="$RUN_DIR/logs/ui.log"
 
-if [[ "$BUILD_REQUESTED" == "1" || ! -x "$GW_BIN" || ! -x "$NODE_BIN" ||       ( "$START_UI" == "1" && ! -x "$UI_BIN" ) ]]; then
+if [[ "$BUILD_REQUESTED" == "1" || ! -x "$GW_BIN" || ! -x "$NODE_BIN" ]]; then
     if [[ ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then
         cat >&2 <<EOF
 找不到构建目录: $BUILD_DIR
@@ -159,8 +154,8 @@ EOF
         echo "构建目录未开启 TQSDK_ENABLE_CTP: $BUILD_DIR" >&2
         exit 1
     fi
-    echo "构建 tqsdk-gw / tqsdk-node / tqsdk-ui ..."
-    cmake --build "$BUILD_DIR" --target tqsdk-gw tqsdk-node tqsdk-ui -j
+    echo "构建 tqsdk-gw / tqsdk-node ..."
+    cmake --build "$BUILD_DIR" --target tqsdk-gw tqsdk-node -j
 fi
 
 if ! grep -Eq '^TQSDK_ENABLE_CTP:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
@@ -317,19 +312,18 @@ fi
 
 GW_PID=""
 NODE_PID=""
-UI_PID=""
 cleanup() {
     trap - EXIT INT TERM
     set +e
     echo
-    echo "停止 gw/node/ui ..."
-    for pid in "$UI_PID" "$NODE_PID" "$GW_PID"; do
+    echo "停止 gw/node ..."
+    for pid in "$NODE_PID" "$GW_PID"; do
         if [[ -n "$pid" ]]; then
             kill -TERM "$pid" 2>/dev/null || true
         fi
     done
     sleep 1
-    for pid in "$UI_PID" "$NODE_PID" "$GW_PID"; do
+    for pid in "$NODE_PID" "$GW_PID"; do
         if [[ -n "$pid" ]]; then
             kill -KILL "$pid" 2>/dev/null || true
         fi
@@ -375,43 +369,21 @@ start_node() {
         if [[ "$ready" == "1" ]]; then
             echo "node 已就绪: http://127.0.0.1:$HTTP_PORT"
         else
-            echo "注意: /readyz 仍未返回 200；CTP 登录/行情可能较慢，UI 仍会启动。" >&2
+            echo "注意: /readyz 仍未返回 200；CTP 登录/行情可能较慢。" >&2
             echo "      可查看 $NODE_LOG 或 $GW_LOG。" >&2
         fi
     fi
 }
 
-start_ui() {
-    if [[ ! -x "$UI_BIN" ]]; then
-        echo "找不到 UI 可执行文件: $UI_BIN" >&2
-        exit 1
-    fi
-
-    if [[ -z "${QT_QPA_PLATFORM:-}" ]]; then
-        if [[ "${XDG_SESSION_TYPE:-}" == "wayland" && -n "${WAYLAND_DISPLAY:-}" ]]; then
-            export QT_QPA_PLATFORM=wayland
-        else
-            export QT_QPA_PLATFORM=xcb
-        fi
-    fi
-
-    echo "启动 Qt UI ($QT_QPA_PLATFORM) ..."
-    "$UI_BIN" --node-url "http://127.0.0.1:$HTTP_PORT" >"$UI_LOG" 2>&1 &
-    UI_PID=$!
-}
-
 start_gw
 start_node
-if [[ "$START_UI" == "1" ]]; then
-    start_ui
-fi
 
 cat <<EOF
 
 运行中:
   gw:   tcp://127.0.0.1:$GW_PORT
   node: http://127.0.0.1:$HTTP_PORT  (ws /stream)
-  ui:   $([[ "$START_UI" == "1" ]] && echo "$UI_BIN (PID $UI_PID)" || echo "未启动")
+  web:  ./scripts/run_web.sh  (http://127.0.0.1:5173)
   日志: $RUN_DIR/logs/
   合约: $SYMBOLS
 
@@ -420,14 +392,10 @@ cat <<EOF
   curl -s http://127.0.0.1:$HTTP_PORT/quote/SHFE.rb2701
   curl -s http://127.0.0.1:$HTTP_PORT/account
 
-按 Ctrl-C 或关闭 UI 窗口结束全部进程。
+Web UI 请另开终端运行 ./scripts/run_web.sh。按 Ctrl-C 结束 gw/node。
 EOF
 
 while true; do
-    if [[ -n "$UI_PID" ]] && ! kill -0 "$UI_PID" 2>/dev/null; then
-        echo "UI 已退出，开始清理。"
-        exit 0
-    fi
     if ! kill -0 "$GW_PID" 2>/dev/null; then
         echo "gw 已退出，开始清理；请查看 $GW_LOG。" >&2
         exit 1

@@ -8,7 +8,7 @@ C++20 期货数据与交易基础设施，目标是把 TqSdk 的“异步数据�
 - HTTP REST、WebSocket 实时 diff；
 - `web/` SolidJS + TypeScript + pnpm 独立 Web 终端；
 - TradingView Lightweight Charts K 线/分时/指标；
-- 自选、下单、持仓、委托、成交、账户权益完整面板；
+- 多自选列表、代码/名称模糊搜索、三键下单、合并持仓、账户权益联动；
 - 合约目录、节假日日历、SQLite K 线缓存；
 - CTP SimNow 验收、交易时段 soak、故障注入。
 
@@ -45,7 +45,7 @@ $EDITOR config/live.local.env
 ```
 
 `run_web.sh` 启动 gw/node + Vite；打开 `http://127.0.0.1:5173`。
-传统 Qt 前端仍可使用 `./scripts/run_live.sh`。
+只启动后端使用 `./scripts/run_live.sh`。
 
 只启动 gw/node：
 
@@ -113,7 +113,6 @@ include/tqsdk/
 src/              对应实现
 apps/             gw_main、node_main
 web/              TQSDK Board：SolidJS + pnpm + Lightweight Charts
-ui/               Qt 6 Widgets 历史前端（保留，Web 为主）
 tests/            GTest / e2e / CTP 映射
 scripts/          live、soak、SimNow 验收、诊断
 docs/             架构、模块、信息流、状态机、运维、专题
@@ -137,8 +136,8 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/CTP.md](docs/CTP.md)
 - [docs/WEB_FRONTEND.md](docs/WEB_FRONTEND.md)
 - [web/README.md](web/README.md)
-- [docs/UI_QT.md](docs/UI_QT.md)（历史保留）
-- [docs/INDICATOR_PLUGINS.md](docs/INDICATOR_PLUGINS.md)
+- [docs/archive/UI_QT_LEGACY.md](docs/archive/UI_QT_LEGACY.md)（历史）
+- [docs/archive/INDICATOR_PLUGINS_QT_LEGACY.md](docs/archive/INDICATOR_PLUGINS_QT_LEGACY.md)（历史）
 - [docs/INSTRUMENTS.md](docs/INSTRUMENTS.md)
 - [docs/KLINE_CACHE.md](docs/KLINE_CACHE.md)
 - [docs/SIMNOW_ACCEPTANCE.md](docs/SIMNOW_ACCEPTANCE.md)
@@ -151,7 +150,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 
 ## 当前状态
 
-- `ctest`：300 项通过（以本地构建目录为准）；
+- `ctest`：292 项通过（Qt UI 测试已移除，以本地构建目录为准）；
 - Web：`pnpm typecheck`、`pnpm test`、`pnpm build` 通过，连 node 的
   K 线/分时/指标/盘口/下单/持仓/委托/成交/权益已完成浏览器验证；
 - SimTd 24h soak：完成，`http_err=0`、`ws_err=0`、`fatal=""`；

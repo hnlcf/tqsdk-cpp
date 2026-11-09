@@ -1,6 +1,7 @@
 import { For, Show, createMemo } from "solid-js";
 import type { Quote } from "../api/client";
 import { formatPrice, formatVolume, quoteChange } from "../lib/format";
+import { instrumentName } from "../lib/instruments";
 import type { OHLCV, IndicatorConfig } from "../indicators/indicators";
 import KLineChart from "../chart/KLineChart";
 import IntradayChart from "../chart/IntradayChart";
@@ -46,7 +47,7 @@ export default function ChartPanel(props: Props) {
           <span class="exchange-badge">{props.symbol.split(".")[0]}</span>
           <div>
             <h1>{props.symbol}</h1>
-            <small>{props.quote?.datetime ?? "等待行情"}</small>
+            <small>{instrumentName(props.symbol)} · {props.quote?.datetime ?? "等待行情"}</small>
           </div>
         </div>
         <div class="quote-block">

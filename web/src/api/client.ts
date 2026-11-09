@@ -67,6 +67,7 @@ export interface Quote {
   price_tick?: number | null;
   price_decs?: number | null;
   volume_multiple?: number | null;
+  instrument_name?: string;
 }
 
 export interface KlineBar {
@@ -158,6 +159,10 @@ export interface PositionSnapshot {
   float_profit?: number | null;
   margin_long?: number | null;
   margin_short?: number | null;
+  volume_multiple?: number | null;
+  price_tick?: number | null;
+  price_decs?: number | null;
+  instrument_name?: string;
 }
 
 export interface OrderSnapshot {
@@ -353,7 +358,7 @@ export interface InsertOrderRequest {
   exchange_id?: string;
   direction: "BUY" | "SELL";
   offset: "OPEN" | "CLOSE" | "CLOSETODAY" | "CLOSEYESTERDAY";
-  price_type: "LIMIT";
+  price_type: "LIMIT" | "ANY" | "BEST";
   limit_price: number;
   time_cond: "GFD" | "IOC";
   volume_cond: "ANY";
@@ -522,6 +527,15 @@ export function createMarketStream(handlers: MarketHandlers): MarketStream {
       for (const topic of nextTopicSet) topics.add(topic);
 
       if (!online) return;
+      if (
+        !addedSymbols.length &&
+        !addedKlines.length &&
+        !topicsChanged &&
+        !releasedSymbols.length &&
+        !releasedKlines.length
+      ) {
+        return;
+      }
       if (releasedSymbols.length || releasedKlines.length) {
         send({
           op: "subscribe",
@@ -530,12 +544,7 @@ export function createMarketStream(handlers: MarketHandlers): MarketStream {
           klines: releasedKlines,
         });
       }
-      if (
-        addedSymbols.length ||
-        addedKlines.length ||
-        topicsChanged ||
-        (!releasedSymbols.length && !releasedKlines.length)
-      ) {
+      if (addedSymbols.length || addedKlines.length || topicsChanged) {
         sendSubscribe();
       }
     },

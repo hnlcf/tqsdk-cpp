@@ -207,13 +207,6 @@ if(TQSDK_BUILD_APPS)
     target_link_libraries(tqsdk-node PRIVATE tqsdk_core)
 endif()
 
-# ---------- Qt 桌面 UI（独立前端进程，可选） ----------
-# UI 只通过 REST + WebSocket 访问 node，不链接 tqsdk_core；默认关闭，
-# 让核心/gw/node/package 构建不依赖 Qt。
-option(TQSDK_BUILD_UI "Build the independent Qt desktop UI" OFF)
-if(TQSDK_BUILD_UI)
-    add_subdirectory(ui)
-endif()
 
 # ---------- 示例可执行文件 ----------
 option(TQSDK_BUILD_EXAMPLES "Build example executables" OFF)
@@ -357,8 +350,10 @@ endif()
 # 示例配置与文档；brokers.json 可能含柜台信息，不随包强制分发。
 install(FILES config/gw.toml config/node.toml
         DESTINATION share/tqsdk/config)
-install(FILES README.md docs/CTP.md docs/SOAK_PERF.md docs/THREADING.md
-              docs/IPC_RECOVERY.md docs/HA.md docs/WEB_FRONTEND.md docs/INSTRUMENTS.md docs/KLINE_CACHE.md docs/ARCHITECTURE_REVIEW.md docs/UI_QT.md docs/INDICATOR_PLUGINS.md docs/UI_ARCHITECTURE.md
+install(FILES README.md docs/README.md docs/ARCHITECTURE.md docs/MODULES.md
+              docs/FLOWS.md docs/STATE_MACHINES.md docs/PROTOCOLS.md docs/OPERATIONS.md
+              docs/CTP.md docs/SOAK_PERF.md docs/WEB_FRONTEND.md docs/INSTRUMENTS.md
+              docs/KLINE_CACHE.md docs/SIMNOW_ACCEPTANCE.md docs/ROADMAP.md
         DESTINATION share/doc/tqsdk)
 
 # ==========================================================

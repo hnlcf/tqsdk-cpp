@@ -108,6 +108,7 @@ void fill_quote_static(json& j, const Quote& q, const InstrumentCatalog* catalog
     // 目录里的静态规格比交易所推送更完整；price_decs 甚至可能被默认成 0。
     j["volume_multiple"] = static_cast<uint64_t>(instrument->volume_multiple);
     j["price_decs"]      = static_cast<uint64_t>(instrument->price_decs);
+    j["instrument_name"] = instrument->name;
 }
 
 } // namespace

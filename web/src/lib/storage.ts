@@ -74,6 +74,82 @@ export function saveWatchlist(symbols: string[]): void {
   writeJson(KEY_WATCHLIST, [...new Set(symbols.filter(Boolean))]);
 }
 
+export interface WatchlistGroup {
+  id: string;
+  name: string;
+  symbols: string[];
+}
+
+const KEY_WATCHLISTS = "tqsdk.watchlists.v2";
+const KEY_ACTIVE_WATCHLIST = "tqsdk.watchlists.active.v2";
+
+function newListId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `list-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function sanitizeGroup(value: unknown): WatchlistGroup | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  if (typeof row.id !== "string" || typeof row.name !== "string") return null;
+  const symbols = Array.isArray(row.symbols)
+    ? [...new Set(row.symbols.filter((item): item is string => typeof item === "string"))]
+    : [];
+  return { id: row.id, name: row.name, symbols };
+}
+
+/**
+ * Watchlists are versioned independently from the old single-list key.
+ * Existing v1 arrays are migrated into one "默认" group.
+ */
+export function readWatchlists(): { groups: WatchlistGroup[]; activeId: string } {
+  try {
+    const raw = window.localStorage.getItem(KEY_WATCHLISTS);
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        const groups = parsed
+          .map(sanitizeGroup)
+          .filter((group): group is WatchlistGroup => group !== null);
+        if (groups.length > 0) {
+          const storedActive = window.localStorage.getItem(KEY_ACTIVE_WATCHLIST);
+          const activeId = groups.some((group) => group.id === storedActive)
+            ? (storedActive as string)
+            : groups[0].id;
+          return { groups, activeId };
+        }
+      }
+    }
+  } catch {
+    // migrate/fallback below
+  }
+  const migrated = readWatchlist();
+  const first: WatchlistGroup = { id: "default", name: "默认", symbols: migrated };
+  return { groups: [first], activeId: first.id };
+}
+
+export function saveWatchlists(groups: WatchlistGroup[], activeId: string): void {
+  const normalized = groups
+    .map((group) => ({
+      ...group,
+      name: group.name.trim() || "未命名",
+      symbols: [...new Set(group.symbols.filter(Boolean))],
+    }))
+    .filter((group) => group.id);
+  writeJson(KEY_WATCHLISTS, normalized);
+  try {
+    window.localStorage.setItem(KEY_ACTIVE_WATCHLIST, activeId);
+  } catch {
+    // ignore
+  }
+}
+
+export function createWatchlistGroup(name: string, symbols: string[] = []): WatchlistGroup {
+  return { id: newListId(), name: name.trim() || "新自选", symbols: [...new Set(symbols)] };
+}
+
 export function readSelected(): string {
   try {
     return window.localStorage.getItem(KEY_SELECTED) || DEFAULT_WATCHLIST[0];

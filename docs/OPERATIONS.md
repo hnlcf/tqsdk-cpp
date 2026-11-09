@@ -8,7 +8,6 @@
 - Boost.Asio/Beast、OpenSSL、spdlog、nlohmann_json、magic_enum、
   tomlplusplus、CLI11、SQLiteCpp；
 - SolidJS + pnpm + Node.js LTS（Web 前端）；
-- Qt 6 Widgets（历史前端，可选）；
 - CTP SDK（可选，放在 `third_party/ctp/`）。
 
 依赖通过 vcpkg manifest 管理。CTP 目录结构：
@@ -31,7 +30,7 @@ CTP 构建开关和 preset 以 `CMakePresets.json` 为准。仓库通常使用�
 
 ```text
 build/              默认核心构建
-build-ui/           UI/tests 当前开发构建
+build-ui/           开发构建目录（保留历史名称）
 build-ctp/          CTP/live 构建
 build-release/      release 性能/soak
 build-package/      打包
@@ -42,7 +41,6 @@ build-package/      打包
 ```bash
 cmake -S . -B build -G Ninja \
   -DTQSDK_BUILD_TESTS=ON \
-  -DTQSDK_BUILD_UI=OFF
 cmake --build build
 ```
 
@@ -171,7 +169,7 @@ kind = "none"
 ./scripts/run_live.sh --gw-port 14330 --http-port 18081 --no-ui
 ```
 
-传统 Qt 前端仍可执行 `./scripts/run_live.sh --build`。退出顺序由脚本处理。
+`./scripts/run_live.sh --build` 只启动 gw/node；Web 使用 `run_web.sh`。退出顺序由脚本处理。
 
 ### 手工启动
 
@@ -345,5 +343,5 @@ node/gw logs      IPC/CTP/查询错误
 - CTP 仅 Linux 构建验证；
 - 连续 5 个交易日真实 CTP session soak 需要按交易日运行；
 - 真实部分成交依赖 SimNow/交易所撮合窗口；
-- Qt UI 保留维护，Web 是主前端；
+- Qt UI 已删除，Web 是唯一前端；
 - 交易所品种级夜盘/完整官方交易日历仍需扩展。

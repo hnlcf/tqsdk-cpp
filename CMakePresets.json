@@ -45,19 +45,9 @@
                 "CMAKE_SHARED_LINKER_FLAGS": "-fuse-ld=mold",
                 "TQSDK_ENABLE_CTP": "ON",
                 "TQSDK_BUILD_EXAMPLES": "OFF",
-                "TQSDK_BUILD_TESTS": "ON",
-                "TQSDK_BUILD_UI": "ON",
-                "TQSDK_BUILD_UI_TESTS": "ON"
+                "TQSDK_BUILD_TESTS": "ON"
             },
             "generator": "Ninja"
-        },
-        {
-            "name": "ui-package",
-            "inherits": "package",
-            "binaryDir": "${sourceDir}/build-ui-package",
-            "cacheVariables": {
-                "TQSDK_BUILD_UI": "ON"
-            }
         }
     ],
     "buildPresets": [
@@ -65,26 +55,11 @@
             "name": "ui-dev",
             "configurePreset": "ui-dev",
             "targets": [
-                "tqsdk-ui",
-                "tqsdk-ui-tests",
-                "tqsdk_tests",
-                "tqsdk-ui-model-tests",
-                "tqsdk-ui-parser-tests",
-                "tqsdk-ui-chart-tests",
-                "tqsdk-ui-indicator-tests",
-                "tqsdk-ui-table-tests",
-                "tqsdk-ui-window-tests",
-                "tqsdk-ui-panel-tests"
+                "tqsdk-gw",
+                "tqsdk-node",
+                "tqsdk_tests"
             ]
         }
     ],
-    "packagePresets": [
-        {
-            "name": "ui-package",
-            "configurePreset": "ui-package",
-            "generators": [
-                "TGZ"
-            ]
-        }
-    ]
+    "packagePresets": []
 }

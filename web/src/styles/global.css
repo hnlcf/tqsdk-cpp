@@ -35,7 +35,7 @@ body {
     var(--bg);
   color: var(--text);
   font-family: var(--sans);
-  font-size: 13px;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -85,7 +85,7 @@ button {
   border-radius: 10px;
   color: #061019;
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
   letter-spacing: -0.08em;
   background: linear-gradient(145deg, #7bd8ff, #4f8cff 55%, #8d7bff);
@@ -95,7 +95,7 @@ button {
 .brand strong {
   display: block;
   letter-spacing: 0.01em;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .brand small,
@@ -115,7 +115,7 @@ button {
 .brand small {
   display: block;
   margin-top: 2px;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.05em;
 }
 
@@ -124,7 +124,7 @@ button {
   align-items: center;
   gap: 10px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -166,7 +166,7 @@ button {
 }
 
 .account-strip small {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -175,7 +175,7 @@ button {
   margin-top: 4px;
   font-family: var(--mono);
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .workspace {
@@ -204,7 +204,7 @@ button {
 
 .panel-heading h2 {
   margin: 3px 0 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -213,7 +213,7 @@ button {
 }
 
 .eyebrow {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.16em;
 }
@@ -279,12 +279,12 @@ button {
 
 .watch-main strong {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 .watch-main small {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .watch-price {
@@ -293,13 +293,13 @@ button {
 
 .watch-price strong {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .watch-price small {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .session-note {
@@ -327,14 +327,14 @@ button {
 }
 
 .session-note strong {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .session-note small {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.35;
 }
 
@@ -372,7 +372,7 @@ button {
   color: #8cb7ff;
   background: rgba(79, 140, 255, 0.08);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.08em;
 }
 
@@ -388,7 +388,7 @@ button {
   display: block;
   margin-top: 3px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .quote-block {
@@ -407,7 +407,7 @@ button {
 
 .quote-block span {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .quote-stats {
@@ -426,13 +426,13 @@ button {
 }
 
 .quote-stats small {
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .quote-stats strong {
   margin-top: 5px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -460,7 +460,7 @@ button {
   background: transparent;
   color: var(--muted);
   padding: 5px 8px;
-  font-size: 10px;
+  font-size: 11px;
   transition: 140ms ease;
 }
 
@@ -498,7 +498,7 @@ button {
   padding: 7px 14px 9px;
   border-top: 1px solid var(--line);
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   background: #0a1118;
 }
 
@@ -519,7 +519,7 @@ button {
   color: var(--amber);
   background: rgba(231, 179, 90, 0.08);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.1em;
 }
 
@@ -546,7 +546,7 @@ button {
   padding: 8px;
   background: transparent;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -567,7 +567,7 @@ button {
 }
 
 .field > span {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .field select,
@@ -580,7 +580,7 @@ button {
   background: #091018;
   color: var(--text);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   padding: 0 9px;
 }
 
@@ -624,7 +624,7 @@ button {
   justify-content: space-between;
   padding-top: 3px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .order-summary strong {
@@ -639,7 +639,7 @@ button {
   border-radius: 7px;
   padding: 10px;
   color: #06130e;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
@@ -657,7 +657,7 @@ button {
   min-height: 28px;
   margin: 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.45;
 }
 
@@ -686,13 +686,13 @@ button {
 
 .position-card strong {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
 }
 
 .position-card small {
   margin-top: 3px;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .position-pnl {
@@ -711,7 +711,7 @@ button {
   padding: 2px 5px;
   background: transparent;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .table-action:hover {
@@ -726,7 +726,7 @@ button {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 th,
@@ -744,7 +744,7 @@ td:first-child {
 
 th {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.06em;
 }
@@ -777,7 +777,7 @@ tbody tr:hover {
   padding: 2px 5px;
   border-radius: 4px;
   font-family: var(--sans);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .order-status.alive {
@@ -795,7 +795,7 @@ tbody tr:hover {
   justify-content: space-between;
   gap: 16px;
   padding: 2px 3px;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 @media (max-width: 1180px) {
@@ -900,7 +900,7 @@ tbody tr:hover {
   padding: 7px 10px;
   background: transparent;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -928,7 +928,7 @@ tbody tr:hover {
   border-radius: 7px;
   background: transparent;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .theme-toggle:hover {
@@ -967,7 +967,7 @@ tbody tr:hover {
   margin: 0;
   max-width: 620px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -985,7 +985,7 @@ tbody tr:hover {
 
 .page-heading-stats small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.08em;
 }
 
@@ -1015,7 +1015,7 @@ tbody tr:hover {
 
 .search-field span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .search-field input {
@@ -1027,7 +1027,7 @@ tbody tr:hover {
   background: var(--bg);
   color: var(--text);
   padding: 0 9px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .search-field input:focus {
@@ -1046,7 +1046,7 @@ tbody tr:hover {
   padding: 6px 8px;
   background: transparent;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
   font-family: var(--mono);
 }
 
@@ -1060,7 +1060,7 @@ tbody tr:hover {
 .filter-hint {
   margin-left: auto;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
   white-space: nowrap;
 }
 
@@ -1083,7 +1083,7 @@ tbody tr:hover {
 
 .market-table td,
 .option-table td {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .market-table th:nth-child(-n + 3),
@@ -1103,7 +1103,7 @@ tbody tr:hover {
   border-radius: 4px;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .clickable-row {
@@ -1118,7 +1118,7 @@ tbody tr:hover {
   padding: 40px;
   color: var(--muted);
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .option-underlying {
@@ -1132,7 +1132,7 @@ tbody tr:hover {
 .option-underlying small,
 .option-underlying span {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .option-underlying strong {
@@ -1155,7 +1155,7 @@ tbody tr:hover {
   display: flex;
   gap: 18px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .option-summary strong {
@@ -1180,7 +1180,7 @@ tbody tr:hover {
   grid-template-columns: 1fr 1fr 1fr;
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-align: center;
@@ -1210,7 +1210,7 @@ tbody tr:hover {
   justify-content: space-between;
   gap: 16px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 /* ---------- light theme ---------- */
@@ -1393,7 +1393,7 @@ html[data-theme="light"] .chart-credit {
   color: var(--muted);
   vertical-align: middle;
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.08em;
 }
 
@@ -1419,7 +1419,7 @@ html[data-theme="light"] .chart-credit {
 .option-selectors label > span,
 .expiry-chip > span {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .option-selectors select {
@@ -1432,7 +1432,7 @@ html[data-theme="light"] .chart-credit {
   color: var(--text);
   padding: 0 7px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .option-selectors select:focus {
@@ -1449,7 +1449,7 @@ html[data-theme="light"] .chart-credit {
 
 .expiry-chip strong {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .option-analytics {
@@ -1515,7 +1515,7 @@ html[data-theme="light"] .chart-credit {
   color: var(--muted);
   background: transparent;
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .payoff-legend button:hover {
@@ -1618,7 +1618,7 @@ html[data-theme="light"] .source-badge.live {
   padding: 6px 12px;
   background: transparent;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .load-more:hover {
@@ -1645,7 +1645,7 @@ html[data-theme="light"] .source-badge.live {
   border-radius: 4px;
   color: var(--amber);
   background: rgba(231, 179, 90, 0.08);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .source-badge {
@@ -1654,7 +1654,7 @@ html[data-theme="light"] .source-badge.live {
   border-radius: 4px;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.08em;
 }
 
@@ -1680,7 +1680,7 @@ html[data-theme="light"] .source-badge.live {
   background: #0a1118;
   color: var(--text);
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
   outline: none;
 }
 
@@ -1694,7 +1694,7 @@ html[data-theme="light"] .source-badge.live {
   padding: 0 8px;
   background: rgba(79, 140, 255, 0.12);
   color: #9fc0ff;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .watch-row {
@@ -1724,7 +1724,7 @@ html[data-theme="light"] .source-badge.live {
   padding: 0 3px;
   color: var(--muted);
   background: transparent;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 12px;
 }
 
@@ -1755,7 +1755,7 @@ html[data-theme="light"] .source-badge.live {
   gap: 12px;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   pointer-events: none;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
@@ -1789,7 +1789,7 @@ html[data-theme="light"] .source-badge.live {
   border-radius: 6px;
   color: var(--amber);
   background: rgba(231, 179, 90, 0.06);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.5;
 }
 
@@ -1814,13 +1814,13 @@ html[data-theme="light"] .source-badge.live {
 }
 
 .quick-order strong {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .quick-order small {
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 7px;
+  font-size: 8px;
   letter-spacing: 0.04em;
 }
 
@@ -1875,7 +1875,7 @@ html[data-theme="light"] .source-badge.live {
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   text-align: right;
 }
 
@@ -1901,7 +1901,7 @@ html[data-theme="light"] .source-badge.live {
   padding: 3px 12px;
   background: transparent;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   text-align: right;
 }
 
@@ -1943,7 +1943,7 @@ html[data-theme="light"] .source-badge.live {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   padding: 3px 12px;
-  font-size: 9px;
+  font-size: 10px;
   text-align: right;
 }
 
@@ -1978,14 +1978,14 @@ html[data-theme="light"] .source-badge.live {
 
 .account-card small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.06em;
 }
 
 .account-card strong {
   margin-top: 4px;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -2006,7 +2006,7 @@ html[data-theme="light"] .source-badge.live {
   padding: 7px 12px;
   background: transparent;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .table-tabs button span {
@@ -2038,7 +2038,7 @@ html[data-theme="light"] .source-badge.live {
 
 .empty-state.small {
   padding: 8px 12px;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .toast {
@@ -2053,7 +2053,7 @@ html[data-theme="light"] .source-badge.live {
   background: rgba(12, 22, 33, 0.96);
   color: var(--text);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 html[data-theme="light"] .chart-stage,
@@ -2098,6 +2098,155 @@ html[data-theme="light"] .account-card {
 
   .chart-legend {
     gap: 7px;
-    font-size: 8px;
+    font-size: 9px;
   }
+}
+
+/* ---- multi-watchlist / fuzzy search ---- */
+.watchlist-groups {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 25px 25px 25px;
+  gap: 4px;
+  padding: 0 10px 8px;
+}
+
+.watchlist-groups select {
+  min-width: 0;
+  height: 29px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 0 7px;
+  background: #0a1118;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  outline: none;
+}
+
+.watchlist-groups button {
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #0a1118;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.watchlist-groups button:hover {
+  border-color: var(--blue);
+  color: var(--text);
+}
+
+.watchlist-groups button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.watch-add.group-add {
+  padding-top: 0;
+}
+
+.watch-suggestions {
+  max-height: 190px;
+  margin: 0 10px 8px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #091018;
+}
+
+.watch-suggestion {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  border-bottom: 1px solid rgba(27, 40, 53, 0.7);
+  padding: 7px 9px;
+  background: transparent;
+  text-align: left;
+}
+
+.watch-suggestion:last-child {
+  border-bottom: 0;
+}
+
+.watch-suggestion:hover {
+  background: rgba(79, 140, 255, 0.1);
+}
+
+.watch-suggestion span:first-child {
+  min-width: 0;
+}
+
+.watch-suggestion strong,
+.watch-suggestion small {
+  display: block;
+}
+
+.watch-suggestion strong {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.watch-suggestion small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.exchange-tag {
+  flex: 0 0 auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 2px 4px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
+/* ---- simple three-key ticket ---- */
+.order-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 15px 0;
+}
+
+.market-price-hint {
+  min-height: 33px;
+  display: flex;
+  align-items: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: 6px;
+  padding: 0 9px;
+  color: var(--muted);
+  background: #091018;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.quick-orders.three-key {
+  padding-top: 10px;
+}
+
+.quick-order:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* ---- merged real-time positions ---- */
+.trading-tables .table-scroll {
+  max-height: 320px;
+}
+
+.trading-tables table {
+  min-width: 1260px;
+}
+
+/* Larger type across the dense terminal UI. Headings stay at their design
+   size so the extra pixel improves readability rather than page hierarchy. */
+body {
+  font-size: 14px;
 }

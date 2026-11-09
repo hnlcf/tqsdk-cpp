@@ -1,6 +1,6 @@
 # TQSDK Board Web 前端
 
-> 状态：当前主前端。Qt 6 Widgets 版本保留在 `ui/`，但后续功能以 `web/` 为准。
+> 状态：当前唯一前端；Qt UI 代码已删除。
 > 目录：`web/`；包名：`tqsdk-board`。
 
 ## 1. 技术栈
@@ -31,15 +31,18 @@ env VITE_PROXY_TARGET=http://127.0.0.1:18082 pnpm dev
 
 ### 交易终端
 
-- 自选列表：添加/删除/上下移动/localStorage；
+- 自选列表：多列表、新建/重命名/删除、代码/名称模糊搜索、上下移动、localStorage；
 - K 线：1m/5m/15m/30m/1h/2h/4h/1d/3d/1w；
 - 分时：当前 China futures session、面积图、均价线、成交量、昨收；
 - 指标：MA/BOLL/MACD/RSI；
 - 盘口：5 档深度，点击价格填入下单板；
 - 分笔成交：由 quote volume 增量生成；
-- 下单板：买开/卖开/平仓、开平/平今/平昨、限价、数量；
-- 持仓/委托/成交：REST + WS 合并；
-- 账户权益：权益/可用/保证金/浮盈/风险度；
+- 三键下单：买开/卖开/平仓直接提交；价格类型支持限价/对价/市价；
+- 持仓/委托/成交：REST + WS 合并；持仓多空合并为一行，
+  显示合约名、最新价、开仓均价、保证金、浮动盈亏、浮盈比例、持仓市值、资金占比；
+- 持仓实时性：quote 更新时前端重算浮动盈亏/市值，交易快照 5s 兜底对账；
+- 账户权益：权益/可用/保证金/浮盈/风险度；权益按实时持仓浮盈修正，
+  WS 快照与 5s REST 对账同步；
 - `/readyz` 或 WS 未就绪时禁用报单。
 
 ### 期货列表
@@ -116,11 +119,12 @@ pnpm typecheck
 pnpm build
 ```
 
-当前 Vitest 覆盖：
+当前 Vitest 覆盖（8 项）：
 
 - SMA/EMA/BOLL/MACD/RSI；
 - China futures session 分时选择；
-- China time 标签。
+- China time 标签；
+- 合约名/乘数/本地模糊搜索 fallback。
 
 真实行情/下单验证需要 node 和网关；浏览器截图只能证明界面/渲染，不等于
 CTP 验收。

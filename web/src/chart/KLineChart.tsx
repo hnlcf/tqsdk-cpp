@@ -326,6 +326,7 @@ export default function KLineChart(props: Props) {
         background: { type: ColorType.Solid, color: theme.background },
         textColor: theme.text,
         fontFamily: "Inter, SFMono-Regular, Menlo, monospace",
+        fontSize: 13,
         attributionLogo: true,
       },
       grid: {

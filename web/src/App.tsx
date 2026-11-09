@@ -13,6 +13,7 @@ import {
   API_BASE,
   cancelOrder,
   createMarketStream,
+  getInstruments,
   getKline,
   getQuote,
   getReadyz,
@@ -45,21 +46,28 @@ import {
 } from "./indicators/indicators";
 import { finite, priceDecimals } from "./lib/format";
 import {
+  createWatchlistGroup,
   readChartMode,
   readIndicators,
   readPeriod,
   readSelected,
   readTheme,
-  readWatchlist,
+  readWatchlists,
   saveChartMode,
   saveIndicators,
   savePeriod,
   saveSelected,
   saveTheme,
-  saveWatchlist,
+  saveWatchlists,
   type Theme,
   type View,
+  type WatchlistGroup,
 } from "./lib/storage";
+import {
+  fallbackVolumeMultiple,
+  instrumentName,
+  searchFallbackInstruments,
+} from "./lib/instruments";
 
 const PERIODS: PeriodOption[] = [
   { id: "1m", label: "1m", durationNs: 60_000_000_000 },
@@ -102,9 +110,13 @@ function initialView(): View {
 }
 
 export default function App() {
+  const initialWatchlists = readWatchlists();
   const [view, setView] = createSignal<View>(initialView());
   const [theme, setTheme] = createSignal<Theme>(readTheme());
-  const [watchlist, setWatchlist] = createSignal<string[]>(readWatchlist());
+  const [watchlistGroups, setWatchlistGroups] = createSignal<WatchlistGroup[]>(
+    initialWatchlists.groups,
+  );
+  const [activeListId, setActiveListId] = createSignal(initialWatchlists.activeId);
   const [selected, setSelected] = createSignal(readSelected());
   const [period, setPeriod] = createSignal(readPeriod());
   const [chartMode, setChartMode] = createSignal<"kline" | "time">(readChartMode());
@@ -130,11 +142,16 @@ export default function App() {
   let stream: MarketStream | undefined;
   let loadGeneration = 0;
   let snapshotLoaded = false;
+  let tradingRefreshInFlight = false;
   let tapeSequence = 0;
   let priceSymbol = "";
   const lastVolume = new Map<string, number>();
   const lastPrice = new Map<string, number>();
 
+  const activeGroup = createMemo(
+    () => watchlistGroups().find((group) => group.id === activeListId()) ?? watchlistGroups()[0],
+  );
+  const watchlist = createMemo(() => activeGroup()?.symbols ?? []);
   const selectedQuote = createMemo(() => quotes()[selected()]);
   const decimals = createMemo(() => priceDecimals(selectedQuote(), 2));
   const periodDuration = createMemo(
@@ -149,6 +166,43 @@ export default function App() {
   const tradingReady = createMemo(
     () => Boolean(ready()?.ready) && streamStatus() === "online",
   );
+  const liveFloatProfit = createMemo(() => {
+    let total = 0;
+    for (const row of Object.values(positions())) {
+      const quote = quotes()[row.instrument_id];
+      const last = finite(quote?.last_price) ? quote.last_price : row.last_price;
+      const long = row.volume_long ?? 0;
+      const short = row.volume_short ?? 0;
+      const longOpen = row.open_price_long ?? row.position_price_long;
+      const shortOpen = row.open_price_short ?? row.position_price_short;
+      const multiplier =
+        (finite(row.volume_multiple) && row.volume_multiple > 0
+          ? row.volume_multiple
+          : finite(quote?.volume_multiple) && quote.volume_multiple > 0
+            ? quote.volume_multiple
+            : fallbackVolumeMultiple(row.instrument_id)) || 1;
+      if (finite(last) && (long === 0 || finite(longOpen)) && (short === 0 || finite(shortOpen))) {
+        total += finite(longOpen) ? (last - longOpen) * long * multiplier : 0;
+        total += finite(shortOpen) ? (shortOpen - last) * short * multiplier : 0;
+      } else {
+        total +=
+          (row.float_profit_long ?? 0) + (row.float_profit_short ?? 0) || row.float_profit || 0;
+      }
+    }
+    return total;
+  });
+  const displayAccount = createMemo(() => {
+    const current = account();
+    if (!current) return current;
+    const hasPositions = Object.keys(positions()).length > 0;
+    if (!hasPositions) return current;
+    const floatProfit = liveFloatProfit();
+    const equity =
+      finite(current.balance) && finite(current.float_profit)
+        ? current.balance - current.float_profit + floatProfit
+        : current.balance;
+    return { ...current, balance: equity, float_profit: floatProfit };
+  });
 
   function notify(message: string) {
     setToast(message);
@@ -206,6 +260,19 @@ export default function App() {
     }
   }
 
+  async function refreshTradingSnapshot() {
+    if (tradingRefreshInFlight || !tradingReady()) return;
+    tradingRefreshInFlight = true;
+    try {
+      applyTradeData(await getTradingSnapshot(), true);
+      snapshotLoaded = true;
+    } catch {
+      // Keep the last WS snapshot; the next poll/reconnect will resync.
+    } finally {
+      tradingRefreshInFlight = false;
+    }
+  }
+
   async function loadChart(symbol: string, duration: number) {
     const generation = ++loadGeneration;
     setHistory([]);
@@ -229,6 +296,14 @@ export default function App() {
     setView("terminal");
   }
 
+  function updateActiveGroup(updater: (symbols: string[]) => string[]) {
+    setWatchlistGroups((groups) =>
+      groups.map((group) =>
+        group.id === activeListId() ? { ...group, symbols: updater(group.symbols) } : group,
+      ),
+    );
+  }
+
   function addSymbol(input: string) {
     const symbol = input.trim().toUpperCase();
     if (!symbol) return;
@@ -236,40 +311,93 @@ export default function App() {
       notify("请输入带交易所的合约，例如 SHFE.rb2701");
       return;
     }
-    setWatchlist((previous) => (previous.includes(symbol) ? previous : [...previous, symbol]));
+    updateActiveGroup((symbols) => (symbols.includes(symbol) ? symbols : [...symbols, symbol]));
     selectSymbol(symbol);
   }
 
   function removeSymbol(symbol: string) {
-    setWatchlist((previous) => {
-      const next = previous.filter((item) => item !== symbol);
-      if (next.length === 0) return previous;
-      if (symbol === selected()) setSelected(next[0]);
-      return next;
-    });
+    const current = watchlist();
+    if (current.length <= 1) {
+      notify("自选列表至少保留一个合约");
+      return;
+    }
+    updateActiveGroup((symbols) => symbols.filter((item) => item !== symbol));
+    if (symbol === selected()) setSelected(current.find((item) => item !== symbol) ?? current[0]);
   }
 
   function moveSymbol(symbol: string, direction: -1 | 1) {
-    setWatchlist((previous) => {
-      const index = previous.indexOf(symbol);
+    updateActiveGroup((symbols) => {
+      const index = symbols.indexOf(symbol);
       const target = index + direction;
-      if (index < 0 || target < 0 || target >= previous.length) return previous;
-      const next = previous.slice();
+      if (index < 0 || target < 0 || target >= symbols.length) return symbols;
+      const next = symbols.slice();
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
   }
 
+  function selectWatchlistGroup(id: string) {
+    setActiveListId(id);
+    const next = watchlistGroups().find((group) => group.id === id);
+    if (next?.symbols.length) setSelected(next.symbols[0]);
+  }
+
+  function addWatchlistGroup(name: string) {
+    const group = createWatchlistGroup(name);
+    setWatchlistGroups((groups) => [...groups, group]);
+    setActiveListId(group.id);
+  }
+
+  function renameWatchlistGroup(id: string, name: string) {
+    const nextName = name.trim();
+    if (!nextName) return;
+    setWatchlistGroups((groups) =>
+      groups.map((group) => (group.id === id ? { ...group, name: nextName } : group)),
+    );
+  }
+
+  function removeWatchlistGroup(id: string) {
+    const groups = watchlistGroups();
+    if (groups.length <= 1) {
+      notify("至少保留一个自选列表");
+      return;
+    }
+    const next = groups.filter((group) => group.id !== id);
+    setWatchlistGroups(next);
+    if (activeListId() === id) setActiveListId(next[0].id);
+  }
+
+  async function searchInstruments(query: string) {
+    const value = query.trim();
+    if (value.length < 1) return [];
+    try {
+      const response = await getInstruments({ q: value, limit: 8 });
+      if (response.instruments.length > 0) {
+        return response.instruments.map((item) => ({
+          symbol: item.instrument_id,
+          name: item.name || instrumentName(item.instrument_id),
+          exchange: item.exchange_id,
+        }));
+      }
+    } catch {
+      // node catalog may still be downloading; fall through to local search
+    }
+    return searchFallbackInstruments(value);
+  }
+
   async function submitTicket(order: TicketOrder): Promise<string> {
     if (!tradingReady()) throw new Error("交易网关未就绪");
+    if (order.priceType === "LIMIT" && (!Number.isFinite(order.price) || order.price <= 0)) {
+      throw new Error("请输入有效限价");
+    }
     const result = await insertOrder({
       instrument_id: selected(),
       exchange_id: selected().split(".")[0],
       direction: order.side,
       offset: order.offset,
-      price_type: "LIMIT",
-      limit_price: order.price,
-      time_cond: "GFD",
+      price_type: order.priceType,
+      limit_price: order.priceType === "LIMIT" ? order.price : 0,
+      time_cond: order.priceType === "LIMIT" ? "GFD" : "IOC",
       volume_cond: "ANY",
       volume: order.volume,
       min_volume: 0,
@@ -315,8 +443,12 @@ export default function App() {
       void refreshReady();
       if (!snapshotLoaded && ready()?.ready) void loadTradingSnapshot();
     }, 3000);
+    const tradingTimer = window.setInterval(() => {
+      void refreshTradingSnapshot();
+    }, 5000);
     onCleanup(() => {
       window.clearInterval(timer);
+      window.clearInterval(tradingTimer);
       stream?.close();
       stream = undefined;
     });
@@ -324,7 +456,7 @@ export default function App() {
 
   createEffect(() => {
     if (!streamReady() || !stream) return;
-    const symbols = [...new Set([...watchlist(), selected()])];
+    const symbols = [...new Set([...watchlist(), selected(), ...Object.keys(positions())])];
     stream.setSubscription(
       symbols,
       [{ symbol: selected(), duration_ns: activeDuration(), view_width: 600 }],
@@ -360,7 +492,7 @@ export default function App() {
   });
 
   createEffect(() => {
-    saveWatchlist(watchlist());
+    saveWatchlists(watchlistGroups(), activeListId());
   });
 
   createEffect(() => {
@@ -395,7 +527,7 @@ export default function App() {
         theme={theme()}
         streamStatus={streamStatus()}
         ready={ready()}
-        account={account()}
+        account={displayAccount()}
         onView={setView}
         onTheme={() => setTheme(theme() === "dark" ? "light" : "dark")}
       />
@@ -404,13 +536,20 @@ export default function App() {
         <Match when={view() === "terminal"}>
           <main class="workspace">
             <WatchlistPanel
+              groups={watchlistGroups()}
+              activeId={activeListId()}
               symbols={watchlist()}
               quotes={quotes()}
               selected={selected()}
               onSelect={selectSymbol}
+              onSelectGroup={selectWatchlistGroup}
+              onAddGroup={addWatchlistGroup}
+              onRenameGroup={renameWatchlistGroup}
+              onRemoveGroup={removeWatchlistGroup}
               onAdd={addSymbol}
               onRemove={removeSymbol}
               onMove={moveSymbol}
+              onSearch={searchInstruments}
             />
             <ChartPanel
               symbol={selected()}
@@ -450,8 +589,9 @@ export default function App() {
           </main>
 
           <TradingTables
-            account={account()}
+            account={displayAccount()}
             positions={positions()}
+            quotes={quotes()}
             orders={orders()}
             trades={trades()}
             ready={tradingReady()}

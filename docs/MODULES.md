@@ -233,7 +233,7 @@ web/src/indicators/             MA/EMA/BOLL/MACD/RSI
 web/src/lib/                    localStorage、格式化
 ```
 
-详见 [WEB_FRONTEND.md](WEB_FRONTEND.md)。Qt 旧前端仍在 `ui/`，进入维护状态。
+详见 [WEB_FRONTEND.md](WEB_FRONTEND.md)。Qt UI 代码已删除。
 
 ## 12. 依赖规则速查
 
@@ -247,7 +247,6 @@ web/src/lib/                    localStorage、格式化
 | tqapi | gateway/data/ipc | serve |
 | serve | tqapi/data | UI |
 | web | 仅 REST/WS | tqsdk_core |
-| ui | 仅 NodeClient/HTTP/WS（历史） | tqsdk_core |
 
 ## 13. 测试对应
 
@@ -259,5 +258,4 @@ tests/gateway/       TQ 协议、CTP 映射、故障注入
 tests/serve/         router/REST/WS/filter/snapshot/readiness
 tests/e2e/           Sim/Mock 全链路
 web/src/**/*.test.ts  指标/session 单测
-ui/tests/            Qt 模型/图表/面板（历史）
 ```

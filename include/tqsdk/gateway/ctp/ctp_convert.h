@@ -434,6 +434,8 @@ position_json(std::string_view symbol, const PositionAgg& p, const InstrumentSpe
         {"margin_long", p.margin_long},
         {"margin_short", p.margin_short},
         {"margin", p.margin_long + p.margin_short},
+        {"volume_multiple", m},
+        {"price_tick", spec.price_tick},
     };
 }
 

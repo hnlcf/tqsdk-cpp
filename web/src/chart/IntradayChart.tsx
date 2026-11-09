@@ -139,6 +139,7 @@ export default function IntradayChart(props: Props) {
         background: { type: ColorType.Solid, color: theme.background },
         textColor: theme.text,
         fontFamily: "Inter, SFMono-Regular, Menlo, monospace",
+        fontSize: 13,
         attributionLogo: true,
       },
       grid: { vertLines: { color: theme.grid }, horzLines: { color: theme.grid } },

@@ -30,8 +30,6 @@
 | 文档 | 内容 |
 |---|---|
 | [WEB_FRONTEND.md](WEB_FRONTEND.md) | TQSDK Board（SolidJS/pnpm/Lightweight Charts）架构与功能 |
-| [UI_QT.md](UI_QT.md) | Qt 历史前端设计（保留） |
-| [INDICATOR_PLUGINS.md](INDICATOR_PLUGINS.md) | Python sidecar、插件 MANIFEST、共享指标库 |
 | [INSTRUMENTS.md](INSTRUMENTS.md) | 合约目录格式、加载与刷新 |
 | [KLINE_CACHE.md](KLINE_CACHE.md) | SQLite K 线缓存、恢复与容量 |
 
@@ -51,6 +49,8 @@ Web 是当前主前端；旧 Web 方案归档在
 - `THREADING_LEGACY.md`
 - `IPC_RECOVERY_LEGACY.md`
 - `HA_LEGACY.md`
+- `UI_QT_LEGACY.md`
+- `INDICATOR_PLUGINS_QT_LEGACY.md`
 - `UI_ARCHITECTURE_LEGACY.md`
 - `WEB_FRONTEND_DEFERRED.md`
 - `MODULES_LEGACY.md`

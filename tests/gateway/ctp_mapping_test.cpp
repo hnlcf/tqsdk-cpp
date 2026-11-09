@@ -161,6 +161,7 @@ TEST(CtpConvert, AccountPositionDepth) {
     EXPECT_DOUBLE_EQ(pj["open_price_long"], 3800.0);
     EXPECT_DOUBLE_EQ(pj["float_profit_long"], 20.0);
     EXPECT_DOUBLE_EQ(pj["margin_long"], 7600.0);
+    EXPECT_DOUBLE_EQ(pj["volume_multiple"], 10.0);
 
     CThostFtdcDepthMarketDataField depth{};
     set_field(depth.ExchangeID, sizeof(depth.ExchangeID), "SHFE");

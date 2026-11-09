@@ -69,7 +69,6 @@ tqapi/                  TqApi 门面与本地订单路径
 serve/                  REST/WS/路由/快照投影
 apps/                   gw_main / node_main
 web/                    TQSDK Board：SolidJS + pnpm + Lightweight Charts
-ui/                     Qt 历史前端（保留）
 ```
 
 依赖必须朝向抽象：
@@ -187,7 +186,7 @@ CTP SPI 回调线程只做 **TaskQueue 入队**，不直接执行 Asio/DataManag
   尚未接入远程交易日历服务）；
 - 生产级 multi-account 路由；
 - Windows CTP；
-- Qt Widgets 历史前端（Web 主前端）。
+
 
 ## 10. 相关文档
 

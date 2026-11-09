@@ -27,7 +27,6 @@ cmake -S "$ROOT" -B "$BUILD" -G Ninja \
     -DTQSDK_ENABLE_CTP=ON \
     -DTQSDK_BUILD_TESTS=ON \
     -DTQSDK_BUILD_EXAMPLES=OFF \
-    -DTQSDK_BUILD_UI=OFF
 rc=$?
 echo "configure_rc=$rc"
 ((rc == 0)) || exit "$rc"
