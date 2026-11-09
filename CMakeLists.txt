@@ -276,6 +276,7 @@ if(TQSDK_BUILD_TESTS)
         tests/serve/readiness_test.cpp
         tests/serve/p0_http_test.cpp
         tests/serve/option_http_test.cpp
+        tests/serve/multi_account_http_test.cpp
         tests/trading/trading_calendar_test.cpp
         tests/trading/trading_status_test.cpp
         tests/trading/risk_manager_test.cpp

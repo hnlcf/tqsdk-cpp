@@ -493,6 +493,22 @@ NodeConfig build_node_from_toml(const toml::table& root) {
     cfg.upstream = build_from_toml(root); // 复用客户端解析（[ipc]/[md]/[td]）
     // node 一律以 Node 角色连接 gw（gw 侧声明 Gateway，两端角色必须不同）。
     cfg.upstream.ipc.role = ipc::IpcRole::Node;
+    cfg.account_id          = get_str(root, "account_id", cfg.account_id);
+
+    if (auto* arr = root.get("accounts"); arr && arr->is_array()) {
+        for (auto&& item : *arr->as_array()) {
+            const auto* t = item.as_table();
+            if (!t)
+                continue;
+            NodeConfig::AccountEndpoint ep;
+            ep.id      = get_str(*t, "id", "");
+            ep.gw_host = get_str(*t, "gw_host", ep.gw_host);
+            ep.gw_port = static_cast<uint16_t>(get_int(*t, "gw_port", 0));
+            if (!ep.id.empty() && ep.gw_port != 0) {
+                cfg.accounts.push_back(std::move(ep));
+            }
+        }
+    }
 
     if (const auto& s = require_table(root, "serve"); !s.empty()) {
         cfg.serve_bind = get_str(s, "bind", cfg.serve_bind);

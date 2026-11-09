@@ -3,9 +3,13 @@
 namespace tqsdk {
 
 bool MultiAccountManager::add_account(AccountId account_id, std::shared_ptr<TqApi> api) {
-    if (account_id.empty() || !api) return false;
+    if (account_id.empty() || !api)
+        return false;
     std::lock_guard lock(mutex_);
-    return accounts_.try_emplace(std::move(account_id), std::move(api)).second;
+    const bool      inserted = accounts_.try_emplace(account_id, std::move(api)).second;
+    if (inserted && default_account_id_.empty())
+        default_account_id_ = account_id;
+    return inserted;
 }
 
 bool MultiAccountManager::remove_account(const AccountId& account_id) {
@@ -19,23 +23,30 @@ std::shared_ptr<TqApi> MultiAccountManager::find_account(const AccountId& accoun
     return it == accounts_.end() ? nullptr : it->second;
 }
 
+std::string MultiAccountManager::default_account_id() const {
+    std::lock_guard lock(mutex_);
+    return default_account_id_;
+}
+
 std::vector<MultiAccountManager::AccountId> MultiAccountManager::account_ids() const {
-    std::lock_guard             lock(mutex_);
-    std::vector<AccountId>      out;
+    std::lock_guard        lock(mutex_);
+    std::vector<AccountId> out;
     out.reserve(accounts_.size());
-    for (const auto& [id, _] : accounts_) out.push_back(id);
+    for (const auto& [id, _] : accounts_)
+        out.push_back(id);
     std::sort(out.begin(), out.end());
     return out;
 }
 
-asio::awaitable<Order*> MultiAccountManager::insert_order(const AccountId& account_id,
+asio::awaitable<Order*> MultiAccountManager::insert_order(const AccountId&      account_id,
                                                           const InsertOrderReq& req) {
     auto api = find_account(account_id);
-    if (!api) co_return nullptr;
+    if (!api)
+        co_return nullptr;
     co_return co_await api->insert_order(req);
 }
 
-asio::awaitable<CommandAck> MultiAccountManager::cancel_order(const AccountId& account_id,
+asio::awaitable<CommandAck> MultiAccountManager::cancel_order(const AccountId&      account_id,
                                                               const CancelOrderReq& req) {
     auto api = find_account(account_id);
     if (!api) {
@@ -49,19 +60,24 @@ void MultiAccountManager::close() {
     {
         std::lock_guard lock(mutex_);
         apis.reserve(accounts_.size());
-        for (auto& [_, api] : accounts_) apis.push_back(std::move(api));
+        for (auto& [_, api] : accounts_)
+            apis.push_back(std::move(api));
         accounts_.clear();
+        default_account_id_.clear();
     }
     for (auto& api : apis) {
-        if (api) api->close();
+        if (api)
+            api->close();
     }
 }
 
 namespace {
 
 nlohmann::json account_json(const TqApi& api) {
-    const auto& a = api.get_account();
-    auto num = [](double v) { return std::isfinite(v) ? nlohmann::json(v) : nlohmann::json(nullptr); };
+    const auto& a   = api.get_account();
+    auto        num = [](double v) {
+        return std::isfinite(v) ? nlohmann::json(v) : nlohmann::json(nullptr);
+    };
     return nlohmann::json{
         {"account_id", a.account_id},
         {"balance", num(a.balance)},
@@ -126,11 +142,11 @@ nlohmann::json MultiAccountManager::snapshot() const {
     {
         std::lock_guard lock(mutex_);
         copy.reserve(accounts_.size());
-        for (const auto& [id, api] : accounts_) copy.emplace_back(id, api);
+        for (const auto& [id, api] : accounts_)
+            copy.emplace_back(id, api);
     }
-    std::sort(copy.begin(), copy.end(), [](const auto& a, const auto& b) {
-        return a.first < b.first;
-    });
+    std::sort(
+        copy.begin(), copy.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
 
     auto out = nlohmann::json::object();
     for (const auto& [id, api] : copy) {

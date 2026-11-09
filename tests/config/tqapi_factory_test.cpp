@@ -321,6 +321,24 @@ fresh_after_sec = 60
     EXPECT_FALSE(disabled.kline_cache.enabled);
 }
 
+TEST(TqApiFactoryConfig, ParsesNodeAccountEndpoints) {
+    auto cfg = parse_node_config(R"(
+[[accounts]]
+id = "B"
+gw_host = "127.0.0.1"
+gw_port = 14331
+[[accounts]]
+id = "C"
+gw_host = "10.0.0.2"
+gw_port = 14332
+)");
+    ASSERT_EQ(cfg.accounts.size(), 2u);
+    EXPECT_EQ(cfg.accounts[0].id, "B");
+    EXPECT_EQ(cfg.accounts[0].gw_port, 14331);
+    EXPECT_EQ(cfg.accounts[1].id, "C");
+    EXPECT_EQ(cfg.accounts[1].gw_host, "10.0.0.2");
+}
+
 TEST(TqApiFactoryConfig, ParsesAutoUrlFlags) {
     auto cfg = parse_tqapi_config("[md]\nkind = \"tq\"\nauto_url = true\n[td]\nauto_url = true\n");
     EXPECT_TRUE(cfg.md.auto_url);

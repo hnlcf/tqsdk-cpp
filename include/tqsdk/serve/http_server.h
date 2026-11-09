@@ -3,6 +3,7 @@
 #include "tqsdk/pch.h"
 
 #include "tqsdk/instrument/instrument_catalog.h"
+#include "tqsdk/multiaccount/multi_account_manager.h"
 #include "tqsdk/serve/router.h"
 #include "tqsdk/serve/ws_stream.h"
 #include "tqsdk/tqapi.h"
@@ -76,6 +77,14 @@ inline void from_json(const json& j, RiskRuleRequest& r) {
     r.window_ms = j.value("window_ms", std::uint64_t{1000});
 }
 
+/// 账户选择查询参数：`?account=default`。
+struct AccountQuery {
+    std::string account;
+};
+inline void from_json(const json& j, AccountQuery& q) {
+    q.account = j.value("account", std::string{});
+}
+
 /// `/option/analytics/{underlying}` 的估值查询参数。
 struct OptionAnalyticsQuery {
     std::string spot;
@@ -139,7 +148,8 @@ public:
     HttpServer(TqApi*                api,
                asio::any_io_executor ex,
                WsOptions             ws_options = {},
-               InstrumentCatalog*    catalog    = nullptr);
+               InstrumentCatalog*    catalog    = nullptr,
+               MultiAccountManager*  accounts   = nullptr);
 
     /// 双 executor 构造：
     ///   - io_ex      ：accept / socket 读写（可跨多线程、每连接一条 strand）
@@ -149,7 +159,8 @@ public:
                asio::any_io_executor io_ex,
                WsOptions             ws_options,
                asio::any_io_executor data_ex,
-               InstrumentCatalog*    catalog = nullptr);
+               InstrumentCatalog*    catalog  = nullptr,
+               MultiAccountManager*  accounts = nullptr);
 
     /// 绑定并监听 addr:port；开始 accept 循环（后台协程）。失败抛 system_error。
     /// 需在 io_context.run() 之前调用。
@@ -173,10 +184,12 @@ private:
     make_json_response(http::status code, const nlohmann::json& body, unsigned version);
 
     /// 注册全部路由（构造时调用一次）。
-    void setup_routes();
+    void   setup_routes();
+    TqApi* account_api(std::string_view account_id) const;
 
-    TqApi*             api_;
-    InstrumentCatalog* catalog_ = nullptr;
+    TqApi*               api_;
+    MultiAccountManager* accounts_ = nullptr;
+    InstrumentCatalog*   catalog_  = nullptr;
 
     std::uint64_t                                                     task_seq_ = 0;
     std::unordered_map<std::string, std::shared_ptr<TargetPosTask>>   target_tasks_;

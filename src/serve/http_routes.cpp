@@ -1,5 +1,4 @@
 #include "tqsdk/option/option_analytics.h"
-#include "tqsdk/trading/trading_status.h"
 #include "tqsdk/serve/http_server.h"
 #include "tqsdk/trading/holiday_calendar.h"
 #include "tqsdk/trading/trading_status.h"
@@ -56,14 +55,33 @@ void HttpServer::setup_routes() {
         {http::verb::get, "/metrics", make_entry([this]() -> asio::awaitable<json> {
              co_return api_->metrics_json();
          })},
+        {http::verb::get, "/accounts", make_entry([this]() -> asio::awaitable<json> {
+             if (accounts_ == nullptr) {
+                 co_return json{
+                     {"default", "default"},
+                     {"accounts",
+                      json::array({json{{"account_id", "default"}, {"ready", api_->ready()}}})}};
+             }
+             json out = json::array();
+             for (const auto& id : accounts_->account_ids()) {
+                 auto api = accounts_->find_account(id);
+                 if (!api)
+                     continue;
+                 out.push_back(json{{"account_id", id},
+                                    {"ready", api->ready()},
+                                    {"account", account_to_json(api->get_account())}});
+             }
+             co_return json{{"default", accounts_->default_account_id()},
+                            {"accounts", std::move(out)}};
+         })},
         {http::verb::get, "/holiday/status", make_entry([]() -> asio::awaitable<json> {
              co_return HolidayCalendar::global().status_json();
          })},
-        {http::verb::get, "/trading-status", make_entry([this]() -> asio::awaitable<json> {
-             co_return TradingStatus::from_phase(api_->session_phase()).to_json();
-         })},
-        {http::verb::get, "/trading-status", make_entry([this]() -> asio::awaitable<json> {
-             co_return TradingStatus::from_phase(api_->session_phase()).to_json();
+        {http::verb::get,
+         "/trading-status",
+         make_entry([this](Query<AccountQuery> q) -> asio::awaitable<json> {
+             TqApi* selected = account_api(q.value.account);
+             co_return TradingStatus::from_phase(selected->session_phase()).to_json();
          })},
         {http::verb::get, "/catalog/status", make_entry([this]() -> asio::awaitable<Response> {
              if (catalog_ == nullptr) {
@@ -301,8 +319,11 @@ void HttpServer::setup_routes() {
              }
              co_return json{{"instrument_id", symbol}, {"ticks", std::move(ticks)}};
          })},
-        {http::verb::get, "/trading-snapshot", make_entry([this]() -> asio::awaitable<json> {
-             co_return trading_snapshot(*api_);
+        {http::verb::get,
+         "/trading-snapshot",
+         make_entry([this](Query<AccountQuery> q) -> asio::awaitable<json> {
+             TqApi* selected = account_api(q.value.account);
+             co_return trading_snapshot(*selected);
          })},
         {http::verb::get,
          "/kline/{symbol}/{duration_ns}",
@@ -310,24 +331,39 @@ void HttpServer::setup_routes() {
              KlineStream* s = api_->get_kline_serial(symbol, duration_ns);
              co_return kline_to_json(*s);
          })},
-        {http::verb::get, "/account", make_entry([this]() -> asio::awaitable<json> {
-             co_return account_to_json(api_->get_account());
+        {http::verb::get,
+         "/account",
+         make_entry([this](Query<AccountQuery> q) -> asio::awaitable<json> {
+             TqApi* selected = account_api(q.value.account);
+             co_return account_to_json(selected->get_account());
          })},
-        {http::verb::get, "/orders", make_entry([this]() -> asio::awaitable<json> {
-             co_return orders_snapshot(*api_);
+        {http::verb::get,
+         "/orders",
+         make_entry([this](Query<AccountQuery> q) -> asio::awaitable<json> {
+             TqApi* selected = account_api(q.value.account);
+             co_return orders_snapshot(*selected);
          })},
-        {http::verb::get, "/trades", make_entry([this]() -> asio::awaitable<json> {
-             co_return trades_snapshot(*api_);
+        {http::verb::get,
+         "/trades",
+         make_entry([this](Query<AccountQuery> q) -> asio::awaitable<json> {
+             TqApi* selected = account_api(q.value.account);
+             co_return trades_snapshot(*selected);
          })},
-        {http::verb::get, "/positions", make_entry([this]() -> asio::awaitable<json> {
-             co_return positions_snapshot(*api_);
+        {http::verb::get,
+         "/positions",
+         make_entry([this](Query<AccountQuery> q) -> asio::awaitable<json> {
+             TqApi* selected = account_api(q.value.account);
+             co_return positions_snapshot(*selected);
          })},
 
         // ---- 下单 / 撤单 ----
         // body 自动反序列化为 InsertOrderReq（见 trading_gateway.h 的 from_json）。
-        {http::verb::post, "/order", make_entry([this](InsertOrderReq r) -> asio::awaitable<json> {
+        {http::verb::post,
+         "/order",
+         make_entry([this](Query<AccountQuery> q, InsertOrderReq r) -> asio::awaitable<json> {
+             TqApi* selected = account_api(q.value.account);
              // co_await 网关 ack；期间 io_context 继续处理行情/其它请求。
-             Order*     order   = co_await api_->insert_order(r);
+             Order*     order   = co_await selected->insert_order(r);
              const bool success = order != nullptr && !order->is_error;
              co_return json{{"success", success},
                             {"order_id", order ? order->order_id : std::string{}},
@@ -335,8 +371,9 @@ void HttpServer::setup_routes() {
          })},
         {http::verb::delete_,
          "/order/{id}",
-         make_entry([this](std::string oid) -> asio::awaitable<json> {
-             CommandAck ack = co_await api_->cancel_order(CancelOrderReq{oid, ""});
+         make_entry([this](std::string oid, Query<AccountQuery> q) -> asio::awaitable<json> {
+             TqApi*     selected = account_api(q.value.account);
+             CommandAck ack      = co_await selected->cancel_order(CancelOrderReq{oid, ""});
              co_return json{
                  {"success", ack.success}, {"order_id", ack.order_id}, {"error", ack.error_msg}};
          })},

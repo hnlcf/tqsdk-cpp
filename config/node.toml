@@ -3,6 +3,16 @@
 # node 以 Node 角色连接 gw 端点，把行情/交易合并为权威截面，再通过 HTTP serve
 # 对外暴露。上游连接段沿用客户端配置语义（[ipc]/[md]/[td]），md/td 均设为 remote
 # 并指向 gw 的监听端点。
+#
+# 多账户（可选）：
+# 每个额外账户连接一个独立 gw 端点，拥有独立 TqApi/DataManager。
+# 账户 REST：GET /accounts、GET /positions?account=<id>、
+# POST /order?account=<id>。
+# account_id = "default"
+# [[accounts]]
+# id = "account-b"
+# gw_host = "127.0.0.1"
+# gw_port = 14331
 
 [ipc]
 # transport = "uds"

@@ -12,15 +12,18 @@ namespace serve {
 HttpServer::HttpServer(TqApi*                api,
                        asio::any_io_executor ex,
                        WsOptions             ws_options,
-                       InstrumentCatalog*    catalog)
-    : HttpServer(api, ex, std::move(ws_options), ex, catalog) {}
+                       InstrumentCatalog*    catalog,
+                       MultiAccountManager*  accounts)
+    : HttpServer(api, ex, std::move(ws_options), ex, catalog, accounts) {}
 
 HttpServer::HttpServer(TqApi*                api,
                        asio::any_io_executor io_ex,
                        WsOptions             ws_options,
                        asio::any_io_executor data_ex,
-                       InstrumentCatalog*    catalog)
+                       InstrumentCatalog*    catalog,
+                       MultiAccountManager*  accounts)
     : api_(api),
+      accounts_(accounts),
       catalog_(catalog),
       io_ex_(std::move(io_ex)),
       data_ex_(data_ex ? std::move(data_ex) : io_ex_),
@@ -28,6 +31,21 @@ HttpServer::HttpServer(TqApi*                api,
       ws_(std::make_shared<WebSocketHub>(api_, data_ex_, io_ex_, std::move(ws_options))) {
     ws_->set_catalog(catalog_);
     setup_routes();
+}
+
+TqApi* HttpServer::account_api(std::string_view account_id) const {
+    if (accounts_ == nullptr) {
+        return api_;
+    }
+    std::string id{account_id};
+    if (id.empty())
+        id = accounts_->default_account_id();
+    auto api = accounts_->find_account(id);
+    if (!api) {
+        throw HttpError{http::status::not_found,
+                        json{{"error", "account not found"}, {"account", id}}};
+    }
+    return api.get();
 }
 
 void HttpServer::listen(const std::string& address, uint16_t port) {

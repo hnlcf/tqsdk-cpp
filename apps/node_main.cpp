@@ -2,6 +2,7 @@
 
 #include "tqsdk/config/tqapi_factory.h"
 #include "tqsdk/instrument/instrument_catalog.h"
+#include "tqsdk/multiaccount/multi_account_manager.h"
 #include "tqsdk/serve/http_server.h"
 #include "tqsdk/tqapi.h"
 #include "tqsdk/trading/holiday_calendar.h"
@@ -36,11 +37,12 @@ using namespace tqsdk;
 
 // 持有运行期全部对象，保证生命周期覆盖 io.run()。
 struct NodeRuntime {
-    std::shared_ptr<TqAuth>            auth;
-    std::shared_ptr<InstrumentCatalog> catalog;
-    std::shared_ptr<KlineStore>        kline_store;
-    std::unique_ptr<TqApi>             api;
-    std::unique_ptr<serve::HttpServer> http;
+    std::shared_ptr<TqAuth>              auth;
+    std::shared_ptr<InstrumentCatalog>   catalog;
+    std::shared_ptr<KlineStore>          kline_store;
+    std::shared_ptr<TqApi>               api;
+    std::shared_ptr<MultiAccountManager> accounts;
+    std::unique_ptr<serve::HttpServer>   http;
 };
 
 } // namespace
@@ -106,19 +108,58 @@ int main(int argc, char** argv) {
     // TqApi/网关/DataManager 全部绑定 core_ex；HTTP 连接 I/O 在 io_ex 的
     // 每连接 strand 上并行，进入路由 handler 前切回 core_ex。
     auto bootstrap = [&io, io_ex, core_ex, rt, &cfg]() -> asio::awaitable<void> {
+        std::shared_ptr<TqApi> primary;
         try {
-            rt->api = co_await make_tqapi(io, cfg.upstream, core_ex, rt->kline_store);
+            primary = std::shared_ptr<TqApi>(
+                co_await make_tqapi(io, cfg.upstream, core_ex, rt->kline_store));
         } catch (const std::exception& e) {
             SPDLOG_CRITICAL("[node] failed to connect/init upstream gw: {}", e.what());
             io.stop();
             co_return;
         }
-        SPDLOG_INFO("[node] upstream gateway ready");
+        rt->api                      = primary;
+        rt->accounts                 = std::make_shared<MultiAccountManager>();
+        const std::string primary_id = cfg.account_id.empty() ? "default" : cfg.account_id;
+        if (!rt->accounts->add_account(primary_id, primary)) {
+            SPDLOG_CRITICAL("[node] invalid/duplicate primary account id: {}", primary_id);
+            io.stop();
+            co_return;
+        }
+        SPDLOG_INFO("[node] upstream gateway ready (account={})", primary_id);
 
         // 预订阅：让服务启动后即持续有数据，便于 curl 直接读到。
         for (const auto& sym : cfg.symbols) {
-            rt->api->get_quote(sym); // 触发订阅（不存在则创建占位并订阅）
+            primary->get_quote(sym); // 触发订阅（不存在则创建占位并订阅）
             SPDLOG_INFO("[node] pre-subscribed quote {}", sym);
+        }
+
+        // 额外账户：每个账户连接自己的 gw 端点，使用独立 TqApi/DataManager。
+        for (const auto& account : cfg.accounts) {
+            if (rt->accounts->find_account(account.id)) {
+                SPDLOG_WARN("[node] duplicate account id ignored: {}", account.id);
+                continue;
+            }
+            auto account_cfg           = cfg.upstream;
+            account_cfg.ipc.local_name = "node-" + account.id;
+            account_cfg.md.kind        = MdKind::Remote;
+            account_cfg.td.kind        = TdKind::Remote;
+            account_cfg.md.tcp_host    = account.gw_host;
+            account_cfg.md.tcp_port    = account.gw_port;
+            account_cfg.td.tcp_host    = account.gw_host;
+            account_cfg.td.tcp_port    = account.gw_port;
+            try {
+                auto extra =
+                    std::shared_ptr<TqApi>(co_await make_tqapi(io, account_cfg, core_ex, nullptr));
+                rt->accounts->add_account(account.id, extra);
+                for (const auto& sym : cfg.symbols)
+                    extra->get_quote(sym);
+                SPDLOG_INFO("[node] account {} connected to gw {}:{}",
+                            account.id,
+                            account.gw_host,
+                            account.gw_port);
+            } catch (const std::exception& e) {
+                SPDLOG_ERROR("[node] account {} failed to connect: {}", account.id, e.what());
+            }
         }
 
         serve::WsOptions ws_opts;
@@ -128,8 +169,12 @@ int main(int argc, char** argv) {
         ws_opts.max_queue          = cfg.ws.max_queue;
         ws_opts.coalesce           = cfg.ws.coalesce;
 
-        rt->http = std::make_unique<serve::HttpServer>(
-            rt->api.get(), io_ex, std::move(ws_opts), core_ex, rt->catalog.get());
+        rt->http = std::make_unique<serve::HttpServer>(rt->api.get(),
+                                                       io_ex,
+                                                       std::move(ws_opts),
+                                                       core_ex,
+                                                       rt->catalog.get(),
+                                                       rt->accounts.get());
         try {
             rt->http->listen(cfg.serve_bind, cfg.serve_port);
         } catch (const std::exception& e) {
@@ -162,7 +207,9 @@ int main(int argc, char** argv) {
     if (rt->http) {
         rt->http->stop();
     }
-    if (rt->api) {
+    if (rt->accounts) {
+        rt->accounts->close();
+    } else if (rt->api) {
         rt->api->close();
     }
     if (rt->catalog) {

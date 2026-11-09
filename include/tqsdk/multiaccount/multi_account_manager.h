@@ -17,13 +17,14 @@ public:
     MultiAccountManager() = default;
 
     /// 注册账户；account_id 重复时保留原账户并返回 false。
-    bool add_account(AccountId account_id, std::shared_ptr<TqApi> api);
-    bool remove_account(const AccountId& account_id);
+    bool                   add_account(AccountId account_id, std::shared_ptr<TqApi> api);
+    bool                   remove_account(const AccountId& account_id);
     std::shared_ptr<TqApi> find_account(const AccountId& account_id) const;
     std::vector<AccountId> account_ids() const;
+    std::string            default_account_id() const;
 
     asio::awaitable<Order*> insert_order(const AccountId& account_id, const InsertOrderReq& req);
-    asio::awaitable<CommandAck> cancel_order(const AccountId& account_id,
+    asio::awaitable<CommandAck> cancel_order(const AccountId&      account_id,
                                              const CancelOrderReq& req);
 
     /// 关闭全部账户的 TqApi（幂等）。
@@ -33,8 +34,9 @@ public:
     nlohmann::json snapshot() const;
 
 private:
-    mutable std::mutex                                  mutex_;
+    mutable std::mutex                                    mutex_;
     std::unordered_map<AccountId, std::shared_ptr<TqApi>> accounts_;
+    std::string                                           default_account_id_;
 };
 
 } // namespace tqsdk

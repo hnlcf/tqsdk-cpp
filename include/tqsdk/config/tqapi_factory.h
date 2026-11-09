@@ -190,13 +190,22 @@ struct GwConfig {
 /// 再通过 HTTP serve 层对外暴露。gw 连接参数复用 TqApiConfig（md/td kind 应设为
 /// Remote，指向 gw 的监听端点）。
 struct NodeConfig {
-    TqApiConfig               upstream; ///< 到 gw 的连接（md/td.kind = Remote）
-    std::string               serve_bind = "127.0.0.1";
-    uint16_t                  serve_port = 8080;
-    std::vector<InstrumentId> symbols;     ///< 启动即预订阅的合约（便于直接 curl 到数据）
-    InstrumentCatalog::Config instruments; ///< [instruments] 标准合约目录/刷新
-    TqAuth::Config            tq_auth;     ///< [tq_auth] 快期账户认证
-    KlineStore::Config        kline_cache; ///< [kline_cache] 本地 K 线历史缓存
+    TqApiConfig upstream;               ///< 默认账户到 gw 的连接（md/td.kind = Remote）
+    std::string account_id = "default"; ///< 默认账户 ID
+
+    /// 额外账户：每个账户独立连接一个 gw 端点，形成独立 TqApi/DataManager。
+    struct AccountEndpoint {
+        std::string id;
+        std::string gw_host = "127.0.0.1";
+        uint16_t    gw_port = 0;
+    };
+    std::vector<AccountEndpoint> accounts;
+    std::string                  serve_bind = "127.0.0.1";
+    uint16_t                     serve_port = 8080;
+    std::vector<InstrumentId>    symbols;     ///< 启动即预订阅的合约（便于直接 curl 到数据）
+    InstrumentCatalog::Config    instruments; ///< [instruments] 标准合约目录/刷新
+    TqAuth::Config               tq_auth;     ///< [tq_auth] 快期账户认证
+    KlineStore::Config           kline_cache; ///< [kline_cache] 本地 K 线历史缓存
 
     /// [serve.ws]：同一 HTTP 端口上的 WebSocket 实时推送。
     struct Ws {

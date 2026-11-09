@@ -82,20 +82,21 @@ Base URL 默认 `http://127.0.0.1:18081`。
 | GET | `/quotes?symbols=A,B` | batched quotes |
 | GET | `/kline/{symbol}/{duration_ns}` | `{symbol,duration_ns,bars}` |
 | GET | `/kline-cache/status` | KlineStore status |
-| GET | `/account` | account |
+| GET | `/account?account=default` | account |
 | GET | `/orders` | `{"orders":{...}}` |
 | GET | `/trades` | `{"trades":{...}}` |
 | GET | `/positions` | `{"positions":{...}}`；REST 隐藏零仓位 |
 | GET | `/trading-snapshot` | account/orders/trades/positions 合并 |
 | GET | `/ticks/{symbol}` | quote 固化 tick 快照 |
-| GET | `/trading-status` | TradingStatus 快照 |
+| GET | `/trading-status?account=default` | TradingStatus 快照 |
+| GET | `/accounts` | 多账户列表与账户快照 |
 | GET | `/option/analytics/{underlying}` | ATM + Black-Scholes Greeks |
 
 ### 写
 
 | Method | Path | Body |
 |---|---|---|
-| POST | `/order` | `InsertOrderReq` JSON |
+| POST | `/order?account=default` | `InsertOrderReq` JSON |
 | DELETE | `/order/{id}` | 撤单 |
 | POST | `/task/target` | TargetPosTask：`symbol,target_volume,mode,max_volume` |
 | DELETE | `/task/target/{id}` | 取消并删除 target task |

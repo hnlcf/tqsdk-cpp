@@ -27,9 +27,12 @@ json snap = manager.snapshot();
 
 边界：
 
-- 当前 node 进程仍只构造一个上游 TqApi；REST 多账户路由尚未接入 node 配置；
-- 多账户共享一个 gw 的部署需要 gw 支持多交易连接；框架 API 已预留；
-- 风控规则应每个账户独立配置（每 TqApi 一个 RiskManager）。
+- node 现在支持默认账户 + 可选 `[[accounts]]`：每个额外账户连接独立 gw 端点；
+- REST `/accounts` 和 `?account=<id>` 已支持按账户查询账户/持仓/委托/成交，
+  `POST /order?account=<id>` 已支持按账户下单；
+- WebSocket 仍由默认账户提供（多账户 WS 过滤是下一步）；
+- 每个账户有独立 `TqApi`/`DataManager`；风控/任务目前仍默认落在默认账户，
+  需要后续把 task/risk 路由扩展 account 参数。
 
 ## 2. BacktestEngine
 
