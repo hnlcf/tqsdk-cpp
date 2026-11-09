@@ -17,6 +17,13 @@ std::string http_get(std::string_view          url,
                      std::chrono::milliseconds timeout    = std::chrono::seconds(60),
                      const HttpHeaders&        headers    = {});
 
+/// 同步 PUT（可带空 body）；TqAuth add-account 使用。
+std::string http_put(std::string_view          url,
+                     std::string_view          body = {},
+                     std::string_view          user_agent = "tqsdk-node/0.1",
+                     std::chrono::milliseconds timeout = std::chrono::seconds(30),
+                     const HttpHeaders&        headers = {});
+
 /// 同步 form-urlencoded POST；天勤 TqAuth 的 token endpoint 使用。
 std::string http_post_form(std::string_view          url,
                            std::string_view          body,

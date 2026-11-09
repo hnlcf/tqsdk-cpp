@@ -47,6 +47,9 @@ password = "your_tq_password"
 auth_url = "https://auth.shinnytech.com"
 request_timeout_sec = 30
 refresh_margin_sec = 30
+ns_url = "https://api.shinnytech.com/ns"
+broker_url_prefix = "https://files.shinnytech.com"
+mode = "real"
 ```
 
 推荐通过不会入库的 `config/live.local.env`：
@@ -73,7 +76,36 @@ TQ_AUTH_URL=https://auth.shinnytech.com
 
 登录失败不会阻止行情/交易进程启动；目录刷新会继续尝试，并在日志中记录原因。
 
-## 5. 安全
+## 5. 与官方 auth.py 对齐的能力
+
+`TqAuth` 已提供：
+
+| 官方能力 | C++ |
+|---|---|
+| `login()` | `login()` |
+| refresh_token | `refresh()` / 自动刷新 |
+| JWT `sub` / `grants` | `auth_id()` / `grants_json()` |
+| `expire_datetime` | `expire_datetime()` |
+| `expire_days_left` / `account_type` | `expire_days_left()` / `product_type()` |
+| `_add_account` | `add_account(account_id)` |
+| `_get_td_url` | `get_td_url(broker_id, account_id)` |
+| `_get_md_url` | `get_md_url(stock, backtest)` |
+| `init(mode)` | `init("real"|"bt")` |
+| `_base_headers` | `Authorization`、`User-Agent`、`Accept` |
+
+扩展配置：
+
+```toml
+ns_url = "https://api.shinnytech.com/ns"
+broker_url_prefix = "https://files.shinnytech.com"
+mode = "real"
+```
+
+注意：当前已经实际接入的是 **登录 + token 刷新 + 合约目录 Bearer 下载**；
+`get_td_url` / `get_md_url` / `add_account` 已实现为公共能力，后续接入 Tq
+交易/行情网关时直接使用，不需要再复制一遍认证代码。
+
+## 6. 安全
 
 - 账号密码不得提交到仓库；
 - `run/live/node.toml`、`config/live.local.env` 不进入版本控制；

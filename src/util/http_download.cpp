@@ -67,8 +67,8 @@ std::string request_http(std::string_view          url,
     if (!body.empty()) {
         req.set(http::field::content_type, content_type);
         req.body() = std::string{body};
-        req.prepare_payload();
     }
+    req.prepare_payload();
     for (const auto& [key, value] : headers) {
         if (!key.empty()) {
             req.set(key, value);
@@ -122,6 +122,20 @@ std::string http_get(std::string_view          url,
                      const HttpHeaders&        headers) {
     return request_http(
         url, http::verb::get, user_agent, timeout, {}, "application/json", headers);
+}
+
+std::string http_put(std::string_view          url,
+                     std::string_view          body,
+                     std::string_view          user_agent,
+                     std::chrono::milliseconds timeout,
+                     const HttpHeaders&        headers) {
+    return request_http(url,
+                        http::verb::put,
+                        user_agent,
+                        timeout,
+                        body,
+                        "application/json",
+                        headers);
 }
 
 std::string http_post_form(std::string_view          url,

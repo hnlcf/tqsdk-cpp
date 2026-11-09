@@ -18,6 +18,15 @@ TEST(TqAuth, DisabledAuthDoesNotCreateBearerHeader) {
     EXPECT_TRUE(auth.authorization_header().empty());
 }
 
+TEST(TqAuth, SupportsModeAndUrlServiceWithoutLogin) {
+    TqAuth auth{TqAuth::Config{}};
+    auth.init("bt");
+    EXPECT_EQ(auth.mode(), "bt");
+    EXPECT_FALSE(auth.get_md_url());
+    EXPECT_FALSE(auth.get_td_url("9999", "account"));
+    EXPECT_FALSE(auth.add_account("account"));
+}
+
 TEST(TqAuth, ParsesNodeAuthConfig) {
     const auto cfg = parse_node_config(R"(
 [tq_auth]
@@ -33,6 +42,7 @@ refresh_margin_sec = 11
     EXPECT_EQ(cfg.tq_auth.auth_url, "https://auth.example.test/");
     EXPECT_EQ(cfg.tq_auth.request_timeout.count(), 7);
     EXPECT_EQ(cfg.tq_auth.refresh_margin.count(), 11);
+    EXPECT_EQ(cfg.tq_auth.ns_url, "https://api.shinnytech.com/ns");
 }
 
 } // namespace

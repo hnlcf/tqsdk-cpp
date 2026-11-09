@@ -253,7 +253,7 @@ max_queue = 1024
 coalesce_ms = 10
 
 [tq_auth]
-enabled = {str(os.environ.get("TQ_AUTH_ENABLED", "0")).lower() in ("1", "true", "yes", "on")}
+enabled = {str(str(os.environ.get("TQ_AUTH_ENABLED", "0")).lower() in ("1", "true", "yes", "on")).lower()}
 user_name = {q("TQ_AUTH_USER")}
 password = {q("TQ_AUTH_PASSWORD")}
 auth_url = {q("TQ_AUTH_URL")}

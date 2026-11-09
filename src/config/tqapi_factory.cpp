@@ -365,6 +365,10 @@ TqAuth::Config parse_tq_auth(const toml::table& root) {
         auth.user_name = get_str(t, "user_name", auth.user_name);
         auth.password = get_str(t, "password", auth.password);
         auth.auth_url = get_str(t, "auth_url", auth.auth_url);
+        auth.ns_url = get_str(t, "ns_url", auth.ns_url);
+        auth.broker_url_prefix =
+            get_str(t, "broker_url_prefix", auth.broker_url_prefix);
+        auth.mode = get_str(t, "mode", auth.mode);
         auth.client_id = get_str(t, "client_id", auth.client_id);
         auth.client_secret = get_str(t, "client_secret", auth.client_secret);
         auth.user_agent = get_str(t, "user_agent", auth.user_agent);
