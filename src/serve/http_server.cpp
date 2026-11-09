@@ -13,17 +13,20 @@ HttpServer::HttpServer(TqApi*                api,
                        asio::any_io_executor ex,
                        WsOptions             ws_options,
                        InstrumentCatalog*    catalog,
-                       MultiAccountManager*  accounts)
-    : HttpServer(api, ex, std::move(ws_options), ex, catalog, accounts) {}
+                       MultiAccountManager*  accounts,
+                       TickStore*            tick_store)
+    : HttpServer(api, ex, std::move(ws_options), ex, catalog, accounts, tick_store) {}
 
 HttpServer::HttpServer(TqApi*                api,
                        asio::any_io_executor io_ex,
                        WsOptions             ws_options,
                        asio::any_io_executor data_ex,
                        InstrumentCatalog*    catalog,
-                       MultiAccountManager*  accounts)
+                       MultiAccountManager*  accounts,
+                       TickStore*            tick_store)
     : api_(api),
       accounts_(accounts),
+      tick_store_(tick_store),
       catalog_(catalog),
       io_ex_(std::move(io_ex)),
       data_ex_(data_ex ? std::move(data_ex) : io_ex_),

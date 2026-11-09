@@ -363,6 +363,10 @@ asio::awaitable<void> TqApi::td_loop() {
 }
 
 // ---------- Tick 序列 ----------
+void TqApi::set_tick_sink(TickSink sink) {
+    tick_sink_ = std::move(sink);
+}
+
 TickSeries* TqApi::get_tick_serial(std::string_view symbol, int view_width) {
     if (view_width <= 0)
         view_width = 200;
@@ -377,8 +381,10 @@ TickSeries* TqApi::get_tick_serial(std::string_view symbol, int view_width) {
 void TqApi::append_ticks_from_quotes() {
     for (auto& [symbol, series] : data_.ticks) {
         const auto* quote = data_.quotes.find(symbol);
-        if (quote != nullptr) {
-            series.append_quote(*quote);
+        if (quote != nullptr && series.append_quote(*quote) && tick_sink_) {
+            if (const Tick* tick = series.data.back()) {
+                tick_sink_(*tick);
+            }
         }
     }
 }

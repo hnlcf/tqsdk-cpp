@@ -4,6 +4,7 @@
 
 #include "tqsdk/auth/tq_auth.h"
 #include "tqsdk/data/kline_store.h"
+#include "tqsdk/data/tick_store.h"
 #include "tqsdk/gateway/ctp/ctp_config.h"
 #include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/ipc/protocol.h"
@@ -206,6 +207,7 @@ struct NodeConfig {
     InstrumentCatalog::Config    instruments; ///< [instruments] 标准合约目录/刷新
     TqAuth::Config               tq_auth;     ///< [tq_auth] 快期账户认证
     KlineStore::Config           kline_cache; ///< [kline_cache] 本地 K 线历史缓存
+    TickStore::Config            tick_cache;  ///< [tick_cache] 本地 tick 快照缓存
 
     /// [serve.ws]：同一 HTTP 端口上的 WebSocket 实时推送。
     struct Ws {

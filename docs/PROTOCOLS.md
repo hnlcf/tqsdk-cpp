@@ -87,7 +87,9 @@ Base URL 默认 `http://127.0.0.1:18081`。
 | GET | `/trades` | `{"trades":{...}}` |
 | GET | `/positions` | `{"positions":{...}}`；REST 隐藏零仓位 |
 | GET | `/trading-snapshot` | account/orders/trades/positions 合并 |
-| GET | `/ticks/{symbol}` | quote 固化 tick 快照 |
+| GET | `/ticks/{symbol}` | quote 固化 tick 快照（内存窗口） |
+| GET | `/ticks/{symbol}?source=cache&limit=N` | TickStore 历史 tick |
+| GET | `/tick-cache/status` | TickStore 状态 |
 | GET | `/trading-status?account=default` | TradingStatus 快照 |
 | GET | `/accounts` | 多账户列表与账户快照 |
 | GET | `/option/analytics/{underlying}` | ATM + Black-Scholes Greeks |

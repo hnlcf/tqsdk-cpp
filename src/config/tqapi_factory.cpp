@@ -493,7 +493,7 @@ NodeConfig build_node_from_toml(const toml::table& root) {
     cfg.upstream = build_from_toml(root); // 复用客户端解析（[ipc]/[md]/[td]）
     // node 一律以 Node 角色连接 gw（gw 侧声明 Gateway，两端角色必须不同）。
     cfg.upstream.ipc.role = ipc::IpcRole::Node;
-    cfg.account_id          = get_str(root, "account_id", cfg.account_id);
+    cfg.account_id        = get_str(root, "account_id", cfg.account_id);
 
     if (auto* arr = root.get("accounts"); arr && arr->is_array()) {
         for (auto&& item : *arr->as_array()) {
@@ -555,6 +555,16 @@ NodeConfig build_node_from_toml(const toml::table& root) {
             std::max<int64_t>(1, get_int(t, "max_pending_bars", cfg.kline_cache.max_pending_bars)));
         cfg.kline_cache.fresh_after_sec =
             std::max<int64_t>(0, get_int(t, "fresh_after_sec", cfg.kline_cache.fresh_after_sec));
+    }
+    if (const auto& t = require_table(root, "tick_cache"); !t.empty()) {
+        cfg.tick_cache.enabled              = get_bool(t, "enabled", cfg.tick_cache.enabled);
+        cfg.tick_cache.file                 = get_str(t, "file", cfg.tick_cache.file);
+        cfg.tick_cache.max_ticks_per_series = static_cast<std::size_t>(std::max<int64_t>(
+            1, get_int(t, "max_ticks_per_series", cfg.tick_cache.max_ticks_per_series)));
+        cfg.tick_cache.flush_interval_ms    = static_cast<int>(std::max<int64_t>(
+            1, get_int(t, "flush_interval_ms", cfg.tick_cache.flush_interval_ms)));
+        cfg.tick_cache.max_pending_ticks    = static_cast<std::size_t>(std::max<int64_t>(
+            1, get_int(t, "max_pending_ticks", cfg.tick_cache.max_pending_ticks)));
     }
     cfg.tq_auth = parse_tq_auth(root);
     cfg.runtime = parse_runtime(root);

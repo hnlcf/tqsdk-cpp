@@ -271,3 +271,34 @@ TEST(MockE2E, TickSeriesAppendsQuoteSnapshots) {
     ASSERT_EQ(ticks->data.size(), 2u);
     EXPECT_EQ(ticks->data.back()->last_price, 3802.0);
 }
+
+// tick sink 只在真正新增快照时触发，重复 quote 不重复持久化。
+TEST(MockE2E, TickSinkReceivesOnlyAppendedSnapshots) {
+    Fixture f;
+    f.api->get_tick_serial("SHFE.rb2610", 3);
+    std::vector<Tick> seen;
+    f.api->set_tick_sink([&](const Tick& tick) { seen.push_back(tick); });
+
+    auto quote = [](std::string datetime, double last, uint64_t volume) {
+        return quote_diff("SHFE.rb2610",
+                          {{"datetime", std::move(datetime)},
+                           {"last_price", last},
+                           {"volume", volume},
+                           {"bid_price1", last - 1},
+                           {"ask_price1", last + 1}});
+    };
+    f.md->inject(quote("2026-11-09 21:00:00.000000", 3800, 42));
+    f.pump(30);
+    ASSERT_EQ(seen.size(), 1u);
+    EXPECT_EQ(seen.back().last_price, 3800);
+    EXPECT_EQ(seen.back().bid_price[0], 3799);
+
+    f.md->inject(quote("2026-11-09 21:00:00.000000", 3800, 42));
+    f.pump(30);
+    EXPECT_EQ(seen.size(), 1u);
+
+    f.md->inject(quote("2026-11-09 21:00:01.000000", 3802, 43));
+    f.pump(30);
+    ASSERT_EQ(seen.size(), 2u);
+    EXPECT_EQ(seen.back().ask_price[0], 3803);
+}

@@ -1,6 +1,7 @@
 #include "tqsdk/pch.h"
 
 #include "tqsdk/config/tqapi_factory.h"
+#include "tqsdk/data/tick_store.h"
 #include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/multiaccount/multi_account_manager.h"
 #include "tqsdk/serve/http_server.h"
@@ -40,6 +41,7 @@ struct NodeRuntime {
     std::shared_ptr<TqAuth>              auth;
     std::shared_ptr<InstrumentCatalog>   catalog;
     std::shared_ptr<KlineStore>          kline_store;
+    std::shared_ptr<TickStore>           tick_store;
     std::shared_ptr<TqApi>               api;
     std::shared_ptr<MultiAccountManager> accounts;
     std::unique_ptr<serve::HttpServer>   http;
@@ -102,6 +104,12 @@ int main(int argc, char** argv) {
             SPDLOG_WARN("[node] kline cache unavailable; continuing without history cache");
         }
     }
+    if (cfg.tick_cache.enabled) {
+        rt->tick_store = std::make_shared<TickStore>(cfg.tick_cache);
+        if (!rt->tick_store->ready()) {
+            SPDLOG_WARN("[node] tick cache unavailable; continuing without tick persistence");
+        }
+    }
 
     // 引导协程：建连 gw -> 建 TqApi -> 预订阅 -> 起 HTTP serve。
     // 失败（gw 未就绪/握手失败）记错误并停止 io。
@@ -126,10 +134,17 @@ int main(int argc, char** argv) {
             co_return;
         }
         SPDLOG_INFO("[node] upstream gateway ready (account={})", primary_id);
+        if (rt->tick_store) {
+            auto store = rt->tick_store;
+            primary->set_tick_sink([store](const Tick& tick) { store->append(tick); });
+        }
 
         // 预订阅：让服务启动后即持续有数据，便于 curl 直接读到。
         for (const auto& sym : cfg.symbols) {
             primary->get_quote(sym); // 触发订阅（不存在则创建占位并订阅）
+            // tick sink 只对已创建的 TickSeries 生效；开启持久化时预创建窗口。
+            if (rt->tick_store)
+                primary->get_tick_serial(sym, 200);
             SPDLOG_INFO("[node] pre-subscribed quote {}", sym);
         }
 
@@ -174,7 +189,8 @@ int main(int argc, char** argv) {
                                                        std::move(ws_opts),
                                                        core_ex,
                                                        rt->catalog.get(),
-                                                       rt->accounts.get());
+                                                       rt->accounts.get(),
+                                                       rt->tick_store.get());
         try {
             rt->http->listen(cfg.serve_bind, cfg.serve_port);
         } catch (const std::exception& e) {
@@ -217,6 +233,10 @@ int main(int argc, char** argv) {
     }
     io.restart();
     io.run_for(std::chrono::milliseconds(200)); // 排空 close 触发的回调
+    if (rt->tick_store) {
+        rt->tick_store->flush();
+        rt->tick_store->stop();
+    }
     if (rt->kline_store) {
         rt->kline_store->flush();
         rt->kline_store->stop();

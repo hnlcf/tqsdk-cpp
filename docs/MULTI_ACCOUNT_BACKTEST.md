@@ -48,6 +48,11 @@ BacktestStats stats = engine.run(bars, [](BacktestContext& ctx) {
     if (ctx.bar().datetime == open_time) ctx.target_position(1);
     if (ctx.bar().datetime == close_time) ctx.target_position(0);
 });
+
+// tick 回放：TickStore::load_range 后直接驱动同一套账户/持仓/手续费模型
+BacktestStats tick_stats = engine.run_ticks(ticks, [](BacktestTickContext& ctx) {
+    if (ctx.tick().datetime == open_time) ctx.buy_open(1);
+});
 ```
 
 支持：
@@ -63,4 +68,7 @@ BacktestStats stats = engine.run(bars, [](BacktestContext& ctx) {
 - Bar 级回测，不含撮合队列/盘口滑点/涨跌停拒单；
 - 不模拟保证金强平、交割、结算价和交易所手续费差异；
 - 成交在策略回调时立即按当前 bar 价格完成，属于研究级近似；
-- 需要 tick/盘口级回测时，应使用 SimTd 或真实回放通道。
+- 新增 tick 级回测 `run_ticks()`：成交价使用 `tick.last_price`，可配合
+  `TickStore::load_recent/load_range` 回放本地 SQLite；
+- tick 回测暂不把字符串 datetime 映射为 BacktestFill 的 TimeStamp，成交时间保留 0；
+- 需要撮合队列/盘口滑点/涨跌停拒单时，仍应使用 SimTd 或扩展撮合模型。

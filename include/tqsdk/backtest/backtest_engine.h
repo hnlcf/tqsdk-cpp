@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tqsdk/domain/tick.h"
 #include "tqsdk/pch.h"
 #include "tqsdk/types.h"
 
@@ -34,6 +35,7 @@ struct BacktestFill {
 };
 
 class BacktestEngine;
+class BacktestTickContext;
 
 struct BacktestStats {
     std::size_t  bars             = 0;
@@ -70,15 +72,39 @@ private:
     const BacktestBar* bar_;
 };
 
+class BacktestTickContext {
+public:
+    const Tick&  tick() const noexcept { return *tick_; }
+    std::int64_t position() const noexcept;
+    double       equity() const noexcept;
+
+    bool buy_open(uint64_t volume);
+    bool sell_open(uint64_t volume);
+    bool buy_close(uint64_t volume);
+    bool sell_close(uint64_t volume);
+    bool target_position(std::int64_t target);
+
+private:
+    friend class BacktestEngine;
+    BacktestTickContext(BacktestEngine& engine, const Tick& tick)
+        : engine_(&engine),
+          tick_(&tick) {}
+    BacktestEngine* engine_;
+    const Tick*     tick_;
+};
+
 class BacktestEngine {
 public:
-    using Strategy = std::function<void(BacktestContext&)>;
+    using Strategy     = std::function<void(BacktestContext&)>;
+    using TickStrategy = std::function<void(BacktestTickContext&)>;
 
     explicit BacktestEngine(BacktestConfig config)
         : config_(config) {}
 
     BacktestStats run(const std::vector<BacktestBar>& bars);
     BacktestStats run(const std::vector<BacktestBar>& bars, Strategy strategy);
+    /// 逐 tick 回测：成交价使用 tick.last_price，成交时间保留为 0（tick datetime 为字符串）。
+    BacktestStats run_ticks(const std::vector<Tick>& ticks, TickStrategy strategy = {});
 
     const BacktestConfig& config() const noexcept { return config_; }
     std::int64_t          position() const noexcept { return long_volume_ - short_volume_; }
@@ -87,6 +113,7 @@ public:
 
 private:
     friend class BacktestContext;
+    friend class BacktestTickContext;
 
     bool   execute(Direction direction, Offset offset, uint64_t volume);
     bool   close_short(uint64_t volume, double price);
@@ -101,6 +128,7 @@ private:
                        double    realized);
     double execution_price(const BacktestBar& bar) const;
     void   mark(const BacktestBar& bar);
+    void   mark_tick(const Tick& tick);
 
     BacktestConfig            config_;
     std::vector<BacktestFill> fills_;

@@ -56,6 +56,7 @@ add_library(tqsdk_core SHARED
     src/data/diff_merge_positions.cpp
     src/data/diff_merge_klines.cpp
     src/data/kline_store.cpp
+    src/data/tick_store.cpp
     src/data/data_downloader.cpp
     src/option/option_analytics.cpp
     src/multiaccount/multi_account_manager.cpp
@@ -239,6 +240,7 @@ if(TQSDK_BUILD_TESTS)
         tests/channel/channel_multiplex_test.cpp
         tests/data/data_manager_test.cpp
         tests/data/data_series_test.cpp
+        tests/data/tick_store_test.cpp
         tests/option/option_analytics_test.cpp
         tests/multiaccount/multi_account_test.cpp
         tests/backtest/backtest_engine_test.cpp
@@ -277,6 +279,7 @@ if(TQSDK_BUILD_TESTS)
         tests/serve/p0_http_test.cpp
         tests/serve/option_http_test.cpp
         tests/serve/multi_account_http_test.cpp
+        tests/serve/tick_cache_http_test.cpp
         tests/trading/trading_calendar_test.cpp
         tests/trading/trading_status_test.cpp
         tests/trading/risk_manager_test.cpp

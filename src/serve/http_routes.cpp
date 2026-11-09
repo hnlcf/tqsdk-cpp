@@ -1,3 +1,4 @@
+#include "tqsdk/data/tick_store.h"
 #include "tqsdk/option/option_analytics.h"
 #include "tqsdk/serve/http_server.h"
 #include "tqsdk/trading/holiday_calendar.h"
@@ -278,6 +279,12 @@ void HttpServer::setup_routes() {
         {http::verb::get, "/kline-cache/status", make_entry([this]() -> asio::awaitable<json> {
              co_return api_->kline_cache_status();
          })},
+        {http::verb::get, "/tick-cache/status", make_entry([this]() -> asio::awaitable<json> {
+             if (tick_store_ == nullptr) {
+                 co_return json{{"enabled", false}, {"ready", false}};
+             }
+             co_return tick_store_->status_json();
+         })},
         {http::verb::get,
          "/quote/{symbol}",
          make_entry([this](std::string symbol) -> asio::awaitable<json> {
@@ -309,15 +316,24 @@ void HttpServer::setup_routes() {
          })},
         {http::verb::get,
          "/ticks/{symbol}",
-         make_entry([this](std::string symbol) -> asio::awaitable<json> {
-             TickSeries* series = api_->get_tick_serial(symbol, 200);
-             json        ticks  = json::array();
+         make_entry([this](std::string symbol, Query<TickQuery> query) -> asio::awaitable<json> {
+             const std::size_t limit = query_size(query.value.limit, 200, 20000);
+             json              ticks = json::array();
+             if (query.value.source == "cache" && tick_store_ != nullptr) {
+                 for (const auto& tick : tick_store_->load_recent(symbol, limit)) {
+                     ticks.push_back(tick);
+                 }
+                 co_return json{
+                     {"instrument_id", symbol}, {"source", "cache"}, {"ticks", std::move(ticks)}};
+             }
+             TickSeries* series = api_->get_tick_serial(symbol, static_cast<int>(limit));
              if (series != nullptr) {
                  for (const auto& tick : series->data) {
                      ticks.push_back(tick);
                  }
              }
-             co_return json{{"instrument_id", symbol}, {"ticks", std::move(ticks)}};
+             co_return json{
+                 {"instrument_id", symbol}, {"source", "memory"}, {"ticks", std::move(ticks)}};
          })},
         {http::verb::get,
          "/trading-snapshot",

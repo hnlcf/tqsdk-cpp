@@ -30,14 +30,42 @@ TickSeries* ticks = api.get_tick_serial("SHFE.rb2701", 200);
 REST：
 
 ```text
-GET /ticks/{symbol}
+GET /ticks/{symbol}                         # 内存窗口
+GET /ticks/{symbol}?source=cache&limit=200  # TickStore 历史
+GET /tick-cache/status                      # 缓存状态
 ```
 
 返回：
 
 ```json
-{"instrument_id":"SHFE.rb2701","ticks":[{...}]}
+{"instrument_id":"SHFE.rb2701","source":"cache","ticks":[{...}]}
 ```
+
+## 2.1 TickStore 持久化
+
+`TickStore` 把每条新 `Tick` 异步写入 SQLite（WAL），供重启后回放/分析：
+
+```toml
+[tick_cache]
+enabled = true
+file = "tick_cache.sqlite3"
+max_ticks_per_series = 200000
+flush_interval_ms = 250
+max_pending_ticks = 50000
+```
+
+```cpp
+TickStore store(cfg);
+api.set_tick_sink([&](const Tick& tick) { store.append(tick); });
+auto recent = store.load_recent("SHFE.rb2701", 200);
+auto range  = store.load_range("SHFE.rb2701", start, end, 5000);
+store.flush();
+```
+
+- 异步写线程，队列满时计数 drop，不阻塞行情合并；
+- 按 `symbol` 保留最近 `max_ticks_per_series` 条；
+- 读写连接分离，SQLite 打开失败自动降级；
+- `run_live.sh` 支持 `TICK_CACHE_ENABLED=1` 和 `TICK_CACHE_MAX_TICKS`。
 
 ## 3. DataDownloader
 
@@ -55,6 +83,7 @@ downloader.download_klines(kline_stream, "bars.csv");
 ## 4. 边界
 
 - tick 是 quote 快照，不是逐笔成交；同价位盘口变化是否产生新 tick 由指纹决定；
-- 不落盘 tick（K 线有 SQLite 缓存，tick 导出由 DataDownloader 负责）；
+- tick 默认不落盘；显式启用 `[tick_cache]` 后才写 SQLite，导出仍可用 DataDownloader；
 - tick 容量由调用方控制，避免无界内存增长；
-- 高频合约建议使用较小的 view_width，并在策略侧按需归档。
+- 高频合约建议使用较小的 view_width，并根据磁盘预算设置 `max_ticks_per_series`；
+- TickStore 存的是 quote 快照，不替代交易所逐笔成交明细。

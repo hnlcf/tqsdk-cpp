@@ -47,9 +47,9 @@ public:
     void close();
 
     // ---- 就绪/指标 ----
-    bool           md_ready() const;
-    bool           td_ready() const;
-    bool           ready() const;
+    bool md_ready() const;
+    bool td_ready() const;
+    bool ready() const;
     /// 当前交易阶段；无交易网关时返回 Unknown（由调用方回退到本地交易日历）。
     TradingCalendar::Phase session_phase() const noexcept {
         return td_ ? td_->session_phase() : TradingCalendar::Phase::Unknown;
@@ -86,10 +86,13 @@ public:
     // 报单；按 rid 查，不存在返回 nullptr。
     Order* get_order(std::string_view order_id);
     // 账户快照。
-    Account& get_account();
+    Account&       get_account();
     const Account& get_account() const;
     /// 获取 tick 序列（由订阅到的 quote 快照固化）。首次调用会订阅该合约行情。
     TickSeries* get_tick_serial(std::string_view symbol, int view_width = 200);
+    /// 每条新 tick 固化后调用；用于 node 侧 TickStore 持久化。
+    using TickSink = std::function<void(const Tick&)>;
+    void set_tick_sink(TickSink sink);
     // K 线流；不存在返回 nullptr（需先由数据更新创建）。
     KlineStream* get_kline(std::string_view symbol, int64_t duration_ns);
 
@@ -162,6 +165,7 @@ private:
     std::unordered_map<std::string, bool> cache_fresh_;
 
     std::vector<std::function<void()>> close_hooks_;
+    TickSink                           tick_sink_;
 
     std::uint64_t                                               next_update_hook_id_ = 0;
     std::vector<std::pair<UpdateHookId, std::function<void()>>> update_hooks_;

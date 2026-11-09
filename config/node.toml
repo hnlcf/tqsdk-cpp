@@ -87,6 +87,16 @@ flush_interval_ms = 250
 max_pending_bars = 50000
 fresh_after_sec = 900
 
+# ---- Tick 快照缓存 ----
+# 保存 quote 快照（不是逐笔成交 tape）；异步写 SQLite，按合约保留最近 N 条。
+# REST: GET /tick-cache/status、GET /ticks/SHFE.rb2701?source=cache&limit=200
+[tick_cache]
+enabled = false
+file = "tick_cache.sqlite3"
+max_ticks_per_series = 200000
+flush_interval_ms = 250
+max_pending_ticks = 50000
+
 # ---- 运行时线程 ----
 # io_context worker 数。数据面（TqApi/DataManager/网关）绑定 core strand 串行；
 # HTTP 每连接独立 strand，可在多个 worker 上并行处理 socket 读写。

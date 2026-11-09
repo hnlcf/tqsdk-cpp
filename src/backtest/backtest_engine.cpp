@@ -43,6 +43,22 @@ void BacktestEngine::mark(const BacktestBar& bar) {
     }
 }
 
+void BacktestEngine::mark_tick(const Tick& tick) {
+    if (std::isfinite(tick.last_price) && tick.last_price > 0) {
+        last_price_ = tick.last_price;
+    }
+    // Tick.datetime 是字符串；tick 回测暂不伪造 TimeStamp，成交 datetime 保持 0。
+    current_datetime_    = 0;
+    const double current = equity();
+    if (current > peak_equity_)
+        peak_equity_ = current;
+    const double drawdown = peak_equity_ - current;
+    if (drawdown > max_drawdown_) {
+        max_drawdown_     = drawdown;
+        max_drawdown_pct_ = peak_equity_ > 0 ? drawdown / peak_equity_ * 100.0 : 0.0;
+    }
+}
+
 void BacktestEngine::record_fill(Direction direction,
                                  Offset    offset,
                                  uint64_t  volume,
@@ -191,6 +207,47 @@ BacktestStats BacktestEngine::run(const std::vector<BacktestBar>& bars, Strategy
     return stats;
 }
 
+BacktestStats BacktestEngine::run_ticks(const std::vector<Tick>& ticks, TickStrategy strategy) {
+    fills_.clear();
+    realized_pnl_     = 0.0;
+    commission_       = 0.0;
+    peak_equity_      = config_.initial_balance;
+    max_drawdown_     = 0.0;
+    max_drawdown_pct_ = 0.0;
+    last_price_       = 0.0;
+    current_datetime_ = 0;
+    long_volume_      = 0;
+    short_volume_     = 0;
+    avg_long_         = 0.0;
+    avg_short_        = 0.0;
+
+    for (const auto& tick : ticks) {
+        mark_tick(tick);
+        if (strategy) {
+            BacktestTickContext context(*this, tick);
+            strategy(context);
+        }
+    }
+    if (!ticks.empty())
+        mark_tick(ticks.back());
+
+    BacktestStats stats;
+    stats.bars             = ticks.size();
+    stats.fills            = fills_.size();
+    stats.win_fills        = static_cast<std::size_t>(std::count_if(
+        fills_.begin(), fills_.end(), [](const auto& fill) { return fill.realized_pnl > 0.0; }));
+    stats.initial_balance  = config_.initial_balance;
+    stats.final_equity     = equity();
+    stats.total_return     = stats.final_equity - stats.initial_balance;
+    stats.realized_pnl     = realized_pnl_;
+    stats.commission       = commission_;
+    stats.max_drawdown     = max_drawdown_;
+    stats.max_drawdown_pct = max_drawdown_pct_;
+    stats.final_position =
+        static_cast<std::int64_t>(long_volume_) - static_cast<std::int64_t>(short_volume_);
+    return stats;
+}
+
 std::int64_t BacktestContext::position() const noexcept {
     return engine_->position();
 }
@@ -216,6 +273,41 @@ bool BacktestContext::sell_close(uint64_t volume) {
 }
 
 bool BacktestContext::target_position(std::int64_t target) {
+    const auto current = engine_->position();
+    if (target == current)
+        return true;
+    if (target > current) {
+        return engine_->execute(
+            Direction::BUY, Offset::OPEN, static_cast<uint64_t>(target - current));
+    }
+    return engine_->execute(Direction::SELL, Offset::OPEN, static_cast<uint64_t>(current - target));
+}
+
+std::int64_t BacktestTickContext::position() const noexcept {
+    return engine_->position();
+}
+
+double BacktestTickContext::equity() const noexcept {
+    return engine_->equity();
+}
+
+bool BacktestTickContext::buy_open(uint64_t volume) {
+    return engine_->execute(Direction::BUY, Offset::OPEN, volume);
+}
+
+bool BacktestTickContext::sell_open(uint64_t volume) {
+    return engine_->execute(Direction::SELL, Offset::OPEN, volume);
+}
+
+bool BacktestTickContext::buy_close(uint64_t volume) {
+    return engine_->execute(Direction::BUY, Offset::CLOSE, volume);
+}
+
+bool BacktestTickContext::sell_close(uint64_t volume) {
+    return engine_->execute(Direction::SELL, Offset::CLOSE, volume);
+}
+
+bool BacktestTickContext::target_position(std::int64_t target) {
     const auto current = engine_->position();
     if (target == current)
         return true;

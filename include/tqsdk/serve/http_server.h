@@ -14,6 +14,7 @@
 #include <boost/beast/version.hpp>
 
 namespace tqsdk {
+class TickStore;
 namespace serve {
 
 namespace beast = boost::beast;
@@ -85,6 +86,16 @@ inline void from_json(const json& j, AccountQuery& q) {
     q.account = j.value("account", std::string{});
 }
 
+/// `/ticks/{symbol}` 查询参数；`source=cache` 从 TickStore 读取历史。
+struct TickQuery {
+    std::string limit;
+    std::string source;
+};
+inline void from_json(const json& j, TickQuery& q) {
+    q.limit  = j.value("limit", std::string{});
+    q.source = j.value("source", std::string{});
+}
+
 /// `/option/analytics/{underlying}` 的估值查询参数。
 struct OptionAnalyticsQuery {
     std::string spot;
@@ -149,7 +160,8 @@ public:
                asio::any_io_executor ex,
                WsOptions             ws_options = {},
                InstrumentCatalog*    catalog    = nullptr,
-               MultiAccountManager*  accounts   = nullptr);
+               MultiAccountManager*  accounts   = nullptr,
+               TickStore*            tick_store = nullptr);
 
     /// 双 executor 构造：
     ///   - io_ex      ：accept / socket 读写（可跨多线程、每连接一条 strand）
@@ -159,8 +171,9 @@ public:
                asio::any_io_executor io_ex,
                WsOptions             ws_options,
                asio::any_io_executor data_ex,
-               InstrumentCatalog*    catalog  = nullptr,
-               MultiAccountManager*  accounts = nullptr);
+               InstrumentCatalog*    catalog    = nullptr,
+               MultiAccountManager*  accounts   = nullptr,
+               TickStore*            tick_store = nullptr);
 
     /// 绑定并监听 addr:port；开始 accept 循环（后台协程）。失败抛 system_error。
     /// 需在 io_context.run() 之前调用。
@@ -188,8 +201,9 @@ private:
     TqApi* account_api(std::string_view account_id) const;
 
     TqApi*               api_;
-    MultiAccountManager* accounts_ = nullptr;
-    InstrumentCatalog*   catalog_  = nullptr;
+    MultiAccountManager* accounts_   = nullptr;
+    TickStore*           tick_store_ = nullptr;
+    InstrumentCatalog*   catalog_    = nullptr;
 
     std::uint64_t                                                     task_seq_ = 0;
     std::unordered_map<std::string, std::shared_ptr<TargetPosTask>>   target_tasks_;

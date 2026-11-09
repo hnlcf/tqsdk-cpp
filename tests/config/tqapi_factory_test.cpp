@@ -321,6 +321,22 @@ fresh_after_sec = 60
     EXPECT_FALSE(disabled.kline_cache.enabled);
 }
 
+TEST(TqApiFactoryConfig, ParsesNodeTickCache) {
+    auto cfg = parse_node_config(R"(
+[tick_cache]
+enabled = true
+file = "/tmp/ticks.sqlite3"
+max_ticks_per_series = 1234
+flush_interval_ms = 20
+max_pending_ticks = 99
+)");
+    EXPECT_TRUE(cfg.tick_cache.enabled);
+    EXPECT_EQ(cfg.tick_cache.file, "/tmp/ticks.sqlite3");
+    EXPECT_EQ(cfg.tick_cache.max_ticks_per_series, 1234u);
+    EXPECT_EQ(cfg.tick_cache.flush_interval_ms, 20);
+    EXPECT_EQ(cfg.tick_cache.max_pending_ticks, 99u);
+}
+
 TEST(TqApiFactoryConfig, ParsesNodeAccountEndpoints) {
     auto cfg = parse_node_config(R"(
 [[accounts]]
