@@ -63,6 +63,19 @@ task.target.create / task.target.list / task.target.write / tasks 全部 PASS；
 Sim 仓位已通过 SELL CLOSE 平掉，`/positions` 为空。
 报告归档在 `artifacts/p0_sim_preflight/`。
 
+## 2.1 等待晚间自动执行
+
+```bash
+# 等到 ready=true 且 trading=true，然后跑只读探针
+./scripts/p0_evening_acceptance.sh
+
+# 等到 ready/trading 后执行写场景；--yes 仍需显式确认
+./scripts/p0_evening_acceptance.sh --write --yes
+```
+
+脚本默认每次最多等 4 小时，失败后每 30 秒重新检查；
+`TQSDK_READY_WAIT=0` 可改为循环等待。
+
 ## 3. 自动探针（推荐）
 
 只读：
