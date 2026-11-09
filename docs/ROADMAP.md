@@ -76,7 +76,7 @@
 ### P6.3 长稳与故障
 
 - 60s 短 soak 已验证；待做 24h/72h soak 归档自动化；
-- ✅ ASan/TSan 本地全量通过；待做 UBSan、CI runner；
+- ✅ ASan/TSan/UBSan 本地全量通过；待做 GitHub CI runner；
 - IPC/WS fuzz：
   - 半帧/超大长度/非法 JSON/重复 seq/epoch 回绕；
 - CTP 查询 watchdog 抖动注入；

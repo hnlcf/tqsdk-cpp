@@ -4,7 +4,8 @@
 #   ./scripts/ci_local.sh
 #   ./scripts/ci_local.sh --asan
 #   ./scripts/ci_local.sh --tsan
-#   ./scripts/ci_local.sh --asan --tsan
+#   ./scripts/ci_local.sh --ubsan
+#   ./scripts/ci_local.sh --asan --tsan --ubsan
 #
 # This is intentionally dependency-light; CI runners can call the same script
 # after installing cmake/vcpkg/pnpm.
@@ -15,11 +16,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${TQSDK_CI_BUILD_DIR:-$ROOT/build-ui}"
 RUN_ASAN=0
 RUN_TSAN=0
+RUN_UBSAN=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
     --asan) RUN_ASAN=1; shift ;;
     --tsan) RUN_TSAN=1; shift ;;
+    --ubsan) RUN_UBSAN=1; shift ;;
     -h|--help)
         sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
         exit 0
@@ -49,6 +52,10 @@ fi
 if (( RUN_TSAN )); then
     echo "== TSan =="
     "$ROOT/scripts/tsan_job.sh"
+fi
+if (( RUN_UBSAN )); then
+    echo "== UBSan =="
+    "$ROOT/scripts/ubsan_job.sh"
 fi
 
 echo "ci_local: PASS"
