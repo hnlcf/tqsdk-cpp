@@ -17,6 +17,18 @@
 - 本轮模块重构：WsEntityFilter、SnapshotService、GatewaySubscriptionBook、
   CommandAckCache、DiffMerge/CTP/gateway/http 分文件。
 
+## 1.1 当前剩余优先级
+
+1. **TqTdGateway**：消费动态 TD URL，实现 TQ 交易网关登录、下单/撤单、成交/持仓 diff、重连对账；需要官方协议/可用测试端点。
+2. **WebSocket 多账户过滤**：当前 Web 账户选择器对非默认账户走 REST，WS 仍只提供默认账户。
+3. **账户级 task/risk**：把 `/task/*`、`/risk/*` 扩展到 `?account=`，并做每账户独立规则。
+4. **真实多账户验收**：启动两个 gw/账户，验证 `/accounts`、下单路由、持仓隔离与故障切换。
+5. **前端 E2E/视觉回归**：Playwright 覆盖搜索选合约、切换合约/周期、K 线缩放、账户切换、断线重连。
+6. **UBSan / IPC-WS fuzz / 24h-72h soak / GitHub CI**；已有本地 `ci_local.sh`、ASan、TSan。
+7. **CTP 连续 5 个交易日 soak 与交易日矩阵**；真实交易日不可压缩。
+8. **生产化**：TLS/认证（node 目前 loopback）、systemd/supervisor、日志脱敏、审计。
+9. **性能/协议**：MessagePack/共享内存、WS 二进制行情、前端虚拟列表与指标 Worker。
+
 ## 2. P0 执行/风控能力（已实现）
 
 - ✅ 高级报单：FAK/FOK、市价、BEST、FIVELEVEL、MIN/ALL、offset_leg2；
@@ -63,8 +75,8 @@
 
 ### P6.3 长稳与故障
 
-- 24h/72h soak 归档自动化；
-- ASan/TSan/UBSan CI；
+- 60s 短 soak 已验证；待做 24h/72h soak 归档自动化；
+- ✅ ASan/TSan 本地全量通过；待做 UBSan、CI runner；
 - IPC/WS fuzz：
   - 半帧/超大长度/非法 JSON/重复 seq/epoch 回绕；
 - CTP 查询 watchdog 抖动注入；
@@ -76,13 +88,15 @@
 - ✅ P1-2：Black-Scholes/Greeks、ATM 期权链、`/option/analytics/{underlying}`、Web Greeks；
 - ✅ P1-3：TradingStatus、`/trading-status`、Tq MD 动态 URL、TD URL 解析诊断；
 - ✅ P2：`MultiAccountManager`（每账户独立 TqApi）、独立 bar `BacktestEngine`。
-- 待集成：node REST 多账户路由、TqTdGateway、tick 落盘。
+- ✅ node REST 多账户路由、TickStore 统一行情 SQLite、tick 级回测；
+- 待集成：TqTdGateway、WebSocket 多账户过滤、账户级 task/risk。
 
 ## 3. UI 与可观测性
 
 - TQSDK Board：多自选模糊搜索/K 线/分时/盘口/三键下单/合并持仓/委托/成交/权益已落地；
 - 指标参数/颜色设置（MA/BOLL/MACD/RSI）已落地，插件化设计见 WEB_INDICATORS；
 - TqAuth 快期认证与目录 Bearer header 已接入；
+- ✅ 顶栏账户选择器、运维页、持仓固定列宽、K 线切换缩放/本地时间；
 - 图表画线 primitive/overlay 与指标 Worker；
 - 前端 Playwright 端到端（登录/订阅/下单/重连）；
 - 虚拟列表、列宽/排序持久化；
@@ -90,8 +104,9 @@
 
 ## 4. 架构与性能
 
-- `CtpQueryPipeline`、`MarketSnapshotService` 已完成的服务边界继续收敛；
-- HTTP 路由按 catalog/market/trading 分组，handler 不再直接读 DataManager；
+- ✅ `CtpQueryPipeline`、`MarketSnapshotService` 服务边界已收敛；
+- ✅ HttpServer 路由 handler 已拆为独立方法，setup_routes 只做注册；
+- 下一步按 catalog/market/trading 文件拆分路由实现；
 - IPC 可选 MessagePack/共享内存快路径；
 - WS 二进制行情帧评估；
 - KlineStore 仅 node 构建依赖；
