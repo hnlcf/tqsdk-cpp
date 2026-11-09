@@ -7,6 +7,7 @@
 #include "tqsdk/data/kline_store.h"
 #include "tqsdk/gateway/market_data_gateway.h"
 #include "tqsdk/gateway/trading_gateway.h"
+#include "tqsdk/trading/risk_manager.h"
 #include "tqsdk/update_signal.h"
 
 namespace tqsdk {
@@ -49,6 +50,10 @@ public:
     bool           md_ready() const;
     bool           td_ready() const;
     bool           ready() const;
+    /// 当前交易阶段；无交易网关时返回 Unknown（由调用方回退到本地交易日历）。
+    TradingCalendar::Phase session_phase() const noexcept {
+        return td_ ? td_->session_phase() : TradingCalendar::Phase::Unknown;
+    }
     nlohmann::json readiness_json() const;
     nlohmann::json metrics_json() const;
     nlohmann::json kline_cache_status() const;
@@ -57,6 +62,18 @@ public:
     // 用于关闭网关之外、TqApi 不直接持有的资源（例如远程模式下共享的
     // IpcClient 连接）。幂等：close() 已执行后再注册会立即调用一次。
     void add_close_hook(std::function<void()> hook);
+
+    // ---- 更新钩子（供 TargetPosTask / InsertOrderTask 驱动）----
+    using UpdateHookId = std::uint64_t;
+    UpdateHookId add_update_hook(std::function<void()> hook);
+    void         remove_update_hook(UpdateHookId id);
+    /// 唤醒当前/下一次 wait_update；任务 set_target_volume 后调用。
+    void                  notify_update();
+    asio::any_io_executor executor() const noexcept { return ex_; }
+
+    // ---- 风控 ----
+    RiskManager&       risk_manager() noexcept { return risk_; }
+    const RiskManager& risk_manager() const noexcept { return risk_; }
 
     // ---- 等待事件 ----
     // 挂起直到有 diff 合并；返回 true 表示有更新，false 表示已关闭。
@@ -70,6 +87,9 @@ public:
     Order* get_order(std::string_view order_id);
     // 账户快照。
     Account& get_account();
+    const Account& get_account() const;
+    /// 获取 tick 序列（由订阅到的 quote 快照固化）。首次调用会订阅该合约行情。
+    TickSeries* get_tick_serial(std::string_view symbol, int view_width = 200);
     // K 线流；不存在返回 nullptr（需先由数据更新创建）。
     KlineStream* get_kline(std::string_view symbol, int64_t duration_ns);
 
@@ -98,7 +118,8 @@ public:
     // ---- 交易 ----
     // 异步发单：本地造占位单，命令发给网关后立即返回其指针（保证非空），不等终态。
     // 注意：Asio 的 awaitable 不支持引用类型，故返回 Order* 而非 Order&。
-    asio::awaitable<Order*>     insert_order(const InsertOrderReq& req);
+    asio::awaitable<Order*>     insert_order(const InsertOrderReq&  req,
+                                             std::optional<OrderId> order_id = std::nullopt);
     asio::awaitable<CommandAck> cancel_order(const CancelOrderReq& req);
 
     // ---- 内部数据访问（测试/调试用）----
@@ -116,6 +137,8 @@ private:
                              KlineStream&     stream);
     int  remote_kline_width(std::string_view symbol, int64_t duration_ns, int requested) const;
     void persist_changed_klines();
+    void run_update_hooks();
+    void append_ticks_from_quotes();
 
     asio::any_io_executor              ex_;
     std::unique_ptr<MarketDataGateway> md_;
@@ -139,6 +162,10 @@ private:
     std::unordered_map<std::string, bool> cache_fresh_;
 
     std::vector<std::function<void()>> close_hooks_;
+
+    std::uint64_t                                               next_update_hook_id_ = 0;
+    std::vector<std::pair<UpdateHookId, std::function<void()>>> update_hooks_;
+    RiskManager                                                 risk_;
 };
 
 } // namespace tqsdk

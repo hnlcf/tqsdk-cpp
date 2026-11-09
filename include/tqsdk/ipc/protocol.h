@@ -343,6 +343,8 @@ inline void to_json(json& j, const CommandBody& m) {
                            {"limit_price", to_json_opt_double(m.insert.limit_price)},
                            {"time_cond", m.insert.time_cond},
                            {"volume_cond", m.insert.volume_cond},
+                           {"advanced", m.insert.advanced},
+                           {"offset_leg2", m.insert.offset_leg2},
                            {"volume", m.insert.volume},
                            {"min_volume", m.insert.min_volume}};
         break;
@@ -366,6 +368,8 @@ inline void from_json(const json& j, CommandBody& m) {
         m.insert.limit_price   = from_json_opt_double(ins, "limit_price");
         m.insert.time_cond     = ins.at("time_cond").get<TimeCondition>();
         m.insert.volume_cond   = ins.at("volume_cond").get<VolumeCondition>();
+        m.insert.advanced      = ins.value("advanced", AdvancedOrder::NONE);
+        m.insert.offset_leg2   = ins.value("offset_leg2", std::string{});
         m.insert.volume        = ins.at("volume").get<uint64_t>();
         m.insert.min_volume    = ins.value("min_volume", uint64_t{0});
         break;

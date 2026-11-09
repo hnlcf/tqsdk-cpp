@@ -65,15 +65,17 @@ public:
 private:
     // 挂单簿内的活动订单状态
     struct LiveOrder {
-        OrderId      rid;
-        InstrumentId instrument_id;
-        Direction    direction;
-        Offset       offset;
-        PriceType    price_type;
-        double       limit_price;  // 限价；市价单为 NaN
-        uint64_t     volume_orign; // 原始手数
-        uint64_t     volume_left;  // 未成交手数
-        TimeStamp    insert_time;
+        OrderId         rid;
+        InstrumentId    instrument_id;
+        Direction       direction;
+        Offset          offset;
+        PriceType       price_type;
+        double          limit_price; // 限价；市价单为 NaN
+        TimeCondition   time_cond   = TimeCondition::GFD;
+        VolumeCondition volume_cond = VolumeCondition::ANY;
+        uint64_t        volume_orign; // 原始手数
+        uint64_t        volume_left;  // 未成交手数
+        TimeStamp       insert_time;
     };
 
     // 持仓聚合（long/short 总量）

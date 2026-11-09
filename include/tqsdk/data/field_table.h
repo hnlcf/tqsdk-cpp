@@ -127,6 +127,7 @@ inline PositionField lookup_position_field(std::string_view name) noexcept {
 }
 
 constexpr std::array kOrderFields = {
+    std::pair{"advanced"sv, OrderField::advanced},
     std::pair{"direction"sv, OrderField::direction},
     std::pair{"exchange_id"sv, OrderField::exchange_id},
     std::pair{"exchange_order_id"sv, OrderField::exchange_order_id},
@@ -139,6 +140,7 @@ constexpr std::array kOrderFields = {
     std::pair{"limit_price"sv, OrderField::limit_price},
     std::pair{"min_volume"sv, OrderField::min_volume},
     std::pair{"offset"sv, OrderField::offset},
+    std::pair{"offset_leg2"sv, OrderField::offset_leg2},
     std::pair{"order_type"sv, OrderField::order_type},
     std::pair{"price_type"sv, OrderField::price_type},
     std::pair{"status"sv, OrderField::status},

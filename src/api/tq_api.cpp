@@ -80,6 +80,7 @@ void TqApi::close() {
         }
     }
     close_hooks_.clear();
+    update_hooks_.clear();
     if (kline_store_) {
         kline_store_->flush();
     }
@@ -98,6 +99,45 @@ void TqApi::add_close_hook(std::function<void()> hook) {
         return;
     }
     close_hooks_.push_back(std::move(hook));
+}
+
+TqApi::UpdateHookId TqApi::add_update_hook(std::function<void()> hook) {
+    if (!hook || closed_.load(std::memory_order_relaxed))
+        return 0;
+    const auto id = ++next_update_hook_id_;
+    update_hooks_.emplace_back(id, std::move(hook));
+    return id;
+}
+
+void TqApi::remove_update_hook(UpdateHookId id) {
+    update_hooks_.erase(std::remove_if(update_hooks_.begin(),
+                                       update_hooks_.end(),
+                                       [id](const auto& item) { return item.first == id; }),
+                        update_hooks_.end());
+}
+
+void TqApi::notify_update() {
+    if (!closed_.load(std::memory_order_relaxed)) {
+        update_signal_.notify();
+    }
+}
+
+void TqApi::run_update_hooks() {
+    // 复制一份，允许 hook 在执行中注销自己或其它任务。
+    std::vector<std::function<void()>> hooks;
+    hooks.reserve(update_hooks_.size());
+    for (const auto& [_, hook] : update_hooks_) {
+        hooks.push_back(hook);
+    }
+    for (auto& hook : hooks) {
+        try {
+            hook();
+        } catch (const std::exception& e) {
+            SPDLOG_ERROR("[TqApi] update hook failed: {}", e.what());
+        } catch (...) {
+            SPDLOG_ERROR("[TqApi] update hook failed: unknown exception");
+        }
+    }
 }
 
 bool TqApi::md_ready() const {
@@ -258,7 +298,9 @@ asio::awaitable<void> TqApi::md_loop() {
             md_connected_.store(true, std::memory_order_relaxed);
             md_ready_.store(true, std::memory_order_relaxed);
             merger_.apply(ev->payload);
+            append_ticks_from_quotes();
             persist_changed_klines();
+            run_update_hooks();
             update_signal_.notify();
             break;
         case MarketDataEvent::Kind::Disconnected:
@@ -290,6 +332,7 @@ asio::awaitable<void> TqApi::td_loop() {
             td_connected_.store(true, std::memory_order_relaxed);
             td_ready_.store(true, std::memory_order_relaxed);
             merger_.apply(ev->payload);
+            run_update_hooks();
             update_signal_.notify();
             break;
         case TradeEvent::Kind::Snapshot:
@@ -319,6 +362,27 @@ asio::awaitable<void> TqApi::td_loop() {
     co_return;
 }
 
+// ---------- Tick 序列 ----------
+TickSeries* TqApi::get_tick_serial(std::string_view symbol, int view_width) {
+    if (view_width <= 0)
+        view_width = 200;
+    auto& series = data_.ticks.get_or_create(symbol, view_width);
+    if (static_cast<int>(series.capacity) < view_width) {
+        series.reset(static_cast<std::size_t>(view_width));
+    }
+    (void)get_quote(symbol); // 复用 quote 订阅与本地占位
+    return &series;
+}
+
+void TqApi::append_ticks_from_quotes() {
+    for (auto& [symbol, series] : data_.ticks) {
+        const auto* quote = data_.quotes.find(symbol);
+        if (quote != nullptr) {
+            series.append_quote(*quote);
+        }
+    }
+}
+
 // ---------- wait_update ----------
 asio::awaitable<bool> TqApi::wait_update() {
     if (closed_) {
@@ -339,6 +403,8 @@ asio::awaitable<bool> TqApi::wait_update() {
         // close() 也会 notify 来唤醒这里。
         co_return false;
     }
+
+    run_update_hooks();
 
     // 此刻挂起期间到达的所有 diff 都已被 md/td loop apply 过，
     // changed_fields 即为"本轮变化"，无需在此清位，直接返回给用户查询。
@@ -370,6 +436,10 @@ Order* TqApi::get_order(std::string_view order_id) {
 }
 
 Account& TqApi::get_account() {
+    return data_.account;
+}
+
+const Account& TqApi::get_account() const {
     return data_.account;
 }
 

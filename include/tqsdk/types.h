@@ -82,6 +82,15 @@ enum class PriceType {
 };
 DEFINE_ENUM_JSON_SERIALIZE(PriceType)
 
+/// 官方 TqSdk 的 advanced 参数：FAK/FOK。
+/// CTP 没有独立的 FAK/FOK 时间条件，需要映射为 IOC + ANY/ALL。
+enum class AdvancedOrder : uint8_t {
+    NONE,
+    FAK,
+    FOK
+};
+DEFINE_ENUM_JSON_SERIALIZE(AdvancedOrder)
+
 enum class VolumeCondition : uint8_t {
     /// 任何数量
     ANY,

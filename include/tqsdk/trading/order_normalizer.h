@@ -23,6 +23,23 @@ struct OrderPriceNormalization {
     bool ok() const noexcept { return error.empty(); }
 };
 
+/// 将官方 advanced=FAK/FOK 与 CTP 的 TimeCondition/VolumeCondition 对齐。
+/// CTP 只有 IOC，FAK/FOK 的差别在数量条件：ANY / ALL。
+inline InsertOrderReq apply_advanced_order(const InsertOrderReq& request) {
+    InsertOrderReq result = request;
+    if (result.advanced == AdvancedOrder::FAK) {
+        result.time_cond   = TimeCondition::IOC;
+        result.volume_cond = VolumeCondition::ANY;
+    } else if (result.advanced == AdvancedOrder::FOK) {
+        result.time_cond   = TimeCondition::IOC;
+        result.volume_cond = VolumeCondition::ALL;
+    } else if (result.price_type != PriceType::LIMIT && result.time_cond == TimeCondition::GFD) {
+        // 市价/最优价/五档价默认是立即成交，避免 GFD 挂单。
+        result.time_cond = TimeCondition::IOC;
+    }
+    return result;
+}
+
 inline std::string order_exchange(const InsertOrderReq& request) {
     if (!request.exchange_id.empty()) {
         return request.exchange_id;

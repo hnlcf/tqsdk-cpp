@@ -317,6 +317,36 @@ TEST(SimTdE2E, RejectZeroVolume) {
     f.finish_and_check();
 }
 
+// FOK/FAK：未穿越时 IOC 语义应直接终态，不留在模拟挂单簿。
+TEST(SimTdE2E, FokNotCrossingBecomesFinished) {
+    SimFixture f;
+
+    f.spawn([&]() -> asio::awaitable<void> {
+        f.sim->on_tick("SHFE.rb2610", 3800.0);
+        auto req              = make_limit(Direction::BUY, Offset::OPEN, 3700.0, 2);
+        req.advanced          = AdvancedOrder::FOK;
+        req.time_cond         = TimeCondition::IOC;
+        req.volume_cond       = VolumeCondition::ALL;
+        Order*            o   = co_await f.api->insert_order(req);
+        const std::string rid = o->order_id;
+        co_await f.api->wait_update();
+        auto* cur = f.api->get_order(rid);
+        EXPECT_NE(cur, nullptr);
+        if (cur == nullptr)
+            co_return;
+        EXPECT_TRUE(cur->is_dead);
+        EXPECT_EQ(cur->volume_left, 2u);
+        EXPECT_EQ(cur->advanced, AdvancedOrder::FOK);
+        EXPECT_EQ(cur->time_cond, TimeCondition::IOC);
+        EXPECT_EQ(cur->volume_cond, VolumeCondition::ALL);
+        EXPECT_NE(cur->last_msg.find("IOC"), std::string::npos);
+        EXPECT_EQ(f.api->data().positions.size(), 0u);
+        co_return;
+    });
+
+    f.finish_and_check();
+}
+
 // 市价单无报价 -> 拒单
 TEST(SimTdE2E, RejectMarketOrderWithoutQuote) {
     SimFixture f;

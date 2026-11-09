@@ -189,7 +189,16 @@ CommandAck CtpTdGateway::send_insert(const InsertOrderReq& req, const OrderId& r
     field.Direction         = ctp_direction(req.direction);
     field.CombOffsetFlag[0] = ctp_offset_for_order(exchange, instrument, req.direction, req.offset);
     field.CombHedgeFlag[0]  = THOST_FTDC_HF_Speculation;
-    field.LimitPrice        = ctp_limit_price(req.price_type, req.limit_price);
+    if (!req.offset_leg2.empty()) {
+        if (auto leg2 = magic_enum::enum_cast<Offset>(req.offset_leg2); leg2.has_value()) {
+            field.CombOffsetFlag[1] =
+                ctp_offset_for_order(exchange, instrument, req.direction, *leg2);
+            field.CombHedgeFlag[1] = THOST_FTDC_HF_Speculation;
+        } else {
+            return CommandAck{false, rid, "invalid offset_leg2: " + req.offset_leg2};
+        }
+    }
+    field.LimitPrice          = ctp_limit_price(req.price_type, req.limit_price);
     field.VolumeTotalOriginal = static_cast<int>(req.volume);
     field.TimeCondition       = ctp_time_cond(req.time_cond);
     field.VolumeCondition     = ctp_volume_cond(req.volume_cond);

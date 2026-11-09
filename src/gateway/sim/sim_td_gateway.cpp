@@ -75,6 +75,8 @@ asio::awaitable<CommandAck> SimTdGateway::insert_order(const InsertOrderReq& req
     o.offset        = req.offset;
     o.price_type    = req.price_type;
     o.limit_price   = (req.price_type == PriceType::LIMIT) ? req.limit_price : kUnknownDouble;
+    o.time_cond     = req.time_cond;
+    o.volume_cond   = req.volume_cond;
     o.volume_orign  = req.volume;
     o.volume_left   = req.volume;
     o.insert_time   = ++clock_ns_;
@@ -103,6 +105,21 @@ asio::awaitable<CommandAck> SimTdGateway::insert_order(const InsertOrderReq& req
     auto it = live_orders_.find(rid);
     if (it != live_orders_.end() && it->second.volume_left == 0) {
         live_orders_.erase(it);
+    } else if (it != live_orders_.end() && it->second.time_cond == TimeCondition::IOC) {
+        // IOC/FAK/FOK 在当前快照下没有成交：立即终态，不留在模拟挂单簿。
+        const LiveOrder& lo = it->second;
+        batch.orders[rid] = nlohmann::json{{"order_id", rid},
+                                           {"instrument_id", symbol},
+                                           {"direction", magic_enum::enum_name(lo.direction)},
+                                           {"offset", magic_enum::enum_name(lo.offset)},
+                                           {"volume_orign", lo.volume_orign},
+                                           {"volume_left", lo.volume_left},
+                                           {"status", magic_enum::enum_name(OrderStatus::FINISHED)},
+                                           {"is_dead", true},
+                                           {"last_msg", "IOC/FAK未成交"}};
+        remember_order(rid, batch.orders[rid]);
+        live_orders_.erase(it);
+        batch.account_dirty = true;
     } else if (it != live_orders_.end()) {
         // 挂单未成交：产一条"已受理(alive)"订单快照，让上层看到 volume_left。
         const LiveOrder& lo = it->second;

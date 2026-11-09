@@ -3,6 +3,7 @@
 #include "tqsdk/pch.h"
 
 #include "tqsdk/data/entity_store.h"
+#include "tqsdk/data/tick_series.h"
 #include "tqsdk/domain/account.h"
 #include "tqsdk/domain/kline.h"
 #include "tqsdk/domain/order.h"
@@ -65,13 +66,45 @@ private:
     std::unordered_map<std::string, KlineStream> streams_;
 };
 
+class TickRegistry {
+public:
+    TickSeries& get_or_create(std::string_view sym, int capacity = 200) {
+        auto [it, inserted] = streams_.try_emplace(std::string(sym));
+        if (inserted) {
+            it->second = TickSeries(std::string(sym), static_cast<std::size_t>(capacity));
+        } else if (capacity > 0 && static_cast<int>(it->second.capacity) < capacity) {
+            it->second.reset(static_cast<std::size_t>(capacity));
+        }
+        return it->second;
+    }
+
+    TickSeries* find(std::string_view sym) noexcept {
+        auto it = streams_.find(std::string(sym));
+        return it == streams_.end() ? nullptr : &it->second;
+    }
+    const TickSeries* find(std::string_view sym) const noexcept {
+        auto it = streams_.find(std::string(sym));
+        return it == streams_.end() ? nullptr : &it->second;
+    }
+
+    std::size_t size() const noexcept { return streams_.size(); }
+    auto        begin() noexcept { return streams_.begin(); }
+    auto        end() noexcept { return streams_.end(); }
+    auto        begin() const noexcept { return streams_.begin(); }
+    auto        end() const noexcept { return streams_.end(); }
+
+private:
+    std::unordered_map<std::string, TickSeries> streams_;
+};
+
 struct DataManager {
     EntityStore<Quote>    quotes;    // key: instrument_id
     EntityStore<Order>    orders;    // key: order_id
     EntityStore<Trade>    trades;    // key: trade_id
     EntityStore<Position> positions; // key: instrument_id
-    Account               account;   // 单例,值类型(未收到时全默认值)
+    TickRegistry          ticks;     // key: instrument_id
     KlineRegistry         klines;
+    Account               account; // 单例,值类型(未收到时全默认值)
 
     void clear_all_changes() noexcept {
         quotes.clear_changes();

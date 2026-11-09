@@ -20,15 +20,17 @@ enum class OrderField : uint64_t {
     limit_price       = 1ull << 9,
     time_cond         = 1ull << 10,
     volume_cond       = 1ull << 11,
-    min_volume        = 1ull << 12,
-    hedge_flag        = 1ull << 13,
-    status            = 1ull << 14,
-    last_msg          = 1ull << 15,
-    insert_date_time  = 1ull << 16,
-    exchange_order_id = 1ull << 17,
-    trade_price       = 1ull << 18,
-    is_error          = 1ull << 19,
-    is_dead           = 1ull << 20,
+    advanced          = 1ull << 12,
+    offset_leg2       = 1ull << 13,
+    min_volume        = 1ull << 14,
+    hedge_flag        = 1ull << 15,
+    status            = 1ull << 16,
+    last_msg          = 1ull << 17,
+    insert_date_time  = 1ull << 18,
+    exchange_order_id = 1ull << 19,
+    trade_price       = 1ull << 20,
+    is_error          = 1ull << 21,
+    is_dead           = 1ull << 22,
 };
 
 struct Order {
@@ -70,6 +72,8 @@ struct Order {
 
     /// 数量条件
     VolumeCondition volume_cond = VolumeCondition::ANY;
+    AdvancedOrder   advanced    = AdvancedOrder::NONE;
+    std::string     offset_leg2;
 
     uint64_t min_volume = 0;
 

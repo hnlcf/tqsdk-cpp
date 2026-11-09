@@ -114,6 +114,9 @@ TEST(CtpConvert, MarketAndBestOrdersUseZeroLimitPrice) {
     EXPECT_DOUBLE_EQ(ctp_limit_price(PriceType::ANY, 3800.0), 0.0);
     EXPECT_DOUBLE_EQ(ctp_limit_price(PriceType::BEST, 3800.0), 0.0);
     EXPECT_DOUBLE_EQ(ctp_limit_price(PriceType::FIVELEVEL, 3800.0), 0.0);
+    EXPECT_EQ(ctp_price_type(PriceType::FIVELEVEL), THOST_FTDC_OPT_FiveLevelPrice);
+    EXPECT_EQ(ctp_time_cond(TimeCondition::FOK), THOST_FTDC_TC_IOC);
+    EXPECT_EQ(ctp_volume_cond(VolumeCondition::ALL), THOST_FTDC_VC_CV);
 }
 
 TEST(CtpConvert, SymbolNormalization) {

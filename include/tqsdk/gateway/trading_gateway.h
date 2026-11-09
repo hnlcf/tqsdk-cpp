@@ -23,6 +23,10 @@ struct InsertOrderReq {
 
     TimeCondition   time_cond   = TimeCondition::GFD;
     VolumeCondition volume_cond = VolumeCondition::ANY;
+    AdvancedOrder   advanced    = AdvancedOrder::NONE;
+
+    /// 仅上期所/能源组合合约使用：第二腿开平标志。
+    std::string offset_leg2;
 
     uint64_t volume     = 0; // 手数
     uint64_t min_volume = 0; // volume_cond == MIN 时有效
@@ -41,6 +45,8 @@ inline void to_json(nlohmann::json& j, const InsertOrderReq& r) {
          std::isfinite(r.limit_price) ? nlohmann::json(r.limit_price) : nlohmann::json(nullptr)},
         {"time_cond", r.time_cond},
         {"volume_cond", r.volume_cond},
+        {"advanced", r.advanced},
+        {"offset_leg2", r.offset_leg2},
         {"volume", r.volume},
         {"min_volume", r.min_volume}};
 }
@@ -57,8 +63,18 @@ inline void from_json(const nlohmann::json& j, InsertOrderReq& r) {
     }
     r.time_cond   = j.value("time_cond", TimeCondition::GFD);
     r.volume_cond = j.value("volume_cond", VolumeCondition::ANY);
-    r.volume      = j.value("volume", uint64_t{0});
-    r.min_volume  = j.value("min_volume", uint64_t{0});
+    if (auto it = j.find("advanced"); it != j.end() && !it->is_null()) {
+        r.advanced = it->get<AdvancedOrder>();
+    } else {
+        r.advanced = AdvancedOrder::NONE;
+    }
+    if (auto it = j.find("offset_leg2"); it != j.end() && it->is_string()) {
+        r.offset_leg2 = it->get<std::string>();
+    } else {
+        r.offset_leg2.clear();
+    }
+    r.volume     = j.value("volume", uint64_t{0});
+    r.min_volume = j.value("min_volume", uint64_t{0});
 }
 
 /// 撤单请求。

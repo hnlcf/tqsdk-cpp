@@ -32,6 +32,8 @@ uint64_t order_diff_bits(const Order& before, const Order& after) {
     ORDER_DIFF(limit_price, same_double(before.limit_price, after.limit_price))
     ORDER_DIFF(time_cond, before.time_cond == after.time_cond)
     ORDER_DIFF(volume_cond, before.volume_cond == after.volume_cond)
+    ORDER_DIFF(advanced, before.advanced == after.advanced)
+    ORDER_DIFF(offset_leg2, before.offset_leg2 == after.offset_leg2)
     ORDER_DIFF(min_volume, before.min_volume == after.min_volume)
     ORDER_DIFF(hedge_flag, before.hedge_flag == after.hedge_flag)
     ORDER_DIFF(status, before.status == after.status)
@@ -174,6 +176,18 @@ void DiffMergeEngine::merge_one_order(Order& o, const nlohmann::json& diff) {
         case OrderField::volume_cond:
             if (auto e = try_get_enum<VolumeCondition>(v)) {
                 o.volume_cond = *e;
+                bits |= (uint64_t)f;
+            }
+            break;
+        case OrderField::advanced:
+            if (auto e = try_get_enum<AdvancedOrder>(v)) {
+                o.advanced = *e;
+                bits |= (uint64_t)f;
+            }
+            break;
+        case OrderField::offset_leg2:
+            if (v.is_string()) {
+                o.offset_leg2 = v.get<std::string>();
                 bits |= (uint64_t)f;
             }
             break;
