@@ -21,13 +21,26 @@ if ! curl -fsS -m 3 "$NODE_URL/readyz" >/dev/null 2>&1; then
     echo 2 >"$DIR/p62_close_yesterday.rc"
     exit 2
 fi
-NODE_URL="$NODE_URL" SYMBOL="$SYMBOL" VOLUME=1 \
-    PENDING="$DIR/close_yesterday_pending.json" \
+PENDING="$DIR/close_yesterday_pending.json"
+HIS=$(curl -sS -m 5 "$NODE_URL/positions" 2>/dev/null |
+    jq -r --arg s "$SYMBOL" '.positions[$s].volume_long_his // 0' 2>/dev/null || echo 0)
+if [[ ! -f "$PENDING" ]]; then
+    echo "no close-yesterday pending marker; skip"
+    echo 3 >"$DIR/p62_close_yesterday.rc"
+    exit 0
+fi
+if ! [[ "$HIS" =~ ^[0-9]+$ ]] || ((HIS < 1)); then
+    echo "no historical long position for $SYMBOL (volume_long_his=$HIS); skip"
+    echo 3 >"$DIR/p62_close_yesterday.rc"
+    exit 0
+fi
+NODE_URL="$NODE_URL" SYMBOL="$SYMBOL" VOLUME=1 PENDING="$PENDING" \
     "$ROOT/scripts/ctp_close_yesterday_test.sh"
 rc=$?
 echo "close_yesterday_rc=$rc"
 echo "$rc" >"$DIR/p62_close_yesterday.rc"
-if ((rc != 0)); then
+# rc=3 is an expected skip (no settled history); do not mark product failure.
+if ((rc != 0 && rc != 3)); then
     echo "$rc" >"$DIR/had_failure"
 fi
-exit "$rc"
+exit 0

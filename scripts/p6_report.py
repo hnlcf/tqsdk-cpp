@@ -37,7 +37,7 @@ def main() -> int:
     data["phase_rc"] = rcs
 
     p61_reports = []
-    for path in sorted((d / "p61_week").glob("*.report.json")):
+    for path in sorted(d.glob("p61_week*/*.report.json")):
         report = read_json(path)
         if report is not None:
             p61_reports.append({"file": str(path), "monitor": report.get("monitor", {}),
@@ -50,8 +50,12 @@ def main() -> int:
         if value is not None:
             p62[name] = value
     data["p62_acceptance"] = p62
+    data["p62_notes"] = {
+        path.name: path.read_text(encoding="utf-8", errors="replace").strip()
+        for path in sorted(d.glob("p62_*skip*.txt"))
+    }
     recon = []
-    for path in sorted((d / "p62_reconcile").glob("ctp_reconcile_*.json")):
+    for path in sorted(d.glob("p62_reconcile*/ctp_reconcile_*.json")):
         value = read_json(path)
         if isinstance(value, dict):
             recon.append({"file": str(path), "ready": value.get("ready"),
@@ -69,6 +73,7 @@ def main() -> int:
     soak = d / "p63_soak_72h.out"
     if soak.exists():
         p63["soak_log_tail"] = soak.read_text(encoding="utf-8", errors="replace")[-4000:]
+    p63["soak_files"] = [str(path) for path in sorted(d.glob("p63_soak_72h*"))]
     asan = d / "p63_asan_build.log"
     if asan.exists():
         p63["asan_log_tail"] = asan.read_text(encoding="utf-8", errors="replace")[-4000:]
@@ -105,9 +110,14 @@ def main() -> int:
         for item in recon[-3:]:
             lines.append(f"  - {Path(item['file']).name}: ready={item['ready']} phase={item['phase']} "
                          f"expected={item['expected_disconnect']} positions={item['positions']} orders={item['orders']}")
+    if data["p62_notes"]:
+        for name, note in data["p62_notes"].items():
+            lines.append(f"- note `{name}`: {note}")
     if not p62 and not recon:
         lines.append("- no P6.2 artifacts yet")
     lines += ["", "## P6.3", ""]
+    if p63.get("soak_files"):
+        lines.append("- files: " + ", ".join(f"`{Path(x).name}`" for x in p63["soak_files"]))
     lines.append("### 72h SimTd soak tail")
     lines.append("```text")
     lines.append(p63["soak_log_tail"].strip() or "no soak log yet")

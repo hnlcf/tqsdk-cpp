@@ -24,6 +24,17 @@ if ! curl -fsS -m 3 "$NODE_URL/readyz" >/dev/null 2>&1; then
     exit 2
 fi
 
+AVAILABLE=$(curl -sS -m 5 "$NODE_URL/account" 2>/dev/null |
+    jq -r '.available // empty' 2>/dev/null || true)
+if [[ "$AVAILABLE" =~ ^-?[0-9]+([.][0-9]+)?$ ]]; then
+    if ! awk -v a="$AVAILABLE" -v m="${P62_MIN_AVAILABLE:-20000}" 'BEGIN { exit !(a >= m) }'; then
+        echo "insufficient available funds ($AVAILABLE); skip partial fill probe"
+        echo 3 >"$DIR/p62_partial_fill.rc"
+        echo "not run: available=$AVAILABLE" >"$DIR/p62_partial_fill_skip.txt"
+        exit 0
+    fi
+fi
+
 NODE_URL="$NODE_URL" SYMBOL="$SYMBOL" MAX_VOLUME=40 \
     OUT="$DIR/p62_partial_fill.txt" \
     "$ROOT/scripts/ctp_partial_fill_probe.sh"

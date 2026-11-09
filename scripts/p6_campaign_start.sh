@@ -105,22 +105,37 @@ setsid -f python3 "$ROOT/scripts/p6_daily_reconcile_loop.py" \
 log "P6.2 daily reconcile loop detached: $?"
 
 # ---------------------------------------------------------------- P6.2
+# 资金门禁：实盘 SimNow 账户可能已有持仓占满保证金。此时只跑只读验收，
+# 不把“资金不足”误记成产品失败，也不留下无法成交的测试委托。
+P62_MIN_AVAILABLE=${P62_MIN_AVAILABLE:-20000}
+AVAILABLE=$(curl -sS -m 5 "$NODE_URL/account" 2>/dev/null |
+    jq -r '.available // empty' 2>/dev/null || true)
+FUNDS_OK=0
+if [[ "$AVAILABLE" =~ ^-?[0-9]+([.][0-9]+)?$ ]]; then
+    if awk -v a="$AVAILABLE" -v m="$P62_MIN_AVAILABLE" 'BEGIN { exit !(a >= m) }'; then
+        FUNDS_OK=1
+    fi
+fi
+log "P6.2 funds available=${AVAILABLE:-unknown} min=$P62_MIN_AVAILABLE ok=$FUNDS_OK"
+
 phase p62_acceptance_readonly python3 "$ROOT/scripts/simnow_acceptance.py" \
     --node-url "$NODE_URL" --symbol "$SYMBOL" \
     --metrics --ws --ready-timeout 120 \
     --json-out "$DIR/p62_acceptance_readonly.json"
 
-if [[ "$P62_WRITE" == "1" ]]; then
+if [[ "$P62_WRITE" == "1" && "$FUNDS_OK" == "1" ]]; then
     phase p62_acceptance_write python3 "$ROOT/scripts/simnow_acceptance.py" \
         --node-url "$NODE_URL" --symbol "$SYMBOL" \
         --orders --yes --include-market --include-counterparty \
         --cleanup-market --order-timeout 30 \
         --json-out "$DIR/p62_acceptance_write.json"
 else
-    log "P62_WRITE=0; write acceptance skipped"
+    log "P62_WRITE skipped (disabled or insufficient available funds)"
+    printf '%s\n' "write acceptance skipped: available=${AVAILABLE:-unknown} min=$P62_MIN_AVAILABLE" \
+        >"$DIR/p62_write_skip.txt"
 fi
 
-if [[ "$P62_OPEN_OVERNIGHT" == "1" ]]; then
+if [[ "$P62_OPEN_OVERNIGHT" == "1" && "$FUNDS_OK" == "1" ]]; then
     POS=$(curl -sS -m 5 "$NODE_URL/positions" 2>/dev/null |
         jq -r --arg s "$SYMBOL" '.positions[$s].volume_long // 0' 2>/dev/null || echo 0)
     if [[ "${POS:-0}" =~ ^[0-9]+$ ]] && ((POS > 0)); then
@@ -130,6 +145,10 @@ if [[ "$P62_OPEN_OVERNIGHT" == "1" ]]; then
             PENDING="$DIR/close_yesterday_pending.json" \
             "$ROOT/scripts/ctp_open_overnight_position.sh"
     fi
+else
+    log "p62_open_overnight skipped (disabled or insufficient available funds)"
+    printf '%s\n' "overnight skipped: available=${AVAILABLE:-unknown} min=$P62_MIN_AVAILABLE" \
+        >"$DIR/p62_open_skip.txt"
 fi
 
 # ---------------------------------------------------------------- P6.3

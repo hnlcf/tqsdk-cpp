@@ -34,8 +34,21 @@ for _ in $(seq 1 20); do
     sleep 1
 done
 echo "terminal_order=$ORDER"
-POS=$(curl -fsS -m 5 "$NODE_URL/positions" | jq -c --arg s "$SYMBOL" '.positions[$s]')
+if [[ "$(printf '%s' "$ORDER" | jq -r '.is_error // false')" == "true" ]]; then
+    echo "open-overnight rejected: $(printf '%s' "$ORDER" | jq -r '.last_msg // "unknown"')" >&2
+    exit 1
+fi
+if [[ "$(printf '%s' "$ORDER" | jq -r '.is_dead // false')" != "true" ]]; then
+    echo "open-overnight order did not reach terminal state; refusing pending marker" >&2
+    exit 1
+fi
+POS=$(curl -fsS -m 5 "$NODE_URL/positions" | jq -c --arg s "$SYMBOL" '.positions[$s] // empty')
 echo "position=$POS"
+POS_VOL=$(printf '%s' "$POS" | jq -r '.volume_long // 0' 2>/dev/null || echo 0)
+if ! [[ "$POS_VOL" =~ ^[0-9]+$ ]] || ((POS_VOL < VOLUME)); then
+    echo "open-overnight filled position is insufficient (volume_long=$POS_VOL requested=$VOLUME)" >&2
+    exit 1
+fi
 mkdir -p "$(dirname "$PENDING")"
 jq -n --arg symbol "$SYMBOL" --arg order_id "$OID" --argjson volume "$VOLUME" \
     '{purpose:"close-yesterday",symbol:$symbol,order_id:$order_id,volume:$volume,opened_at:(now|todate)}' \
