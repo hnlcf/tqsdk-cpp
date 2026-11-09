@@ -21,6 +21,8 @@ test("symbol search preserves SHFE contract casing and shows safe custom indicat
 
   await expect(page.locator(".symbol-title h1")).toHaveText("SHFE.ao2701");
   await expect(page.locator(".watch-row", { hasText: "SHFE.ao2701" })).toBeVisible();
+  await expect(page.locator(".quick-orders.four-key button")).toHaveCount(4);
+  await expect(page.getByRole("button", { name: /平空/ })).toBeVisible();
 
   await page.locator(".indicator-settings-trigger").click();
   const settings = page.locator(".indicator-settings");
