@@ -112,6 +112,8 @@ cat artifacts/p6_campaign_20261109/report.md
 09:00  P6.2 只读验收 9/9 PASS
 09:00  P6.2 写测试 1 FAIL：CTP 资金不足（available=-7059.97）
 09:00  open-overnight 实际为 CTP 资金不足拒单，旧脚本曾误写 pending；已修复
+11:12  available 恢复后重试 limit/cancel/reject：10/10 PASS
+11:12  open-overnight 重试成功：SHFE.rb2701 BUY 1 成交，pending 有效
 09:00  P6.3 ctest 300/300 PASS
 09:04  P6.3 ASan 292/292 PASS
 10:26  主机重启，P6.1/72h soak 中断
