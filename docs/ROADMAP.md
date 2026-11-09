@@ -10,7 +10,7 @@
 - Tq 行情 / CTP 交易 / Sim 交易；
 - gw/node 两进程 + IPC seq/replay；
 - REST/WS 数据面；
-- Qt UI + Python 指标 sidecar；
+- TQSDK Board Web：SolidJS + pnpm + Lightweight Charts；
 - 合约目录、节假日、K 线缓存；
 - SimNow CTP 验收、24h SimTd soak、CTP session monitor；
 - 订单价格归一化、平今/平昨、命令幂等、故障恢复；
@@ -53,12 +53,12 @@
 
 ## 3. UI 与可观测性
 
-- `WebSocketHub::Client` reader/writer 与 Hub 文件拆分；
-- UI 真实 4K Wayland 自动交互测试；
-- 高 DPI 图标/字体/表格回归；
-- 订单部分成交/撤单失败更完整提示；
-- 图表指标副图、图例编辑；
-- 指标 sidecar 打包、依赖检查、插件权限边界。
+- TQSDK Board：自选/K 线/分时/盘口/下单/持仓/委托/成交/权益已落地；
+- 图表画线 primitive/overlay 与指标 Worker；
+- 前端 Playwright 端到端（登录/订阅/下单/重连）；
+- 虚拟列表、列宽/排序持久化；
+- 期权希腊字母、波动率与更完整期权分析；
+- Qt UI 进入维护/归档，不再作为主前端。
 
 ## 4. 架构与性能
 
@@ -80,7 +80,6 @@
 
 ## 6. 暂缓/不做
 
-- Web 前端：当前暂停，Qt UI 优先；
 - 完整交易所官方交易日历服务：当前使用 shinny 节假日 + 可配置 session；
 - 共享内存 IPC：先完成稳定性和多账户路由再评估。
 

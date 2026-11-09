@@ -29,12 +29,13 @@
 
 | 文档 | 内容 |
 |---|---|
-| [UI_QT.md](UI_QT.md) | Qt UI 架构、NodeClient、面板、指标、4K/高 DPI |
+| [WEB_FRONTEND.md](WEB_FRONTEND.md) | TQSDK Board（SolidJS/pnpm/Lightweight Charts）架构与功能 |
+| [UI_QT.md](UI_QT.md) | Qt 历史前端设计（保留） |
 | [INDICATOR_PLUGINS.md](INDICATOR_PLUGINS.md) | Python sidecar、插件 MANIFEST、共享指标库 |
 | [INSTRUMENTS.md](INSTRUMENTS.md) | 合约目录格式、加载与刷新 |
 | [KLINE_CACHE.md](KLINE_CACHE.md) | SQLite K 线缓存、恢复与容量 |
 
-Web 前端当前不推进；旧方案见
+Web 是当前主前端；旧 Web 方案归档在
 [archive/WEB_FRONTEND_DEFERRED.md](archive/WEB_FRONTEND_DEFERRED.md)。
 
 ## 4. 未来计划

@@ -192,10 +192,10 @@ CTP SHFE 不接受 AnyPrice/BestPrice。node 侧统一转换为可报限价：
 
 ## 7. UI transport contract
 
-`NodeClient` 是 UI 唯一数据/交易抽象。传输实现 `HttpWsNodeClient` 必须：
+Web 前端只通过 node REST/WS 访问数据和交易，不链接 `tqsdk_core`：
 
-- 将 HTTP/WS 字节交给 `JsonParserWorker`，GUI 线程不解析 inbound JSON；
-- WS 断线按退避重连并重发订阅；
-- 把市场更新按约 100ms 合并后发 UI；
-- 交易所/节点错误通过 `errorOccurred/orderFailed` 上报；
-- UI 不链接 `tqsdk_core`。
+- 初始快照用 REST，增量用 `/stream` snapshot/diff；
+- WS 断线指数退避重连并重新发送显式 topics 订阅；
+- K 线历史 REST + WS 增量合并，图表命令式更新；
+- 交易 topics 必须显式包含 `account/orders/trades/positions`；
+- `/readyz` 或 WS 未就绪时禁止报单。

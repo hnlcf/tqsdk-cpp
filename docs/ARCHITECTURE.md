@@ -7,7 +7,7 @@
 
 1. **数据面单一所有权**：同一份行情/交易截面只在一个核心线程上合并。
 2. **真实网关可替换**：Tq 行情、CTP 交易、Sim 交易通过统一接口接入。
-3. **进程隔离**：网关进程负责柜台连接，node 负责数据/API，Qt UI 独立。
+3. **进程隔离**：网关进程负责柜台连接，node 负责数据/API，Web UI 独立。
 4. **热路径无锁**：核心 strand 串行处理 Channel 事件，避免每 tick 加锁。
 5. **可恢复**：IPC 有 seq/epoch/replay；交易重启后查询对账。
 6. **可观测**：readiness、metrics、catalog、holiday、soak 产物。
@@ -43,8 +43,8 @@
               └──────────────┬──────────────┘
                              │ REST + WS
               ┌──────────────▼──────────────┐
-              │ Qt UI / 策略 / 诊断工具       │
-              │ NodeClient 唯一传输抽象       │
+              │ TQSDK Board / 策略 / 诊断工具       │
+              │ REST/WS 唯一接口              │
               └─────────────────────────────┘
 ```
 
@@ -53,7 +53,7 @@
 - **两进程生产模式**：gw 接真实网关，node 通过 IPC 代理；
 - **单进程测试/回测**：`TqApi` 直接持有 Sim/Mock/Tq 网关，不启动 gw/node。
 
-UI 进程永远不链接 `tqsdk_core`，只通过 `NodeClient` 使用 HTTP/WS。
+Web 前端永远不链接 `tqsdk_core`，只通过 node REST/WS 通信。
 
 ## 3. 分层与依赖方向
 
@@ -68,7 +68,8 @@ instrument/             合约目录
 tqapi/                  TqApi 门面与本地订单路径
 serve/                  REST/WS/路由/快照投影
 apps/                   gw_main / node_main
-ui/                     NodeClient + Qt Widgets + 指标 sidecar
+web/                    TQSDK Board：SolidJS + pnpm + Lightweight Charts
+ui/                     Qt 历史前端（保留）
 ```
 
 依赖必须朝向抽象：
@@ -186,7 +187,7 @@ CTP SPI 回调线程只做 **TaskQueue 入队**，不直接执行 Asio/DataManag
   尚未接入远程交易日历服务）；
 - 生产级 multi-account 路由；
 - Windows CTP；
-- Web/Tauri 前端（当前 Qt UI 为主）。
+- Qt Widgets 历史前端（Web 主前端）。
 
 ## 10. 相关文档
 

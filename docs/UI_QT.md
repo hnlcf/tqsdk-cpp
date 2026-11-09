@@ -1,5 +1,8 @@
 # TQSDK Qt UI 设计方案
 
+> **历史前端**：项目已改用 `web/` 的 TQSDK Board（SolidJS + pnpm + Lightweight Charts）。
+> 本文保留用于 Qt 版本维护和历史追溯，不再作为主前端路线。
+
 > 专题文档。总体架构/模块/信息流/状态机以 [ARCHITECTURE.md](ARCHITECTURE.md)、
 > [MODULES.md](MODULES.md)、[FLOWS.md](FLOWS.md)、[STATE_MACHINES.md](STATE_MACHINES.md)
 > 和 [PROTOCOLS.md](PROTOCOLS.md) 为准。

@@ -47,3 +47,9 @@ actual-ui-*.png
 # Python sidecar caches
 __pycache__/
 *.pyc
+
+# Web frontend
+web/node_modules/
+web/dist/
+web/.vite/
+web/coverage/

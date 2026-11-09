@@ -6,8 +6,9 @@ C++20 期货数据与交易基础设施，目标是把 TqSdk 的“异步数据�
 - Tq 行情、CTP 真实交易、Sim 本地撮合；
 - `tqsdk-gw` / `tqsdk-node` 两进程部署；
 - HTTP REST、WebSocket 实时 diff；
-- Qt 6 Widgets 独立桌面 UI；
-- Python 指标 sidecar 和单文件指标插件；
+- `web/` SolidJS + TypeScript + pnpm 独立 Web 终端；
+- TradingView Lightweight Charts K 线/分时/指标；
+- 自选、下单、持仓、委托、成交、账户权益完整面板；
 - 合约目录、节假日日历、SQLite K 线缓存；
 - CTP SimNow 验收、交易时段 soak、故障注入。
 
@@ -22,7 +23,16 @@ ctest --test-dir build-ui --output-on-failure
 ```
 
 CTP 需要把 SDK 放在 `third_party/ctp/`。默认 `ui-dev` preset 会按项目当前配置
-启用核心测试和 Qt UI；CTP 构建细节见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。
+启用核心测试；CTP 构建细节见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。
+
+Web 前端：
+
+```fish
+cd web
+nvm use lts
+pnpm install
+pnpm dev
+```
 
 ### 启动 live
 
@@ -31,8 +41,11 @@ cp config/live.local.env.example config/live.local.env
 chmod 600 config/live.local.env
 $EDITOR config/live.local.env
 
-./scripts/run_live.sh --build
+./scripts/run_web.sh --build
 ```
+
+`run_web.sh` 启动 gw/node + Vite；打开 `http://127.0.0.1:5173`。
+传统 Qt 前端仍可使用 `./scripts/run_live.sh`。
 
 只启动 gw/node：
 
@@ -80,8 +93,8 @@ Tq 行情  /  CTP TD  /  Sim TD
        REST + WS
               │
               ▼
-        Qt UI 或外部策略
-       （UI 不链接 tqsdk_core）
+        TQSDK Board（Web）或外部策略
+       （前端不链接 tqsdk_core）
 ```
 
 ## 代码结构
@@ -99,7 +112,8 @@ include/tqsdk/
   config/         TOML/环境配置
 src/              对应实现
 apps/             gw_main、node_main
-ui/               Qt 6 Widgets 独立前端 + 指标 sidecar
+web/              TQSDK Board：SolidJS + pnpm + Lightweight Charts
+ui/               Qt 6 Widgets 历史前端（保留，Web 为主）
 tests/            GTest / e2e / CTP 映射
 scripts/          live、soak、SimNow 验收、诊断
 docs/             架构、模块、信息流、状态机、运维、专题
@@ -121,7 +135,9 @@ docs/             架构、模块、信息流、状态机、运维、专题
 专题：
 
 - [docs/CTP.md](docs/CTP.md)
-- [docs/UI_QT.md](docs/UI_QT.md)
+- [docs/WEB_FRONTEND.md](docs/WEB_FRONTEND.md)
+- [web/README.md](web/README.md)
+- [docs/UI_QT.md](docs/UI_QT.md)（历史保留）
 - [docs/INDICATOR_PLUGINS.md](docs/INDICATOR_PLUGINS.md)
 - [docs/INSTRUMENTS.md](docs/INSTRUMENTS.md)
 - [docs/KLINE_CACHE.md](docs/KLINE_CACHE.md)
@@ -136,6 +152,8 @@ docs/             架构、模块、信息流、状态机、运维、专题
 ## 当前状态
 
 - `ctest`：300 项通过（以本地构建目录为准）；
+- Web：`pnpm typecheck`、`pnpm test`、`pnpm build` 通过，连 node 的
+  K 线/分时/指标/盘口/下单/持仓/委托/成交/权益已完成浏览器验证；
 - SimTd 24h soak：完成，`http_err=0`、`ws_err=0`、`fatal=""`；
 - SimNow CTP 写验收：15/15 PASS；
 - 平昨自动化：已完成；

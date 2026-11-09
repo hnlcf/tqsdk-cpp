@@ -7,7 +7,8 @@
 - C++20 编译器（Clang 当前验证）；
 - Boost.Asio/Beast、OpenSSL、spdlog、nlohmann_json、magic_enum、
   tomlplusplus、CLI11、SQLiteCpp；
-- Qt 6 Widgets（UI）；
+- SolidJS + pnpm + Node.js LTS（Web 前端）；
+- Qt 6 Widgets（历史前端，可选）；
 - CTP SDK（可选，放在 `third_party/ctp/`）。
 
 依赖通过 vcpkg manifest 管理。CTP 目录结构：
@@ -155,15 +156,22 @@ kind = "none"
 
 ## 4. 启动
 
-### 一键 live
+### 一键 live（Web）
 
 ```bash
-./scripts/run_live.sh --build
+./scripts/run_web.sh --build
+# 打开 http://127.0.0.1:5173
+```
+
+`run_web.sh` 启动 gw/node（`run_live.sh --no-ui`）并把 Vite 代理到 node。
+只启动后端：
+
+```bash
 ./scripts/run_live.sh --no-ui
 ./scripts/run_live.sh --gw-port 14330 --http-port 18081 --no-ui
 ```
 
-退出顺序由脚本处理：UI -> node -> gw。
+传统 Qt 前端仍可执行 `./scripts/run_live.sh --build`。退出顺序由脚本处理。
 
 ### 手工启动
 
@@ -199,6 +207,17 @@ printf '%s\n' '{"op":"subscribe","symbols":["SHFE.rb2701"],"klines":[]}' |
 ```bash
 ctest --test-dir build-ui --output-on-failure
 ctest --test-dir build-ui -R 'Ws|DiffMerge|CTP' --output-on-failure
+```
+
+Web:
+
+```fish
+cd web
+nvm use lts
+pnpm install
+pnpm test
+pnpm typecheck
+pnpm build
 ```
 
 Python 自测：
@@ -326,5 +345,5 @@ node/gw logs      IPC/CTP/查询错误
 - CTP 仅 Linux 构建验证；
 - 连续 5 个交易日真实 CTP session soak 需要按交易日运行；
 - 真实部分成交依赖 SimNow/交易所撮合窗口；
-- Web 前端暂停，Qt UI 是主前端；
+- Qt UI 保留维护，Web 是主前端；
 - 交易所品种级夜盘/完整官方交易日历仍需扩展。

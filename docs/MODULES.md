@@ -222,19 +222,18 @@ apps/gw_main.cpp       启动真实网关 + IPC server
 apps/node_main.cpp     Remote 网关 + TqApi + serve + catalog/cache
 ```
 
-## 11. UI `ui/`
+## 11. Web 前端 `web/`
 
 ```text
-ui/src/net/NodeClient.*         唯一传输抽象
-ui/src/net/HttpWsNodeClient.*   HTTP/WS 实现
-ui/src/net/JsonParserWorker.*   worker 线程 JSON 解析
-ui/src/app/                     MainWindow/控制器/布局
-ui/src/widgets/                 面板
-ui/src/chart/                   K线/指标
-ui/indicator_sidecar/           Python 指标
+web/src/api/client.ts           REST/WS、重连、订阅
+web/src/chart/                  K线、分时、指标
+web/src/components/             自选/下单/盘口/分笔/交易表/顶栏
+web/src/pages/                  期货列表、期权链
+web/src/indicators/             MA/EMA/BOLL/MACD/RSI
+web/src/lib/                    localStorage、格式化
 ```
 
-详见 [UI_QT.md](UI_QT.md)。
+详见 [WEB_FRONTEND.md](WEB_FRONTEND.md)。Qt 旧前端仍在 `ui/`，进入维护状态。
 
 ## 12. 依赖规则速查
 
@@ -247,7 +246,8 @@ ui/indicator_sidecar/           Python 指标
 | ipc | gateway/protocol | UI |
 | tqapi | gateway/data/ipc | serve |
 | serve | tqapi/data | UI |
-| ui | 仅 NodeClient/HTTP/WS | tqsdk_core |
+| web | 仅 REST/WS | tqsdk_core |
+| ui | 仅 NodeClient/HTTP/WS（历史） | tqsdk_core |
 
 ## 13. 测试对应
 
@@ -258,5 +258,6 @@ tests/ipc/           帧/会话/重连/replay/幂等/订阅账本
 tests/gateway/       TQ 协议、CTP 映射、故障注入
 tests/serve/         router/REST/WS/filter/snapshot/readiness
 tests/e2e/           Sim/Mock 全链路
-ui/tests/            Qt 模型/图表/面板/NodeClient
+web/src/**/*.test.ts  指标/session 单测
+ui/tests/            Qt 模型/图表/面板（历史）
 ```

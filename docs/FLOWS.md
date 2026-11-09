@@ -24,8 +24,8 @@ node_main
   ├─ HttpServer.listen()
   └─ /readyz: ready=true
 
-UI
-  ├─ HttpWsNodeClient.connectToNode
+TQSDK Board (Web)
+  ├─ createMarketStream + REST client
   ├─ GET /readyz / WS /stream
   ├─ subscribe symbols + klines [+ topics]
   ├─ snapshot -> 模型
@@ -88,8 +88,8 @@ K 线历史缓存只在 node 启动/首次需要时 hydrate；SQLite 不进入�
 ### 下单
 
 ```text
-UI OrderTicket
-  -> NodeClient.placeOrder
+TQSDK Board OrderTicket
+  -> POST /order
   -> POST /order
   -> TqApi.insert_order
      ├─ 创建本地占位 Order（立即可见）
@@ -234,21 +234,19 @@ GET /holiday/status      -> holiday cache/version
 HTTP 读接口在 data_ex/core strand 执行；返回前立即序列化为 JSON，不跨
 `co_await` 持有 DataManager 引用。
 
-## 9. UI 数据流
+## 9. Web 前端数据流
 
 ```text
 HTTP/WS bytes
-  -> QWebSocket/QNetworkAccessManager (GUI thread receive)
-  -> JsonParserWorker (QThread)
-     ├─ parse Protocol structs
-     ├─ 100ms market merge
-     └─ queued signal to UI
-  -> NodeDataController
-  -> models / MarketStore / chart
+  -> HTTP fetch / WebSocket
+  -> SolidJS signal/store merge
+     ├─ quote/klines -> chart (command-style series.update)
+     └─ account/orders/trades/positions -> tables
+  -> chart / components
 ```
 
-UI 不解析 inbound JSON 于 GUI 线程；大行情由 parser worker 合并后一次刷新。
-图表不随每次 tick 重绘，按可见窗口和约 100ms 刷新节奏绘制。
+Web 前端只依赖 node REST/WS；K 线历史来源 REST，增量来源 WS。
+图表不随每个 tick 重建，Solid 只更新数据信号和图表 series。
 
 ## 10. 失败路径
 
