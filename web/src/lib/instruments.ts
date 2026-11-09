@@ -62,6 +62,19 @@ export function exchangeOf(symbol: string): string {
   return symbol.includes(".") ? symbol.slice(0, symbol.indexOf(".")) : "";
 }
 
+/**
+ * Normalize exchange prefix only. CZCE product codes are upper-case; SHFE/DCE/
+ * CFFEX/INE/GFEX contract codes preserve their catalog casing (e.g. SHFE.ao2701).
+ */
+export function normalizeInstrumentId(raw: string): string {
+  const value = raw.trim();
+  const dot = value.indexOf(".");
+  if (dot <= 0) return value;
+  const exchange = value.slice(0, dot).toUpperCase();
+  const contract = value.slice(dot + 1);
+  return `${exchange}.${exchange === "CZCE" ? contract.toUpperCase() : contract}`;
+}
+
 export interface FallbackInstrument {
   symbol: string;
   name: string;

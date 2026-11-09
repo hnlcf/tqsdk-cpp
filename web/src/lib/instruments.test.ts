@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   fallbackVolumeMultiple,
   instrumentName,
+  normalizeInstrumentId,
   productOf,
   searchFallbackInstruments,
 } from "./instruments";
@@ -11,6 +12,12 @@ describe("instrument metadata", () => {
     expect(productOf("CZCE.SA701")).toBe("SA");
     expect(instrumentName("CZCE.SA701")).toContain("纯碱");
     expect(fallbackVolumeMultiple("CZCE.SA701")).toBe(20);
+  });
+
+  it("normalizes exchange casing without upper-casing non-CZCE contracts", () => {
+    expect(normalizeInstrumentId("shfe.ao2701")).toBe("SHFE.ao2701");
+    expect(normalizeInstrumentId("DCE.jm2701")).toBe("DCE.jm2701");
+    expect(normalizeInstrumentId("CZCE.sa701")).toBe("CZCE.SA701");
   });
 
   it("supports fuzzy code and Chinese-name search without catalog", () => {

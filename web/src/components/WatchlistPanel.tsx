@@ -1,7 +1,7 @@
 import { For, Show, createSignal, onCleanup } from "solid-js";
 import type { Quote } from "../api/client";
 import type { WatchlistGroup } from "../lib/storage";
-import { instrumentName } from "../lib/instruments";
+import { instrumentName, normalizeInstrumentId } from "../lib/instruments";
 import { formatPrice, priceDecimals, quoteChange } from "../lib/format";
 
 export interface InstrumentSuggestion {
@@ -67,7 +67,7 @@ export default function WatchlistPanel(props: Props) {
 
   function submit(event: SubmitEvent) {
     event.preventDefault();
-    const symbol = entry().trim().toUpperCase();
+    const symbol = normalizeInstrumentId(entry());
     if (!symbol) return;
     props.onAdd(symbol);
     setEntry("");

@@ -69,6 +69,7 @@ import {
 import {
   fallbackVolumeMultiple,
   instrumentName,
+  normalizeInstrumentId,
   searchFallbackInstruments,
 } from "./lib/instruments";
 
@@ -331,7 +332,7 @@ export default function App() {
   }
 
   function addSymbol(input: string) {
-    const symbol = input.trim().toUpperCase();
+    const symbol = normalizeInstrumentId(input);
     if (!symbol) return;
     if (!symbol.includes(".")) {
       notify("请输入带交易所的合约，例如 SHFE.rb2701");
