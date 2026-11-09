@@ -2269,6 +2269,11 @@ html[data-theme="light"] .account-card {
   padding-top: 10px;
 }
 
+.quick-orders.four-key {
+  padding-top: 10px;
+  grid-template-columns: repeat(2, 1fr);
+}
+
 .quick-order:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -2731,4 +2736,33 @@ html[data-theme="light"] .indicator-block {
   background: var(--panel-2);
   font-family: var(--mono);
   font-size: 11px;
+}
+/* ---- safe custom indicators ---- */
+.custom-indicator-row {
+  align-items: flex-end;
+}
+
+.custom-indicator-row .indicator-toggle.compact {
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  min-height: 29px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.indicator-param-row select {
+  height: 29px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  padding: 0 6px;
+  color: var(--text);
+  background: #091018;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+html[data-theme="light"] .indicator-param-row select {
+  background: #f7f9fc;
+  color: var(--text);
 }

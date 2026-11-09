@@ -17,6 +17,7 @@ import {
 } from "lightweight-charts";
 import {
   boll,
+  customIndicator,
   macd,
   rsi,
   sma,
@@ -222,6 +223,17 @@ export default function KLineChart(props: Props) {
         pane,
       );
     }
+    for (const custom of config.customIndicators ?? []) {
+      if (!custom.enabled) continue;
+      addLine(`custom-${custom.id}`, {
+        color: custom.color,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+        title: `${custom.kind}${custom.period}`,
+      });
+    }
     updateIndicators(props.bars);
   }
 
@@ -273,6 +285,15 @@ export default function KLineChart(props: Props) {
       const values = rsi(bars, config.rsiPeriod);
       indicatorSeries.get("rsi")?.setData(
         values.map((point) => ({ time: point.time as UTCTimestamp, value: point.value })),
+      );
+    }
+    for (const custom of config.customIndicators ?? []) {
+      if (!custom.enabled) continue;
+      indicatorSeries.get(`custom-${custom.id}`)?.setData(
+        customIndicator(bars, custom).map((point) => ({
+          time: point.time as UTCTimestamp,
+          value: point.value,
+        })),
       );
     }
   }

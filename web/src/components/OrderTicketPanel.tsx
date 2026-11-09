@@ -1,5 +1,5 @@
 import { For, Show, createSignal } from "solid-js";
-import type { AccountSnapshot, Quote } from "../api/client";
+import type { AccountSnapshot, PositionSnapshot, Quote } from "../api/client";
 import { formatMoney, formatPrice } from "../lib/format";
 
 export type TicketSide = "BUY" | "SELL";
@@ -23,6 +23,7 @@ interface Props {
   symbol: string;
   quote?: Quote;
   account?: AccountSnapshot;
+  position?: PositionSnapshot;
   ready: boolean;
   decimals: number;
   price: number;
@@ -46,7 +47,8 @@ const ACTIONS: Array<{
 }> = [
   { side: "BUY", offset: "OPEN", label: "买开", hint: "BUY OPEN", tone: "buy" },
   { side: "SELL", offset: "OPEN", label: "卖开", hint: "SELL OPEN", tone: "sell" },
-  { side: "SELL", offset: "CLOSE", label: "平仓", hint: "SELL CLOSE", tone: "close" },
+  { side: "SELL", offset: "CLOSE", label: "平多", hint: "SELL CLOSE", tone: "close" },
+  { side: "BUY", offset: "CLOSE", label: "平空", hint: "BUY CLOSE", tone: "close" },
 ];
 
 export default function OrderTicketPanel(props: Props) {
@@ -55,7 +57,7 @@ export default function OrderTicketPanel(props: Props) {
   const [volumeCond, setVolumeCond] = createSignal<TicketVolumeCond>("ANY");
   const [minVolume, setMinVolume] = createSignal(1);
   const [volume, setVolume] = createSignal(1);
-  const [message, setMessage] = createSignal("设置价格与数量后，直接点三键下单");
+  const [message, setMessage] = createSignal("设置价格与数量后，直接点快捷按钮下单");
   const [busy, setBusy] = createSignal(false);
 
   const tick = () => {
@@ -63,6 +65,12 @@ export default function OrderTicketPanel(props: Props) {
     return typeof value === "number" && value > 0 ? value : 1;
   };
   const isLimit = () => priceType() === "LIMIT";
+  const closeAvailable = (action: (typeof ACTIONS)[number]) =>
+    action.offset !== "CLOSE"
+      ? Number.POSITIVE_INFINITY
+      : action.side === "SELL"
+        ? (props.position?.volume_long ?? 0)
+        : (props.position?.volume_short ?? 0);
   const priceHint = () =>
     priceType() === "BEST"
       ? `买一 ${formatPrice(props.quote?.bid_price1, props.decimals)} / 卖一 ${formatPrice(
@@ -87,7 +95,16 @@ export default function OrderTicketPanel(props: Props) {
       setMessage("请输入有效限价");
       return;
     }
+    const available = closeAvailable(action);
+    if (action.offset === "CLOSE" && available <= 0) {
+      setMessage(action.side === "SELL" ? "没有可平的多头仓位" : "没有可平的空头仓位");
+      return;
+    }
     const qty = Math.max(1, Math.floor(volume()));
+    if (action.offset === "CLOSE" && qty > available) {
+      setMessage(`可平数量最多 ${available} 手`);
+      return;
+    }
     setBusy(true);
     setMessage(`提交${action.label}...`);
     try {
@@ -114,7 +131,7 @@ export default function OrderTicketPanel(props: Props) {
       <div class="panel-heading">
         <div>
           <span class="eyebrow">ORDER ENTRY</span>
-          <h2>三键下单</h2>
+          <h2>快捷下单</h2>
         </div>
         <span class={`demo-pill ${props.ready ? "live" : ""}`}>
           {props.ready ? "READY" : "LOCKED"}
@@ -129,6 +146,14 @@ export default function OrderTicketPanel(props: Props) {
         <span>可用资金</span>
         <strong>{formatMoney(props.account?.available)}</strong>
       </div>
+      <Show when={props.position}>
+        <div class="order-summary">
+          <span>可平仓位</span>
+          <strong>
+            多 {props.position?.volume_long ?? 0} / 空 {props.position?.volume_short ?? 0}
+          </strong>
+        </div>
+      </Show>
 
       <div class="order-form">
         <label class="field">
@@ -221,17 +246,19 @@ export default function OrderTicketPanel(props: Props) {
         </label>
       </div>
 
-      <div class="quick-orders three-key">
+      <div class="quick-orders four-key">
         <For each={ACTIONS}>
           {(action) => (
             <button
               type="button"
               class={`quick-order ${action.tone}`}
-              disabled={!props.ready || busy()}
+              disabled={!props.ready || busy() || closeAvailable(action) <= 0}
               onClick={() => void submit(action)}
             >
               <strong>{busy() ? "提交中" : action.label}</strong>
-              <small>{action.hint}</small>
+              <small>
+                {action.offset === "CLOSE" ? `可平 ${closeAvailable(action)} 手` : action.hint}
+              </small>
             </button>
           )}
         </For>

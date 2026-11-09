@@ -621,6 +621,7 @@ export default function App() {
                 symbol={selected()}
                 quote={selectedQuote()}
                 account={account()}
+                position={positions()[selected()]}
                 ready={tradingReady()}
                 decimals={decimals()}
                 price={ticketPrice()}

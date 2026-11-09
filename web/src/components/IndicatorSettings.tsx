@@ -1,6 +1,7 @@
 import { For, Show } from "solid-js";
 import {
   DEFAULT_INDICATORS,
+  type CustomIndicatorSpec,
   type IndicatorConfig,
   type IndicatorColors,
 } from "../indicators/indicators";
@@ -40,6 +41,30 @@ export default function IndicatorSettings(props: Props) {
 
   function removeMa(index: number) {
     patch({ maPeriods: props.config.maPeriods.filter((_, current) => current !== index) });
+  }
+
+  function addCustom() {
+    if (props.config.customIndicators.length >= 12) return;
+    const next: CustomIndicatorSpec = {
+      id: `custom-${Date.now()}`,
+      kind: "EMA",
+      period: 6,
+      color: "#f0b90b",
+      enabled: true,
+    };
+    patch({ customIndicators: [...props.config.customIndicators, next] });
+  }
+
+  function patchCustom(index: number, next: Partial<CustomIndicatorSpec>) {
+    const items = props.config.customIndicators.slice();
+    items[index] = { ...items[index], ...next };
+    patch({ customIndicators: items });
+  }
+
+  function removeCustom(index: number) {
+    patch({
+      customIndicators: props.config.customIndicators.filter((_, current) => current !== index),
+    });
   }
 
   return (
@@ -284,6 +309,80 @@ export default function IndicatorSettings(props: Props) {
                 />
               </label>
             </div>
+          </div>
+
+          <div class="indicator-block">
+            <div class="indicator-block-title">
+              <strong>自定义指标</strong>
+              <button type="button" class="table-action" onClick={addCustom}>
+                + 加一条
+              </button>
+            </div>
+            <small class="indicator-hint">
+              安全 DSL：只支持 EMA/SMA 白名单计算，不执行任意 JavaScript。
+            </small>
+            <Show when={props.config.customIndicators.length === 0}>
+              <small class="indicator-hint">当前没有自定义指标。</small>
+            </Show>
+            <For each={props.config.customIndicators}>
+              {(item, index) => (
+                <div class="indicator-param-row custom-indicator-row">
+                  <label class="indicator-toggle compact">
+                    <input
+                      type="checkbox"
+                      checked={item.enabled}
+                      onChange={(event) =>
+                        patchCustom(index(), { enabled: event.currentTarget.checked })
+                      }
+                    />
+                    显示
+                  </label>
+                  <label>
+                    计算
+                    <select
+                      value={item.kind}
+                      onChange={(event) =>
+                        patchCustom(index(), {
+                          kind: event.currentTarget.value as "EMA" | "SMA",
+                        })
+                      }
+                    >
+                      <option value="EMA">EMA</option>
+                      <option value="SMA">SMA</option>
+                    </select>
+                  </label>
+                  <label>
+                    周期
+                    <input
+                      type="number"
+                      min="1"
+                      max="500"
+                      value={item.period}
+                      onChange={(event) =>
+                        patchCustom(index(), {
+                          period: Math.min(500, Math.max(1, Number(event.currentTarget.value))),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    颜色
+                    <input
+                      type="color"
+                      value={colorValue(item.color, "#f0b90b")}
+                      onChange={(event) => patchCustom(index(), { color: event.currentTarget.value })}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    class="table-action danger"
+                    onClick={() => removeCustom(index())}
+                  >
+                    删除
+                  </button>
+                </div>
+              )}
+            </For>
           </div>
         </div>
 

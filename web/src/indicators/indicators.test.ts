@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   boll,
   chinaTimeLabel,
+  customIndicator,
+  DEFAULT_INDICATORS,
   ema,
   intradayBars,
   normalizeIndicatorConfig,
@@ -48,6 +50,23 @@ describe("indicators", () => {
     const result = rsi(bars, 2);
     expect(result.length).toBe(3);
     expect(result[0].value).toBe(100);
+  });
+
+  it("ships EMA6 as a safe custom indicator and validates custom specs", () => {
+    expect(DEFAULT_INDICATORS.customIndicators).toContainEqual({
+      id: "ema-6",
+      kind: "EMA",
+      period: 6,
+      color: "#f0b90b",
+      enabled: true,
+    });
+    const spec = DEFAULT_INDICATORS.customIndicators[0];
+    expect(customIndicator(bars, spec)).toEqual(ema(bars, 6));
+    expect(
+      normalizeIndicatorConfig({
+        customIndicators: [{ id: "bad", kind: "EMA", period: 0, color: "red", enabled: true } as never],
+      }).customIndicators,
+    ).toEqual([]);
   });
 
   it("normalizes legacy and invalid indicator parameters", () => {

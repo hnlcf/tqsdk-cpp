@@ -36,6 +36,21 @@ export interface IndicatorColors {
   rsi?: string;
 }
 
+export type CustomIndicatorKind = "EMA" | "SMA";
+
+/**
+ * Safe declarative custom indicator. Deliberately does not contain executable
+ * JavaScript: only whitelisted calculations can run, so a persisted spec cannot
+ * access DOM, network, cookies or arbitrary code.
+ */
+export interface CustomIndicatorSpec {
+  id: string;
+  kind: CustomIndicatorKind;
+  period: number;
+  color: string;
+  enabled: boolean;
+}
+
 export interface IndicatorConfig {
   maPeriods: number[];
   maColors?: string[];
@@ -51,6 +66,7 @@ export interface IndicatorConfig {
   rsi: boolean;
   rsiPeriod: number;
   rsiColors?: IndicatorColors;
+  customIndicators: CustomIndicatorSpec[];
 }
 
 export const DEFAULT_INDICATORS: IndicatorConfig = {
@@ -64,10 +80,53 @@ export const DEFAULT_INDICATORS: IndicatorConfig = {
   macdSignal: 9,
   rsi: false,
   rsiPeriod: 14,
+  customIndicators: [
+    {
+      id: "ema-6",
+      kind: "EMA",
+      period: 6,
+      color: "#f0b90b",
+      enabled: true,
+    },
+  ],
 };
 
 function positiveInt(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+const CUSTOM_COLOR = /^#[0-9a-f]{6}$/i;
+const MAX_CUSTOM_INDICATORS = 12;
+
+function normalizeCustomIndicators(value: unknown): CustomIndicatorSpec[] {
+  if (!Array.isArray(value)) return DEFAULT_INDICATORS.customIndicators;
+  const out: CustomIndicatorSpec[] = [];
+  const ids = new Set<string>();
+  for (const [index, item] of value.entries()) {
+    if (!item || typeof item !== "object" || out.length >= MAX_CUSTOM_INDICATORS) continue;
+    const row = item as Partial<CustomIndicatorSpec>;
+    const kind = row.kind === "SMA" ? "SMA" : row.kind === "EMA" ? "EMA" : null;
+    if (!kind) continue;
+    const period = positiveInt(row.period, 0);
+    if (period < 1 || period > 500) continue;
+    let id = typeof row.id === "string" && row.id.trim() ? row.id.trim() : `custom-${index + 1}`;
+    while (ids.has(id)) id = `${id}-${index + 1}`;
+    ids.add(id);
+    out.push({
+      id,
+      kind,
+      period,
+      color: typeof row.color === "string" && CUSTOM_COLOR.test(row.color) ? row.color : "#f0b90b",
+      enabled: row.enabled !== false,
+    });
+  }
+  return out;
+}
+
+/** Run a whitelisted custom calculation. No eval/Function/network is involved. */
+export function customIndicator(bars: OHLCV[], spec: CustomIndicatorSpec): ValuePoint[] {
+  if (spec.kind === "SMA") return sma(bars, spec.period);
+  return ema(bars, spec.period);
 }
 
 /** Normalize persisted/legacy configs without losing user customisations. */
@@ -88,6 +147,7 @@ export function normalizeIndicatorConfig(config: Partial<IndicatorConfig>): Indi
     macdSlow: positiveInt(config.macdSlow, DEFAULT_INDICATORS.macdSlow),
     macdSignal: positiveInt(config.macdSignal, DEFAULT_INDICATORS.macdSignal),
     rsiPeriod: positiveInt(config.rsiPeriod, DEFAULT_INDICATORS.rsiPeriod),
+    customIndicators: normalizeCustomIndicators(config.customIndicators),
   };
 }
 
