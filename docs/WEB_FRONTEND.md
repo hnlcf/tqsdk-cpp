@@ -57,6 +57,14 @@ env VITE_PROXY_TARGET=http://127.0.0.1:18082 pnpm dev
 产品/合约/到期选择、T 型报价、组合到期损益、期权与标的 K 线；
 ATM 行权价由后端 Black-Scholes 计算结果驱动，选中合约显示 Greeks/IV。
 
+### 多账户与图表稳定性
+
+- 顶栏账户选择器从 `/accounts` 加载；非默认账户的持仓/委托/成交通过 REST
+  按 `?account=` 查询，默认账户继续使用 WS 交易 topics；
+- 持仓表使用稳定列宽和 tabular numbers，实时价格变化不会推动列宽；
+- K 线切换合约/周期时只做一次适配缩放，实时更新保留用户缩放；
+- K 线时间轴/十字光标按 China wall-clock 显示（UTC+8），不依赖浏览器时区。
+
 ### 运维
 
 顶部「运维」入口（`?view=ops`）每 3 秒刷新：
