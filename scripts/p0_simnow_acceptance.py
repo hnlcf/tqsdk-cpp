@@ -330,12 +330,16 @@ class Acceptance:
             evidence["order"] = order
             # FAK/FOK 的远端语义允许立即终态；活着则撤掉，避免遗留。
             self.cancel(order_id)
-            self.check(
-                f"advanced.{advanced.lower()}",
-                PASS if order is not None else WARN,
-                f"order_id={order_id} status={order.get('status') if order else 'missing'}",
-                evidence,
-            )
+            if order is None:
+                status = WARN
+                detail = f"order_id={order_id} 未查到订单"
+            elif order.get("is_error"):
+                status = FAIL
+                detail = f"order_id={order_id} 被柜台/风控拒绝: {order.get('last_msg', '')}"
+            else:
+                status = PASS
+                detail = f"order_id={order_id} status={order.get('status')}"
+            self.check(f"advanced.{advanced.lower()}", status, detail, evidence)
 
         if self.args.five_level:
             if not self.args.symbol.startswith("CFFEX."):
@@ -366,7 +370,16 @@ class Acceptance:
         if not ok:
             self.check("risk.open_count_limit", WARN, "首单未受理，风控场景无法继续", evidence)
             return
-        self.wait_order(first_id)
+        first_order = self.wait_order(first_id)
+        if first_order is None or first_order.get("is_error"):
+            self.cancel(first_id)
+            self.check(
+                "risk.open_count_limit",
+                FAIL,
+                f"风控首单未实际接受: {(first_order or {}).get('last_msg', 'missing')}",
+                {"first": evidence, "first_order": first_order},
+            )
+            return
         second = dict(first)
         ok2, second_id, evidence2 = self.submit(second, "risk.second_order")
         if second_id:
