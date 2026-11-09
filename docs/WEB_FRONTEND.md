@@ -29,6 +29,18 @@ env VITE_PROXY_TARGET=http://127.0.0.1:18082 pnpm dev
 
 ## 2. 页面与功能
 
+### 下单板
+
+- 买开/卖开/平多（SELL CLOSE）/平空（BUY CLOSE）；
+- 平仓按钮显示可平数量，无对应仓位时禁用；
+- SHFE/INE/GFEX 的平今/平昨由 CTP 网关按当前持仓自动选择。
+
+### 自定义指标
+
+- 安全声明式 EMA/SMA，不执行任意 JavaScript；
+- 默认包含 EMA6；指标设置中可增删、改周期/颜色、启停；
+- 详细方案见 [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md)。
+
 ### 交易终端
 
 - 自选列表：多列表、新建/重命名/删除、代码/名称模糊搜索、上下移动、localStorage；
