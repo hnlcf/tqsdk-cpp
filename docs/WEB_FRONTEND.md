@@ -163,16 +163,20 @@ TradingView **Advanced Charts / Charting Library** 提供完整指标和画线�
 ```text
 web/src/
   api/client.ts            REST/WS、重连、订阅 release
-  hooks/useWorkspaceLayout.ts  可拖动布局 + localStorage
+  hooks/useWorkspaceLayout.ts  布局拖动 + localStorage
   hooks/useWasmIndicators.ts   WASM 生命周期 + 计算缓存
+  hooks/useMarketStream.ts     WS 账户连接/重连
+  hooks/useChartData.ts        K 线 REST + live bar 合并
+  hooks/useTradingSession.ts   账户/持仓/委托/成交/下单
+  chart/data.ts                OHLCV 转换 + bar 合并纯函数
   chart/seriesMapping.ts       纯 candle/line/volume 映射
-  chart/KLineChart.tsx         K线 + 指标 + panes
-  chart/IntradayChart.tsx  分时
-  chart/theme.ts           图表主题
-  indicators/indicators.ts MA/EMA/BOLL/MACD/RSI/session
-  components/              自选/下单/盘口/分笔/交易表/顶栏
-  pages/                   期货/期权
-  lib/                     storage/format
+  chart/KLineChart.tsx         K线 + WASM 指标 + panes
+  chart/IntradayChart.tsx      分时
+  chart/theme.ts               图表主题
+  indicators/indicators.ts     分时/session 工具（旧指标计算已删除）
+  components/                  自选/下单/盘口/分笔/交易表/顶栏
+  pages/                       期货/期权
+  lib/                         storage/format/trade merge
   styles/global.css
 ```
 
@@ -184,7 +188,7 @@ pnpm typecheck
 pnpm build
 ```
 
-当前 Vitest 覆盖（21 项）；Playwright E2E：
+当前 Vitest 覆盖（20 项）；Playwright E2E：
 
 - 自选搜索 `SHFE.ao2701` 后大小写不变；
 - 账户选择器可见；
@@ -193,7 +197,8 @@ pnpm build
 - 默认输出图例包含 EMA5/10/20/60/120/200 和 MACD DIF/DEA/HIST；
 - 启用 MA 后出现 MA5；关闭 MACD DIF 后对应输出消失；
 - 刷新后指标参数/输出配置/启用状态保留；
-- 拖动左侧 panel 后刷新，宽度保持。
+- 拖动左侧 panel 后刷新，宽度保持；
+- 分时 session、bar 合并、series 映射、layout、trade diff 有纯函数单测。
 
 Vitest 覆盖：
 

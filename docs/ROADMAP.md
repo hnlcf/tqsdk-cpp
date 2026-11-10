@@ -22,7 +22,7 @@
 1. **TqTdGateway**：消费动态 TD URL，实现 TQ 交易网关登录、下单/撤单、成交/持仓 diff、重连对账；需要官方协议/可用测试端点。
 2. ✅ **WebSocket 多账户过滤**：`/stream?account=` 选择每账户独立 hub；Web 账户切换会重连并带账户订阅。
 3. ✅ **账户级 task/risk**：`/task/*`、`/risk/*` 支持 `?account=`，任务按账户过滤，风控使用对应 TqApi。
-4. **真实多账户验收**：启动两个 gw/账户，验证 `/accounts`、下单路由、持仓隔离与故障切换；已有双 Sim 账户 HTTP/WS/task/risk 集成测试，真实 gw 尚未跑。
+4. ✅ **进程级双账户验收**：两个独立 Sim gw + node 的 `/accounts`、下单、持仓、task/risk、`/stream?account=` 已通过；真实 CTP/SimNow 双账户仍待执行，见 [MULTI_ACCOUNT_ACCEPTANCE.md](MULTI_ACCOUNT_ACCEPTANCE.md)。
 5. **前端 E2E/视觉回归**：Playwright 覆盖搜索选合约、切换合约/周期、K 线缩放、账户切换、断线重连。
 6. ✅ **IPC/WS fuzz 冒烟 + 24h-72h soak 脚本 + GitHub Actions workflow**；远程 runner 尚未实际执行，真实 72h 尚未跑。
 7. **CTP 连续 5 个交易日 soak 与交易日矩阵**；真实交易日不可压缩。

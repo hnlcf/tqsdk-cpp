@@ -1,5 +1,3 @@
-import { normalizeIndicatorConfig, type IndicatorConfig } from "../indicators/indicators";
-
 export type Theme = "dark" | "light";
 export type View = "terminal" | "futures" | "options" | "ops";
 
@@ -8,7 +6,6 @@ const KEY_WATCHLIST = "tqsdk.watchlist.v1";
 const KEY_SELECTED = "tqsdk.selected.v1";
 const KEY_PERIOD = "tqsdk.period.v1";
 const KEY_CHART_MODE = "tqsdk.chartMode.v1";
-const KEY_INDICATORS = "tqsdk.indicators.v1";
 
 export const DEFAULT_WATCHLIST = [
   "SHFE.rb2701",
@@ -199,30 +196,6 @@ export function saveChartMode(mode: "kline" | "time"): void {
     // ignore
   }
 }
-
-export function readIndicators(fallback: IndicatorConfig): IndicatorConfig {
-  try {
-    const requested = new URLSearchParams(window.location.search).get("indicators");
-    if (requested !== null) {
-      const keys = new Set(requested.split(",").map((item) => item.trim()).filter(Boolean));
-      return normalizeIndicatorConfig({
-        ...fallback,
-        maPeriods: keys.has("ma") ? [5, 10, 20] : [],
-        boll: keys.has("boll"),
-        macd: keys.has("macd"),
-        rsi: keys.has("rsi"),
-      });
-    }
-  } catch {
-    // fall back to persisted settings
-  }
-  return normalizeIndicatorConfig(readJson<Partial<IndicatorConfig>>(KEY_INDICATORS, fallback));
-}
-
-export function saveIndicators(config: IndicatorConfig): void {
-  writeJson(KEY_INDICATORS, config);
-}
-
 
 export interface WorkspaceLayout {
   watchlistWidth: number;

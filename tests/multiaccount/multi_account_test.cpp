@@ -101,4 +101,22 @@ TEST(MultiAccount, RoutesOrdersByAccountAndAggregatesSnapshots) {
     test::pump(io, 20);
 }
 
+TEST(MultiAccount, CloseRetiresApisUntilManagerDestruction) {
+    asio::io_context     io;
+    auto                 account = make_account(io, "SHFE.rb2701", 1'000'000.0, "retire");
+    std::weak_ptr<TqApi> weak    = account.api;
+
+    {
+        MultiAccountManager manager;
+        ASSERT_TRUE(manager.add_account("A", account.api));
+        account.api.reset();
+        manager.close();
+        // close() only closes; it must not destroy a TqApi whose coroutines may
+        // still be queued for io_context drain.
+        EXPECT_FALSE(weak.expired());
+    }
+
+    EXPECT_TRUE(weak.expired());
+}
+
 } // namespace

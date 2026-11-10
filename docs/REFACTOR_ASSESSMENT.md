@@ -16,10 +16,14 @@
 ## 2. 现状规模
 
 ```text
-web/src/App.tsx                         720 行（已抽出 layout + WASM runtime）
+web/src/App.tsx                         526 行（组合/页面状态）
 web/src/hooks/useWorkspaceLayout.ts     115 行
 web/src/hooks/useWasmIndicators.ts      210 行
-web/src/chart/KLineChart.tsx            644 行（已抽出纯映射）
+web/src/hooks/useMarketStream.ts         70 行
+web/src/hooks/useChartData.ts            71 行
+web/src/hooks/useTradingSession.ts      200 行
+web/src/chart/KLineChart.tsx            444 行（WASM-only）
+web/src/chart/data.ts                    25 行
 web/src/chart/seriesMapping.ts           56 行
 web/src/components/IndicatorSettings.tsx 408 行
 web/src/api/client.ts                   666 行
@@ -36,17 +40,16 @@ src/gateway/ctp/ctp_query_pipeline.cpp  234 行
 
 ### 3.1 App.tsx 是主要复杂度热点
 
-`App` 同时负责：行情流创建/重连、账户切换、REST 快照、下单/撤单、图表状态、
-URL/主题、Toast。WASM 生命周期/计算缓存和布局拖动已分别抽到
-`useWasmIndicators`、`useWorkspaceLayout`。
+`App` 现在负责页面组合、自选/URL/主题/Toast 等页面状态；行情流、交易会话、
+图表数据、WASM 指标、布局拖动已分别抽到独立 hook。
 
 建议按**可测试控制器**拆分（不是简单拆组件）：
 
-1. `useMarketStream(account)`：WebSocket 连接、订阅 diff、重连、状态（待做）；
-2. `useTradingSession(account)`：REST 快照、WS diff 合并、下单/撤单（待做）；
-3. `useWasmIndicators()`：WASM worker、参数、输出缓存、计算结果（✅ 已抽出）；
-4. `useWorkspaceLayout()`：尺寸/拖动/localStorage（✅ 已抽出）；
-5. `useChartData(symbol, period)`：K 线加载、live bar 合并、周期切换（待做）。
+1. `useMarketStream(account)`：WebSocket 连接、订阅 diff、重连、状态（✅）；
+2. `useTradingSession(account)`：REST 快照、WS diff 合并、下单/撤单（✅）；
+3. `useWasmIndicators()`：WASM worker、参数、输出缓存、计算结果（✅）；
+4. `useWorkspaceLayout()`：尺寸/拖动/localStorage（✅）；
+5. `useChartData(symbol, period)`：K 线加载、live bar 合并、周期切换（✅）。
 
 目标是 `App.tsx` 回到 250–350 行，只负责组合和路由。
 
@@ -142,14 +145,15 @@ src/serve/routes/task_risk_routes.cpp
 ### P0（低风险，先做）
 
 1. `App` 控制器拆分 + 单元测试（stream/trading/indicators/layout）；
-   - ✅ `useWorkspaceLayout` 已抽出 + 纯 `applyResize` 测试；
-   - ✅ `useWasmIndicators` 已抽出（WASM 生命周期、参数、输出缓存、debounce）；
-   - 待做：stream/trading/chart-data 控制器；
+   - ✅ `useWorkspaceLayout`、`useMarketStream`、`useChartData`、
+     `useTradingSession`、`useWasmIndicators` 已抽出；
+   - ✅ 纯函数测试覆盖 layout/chart data/series mapping/trade diff；
 2. `KLineChart` 纯映射层拆分；
    - ✅ `seriesMapping.ts` 已抽出 candle/line/volume 映射 + 3 项测试；
+   - ✅ KLineChart 删除旧本地指标计算路径，只保留 WASM 指标；
 3. `AccountRouter/AccountScope`；
    - ✅ 已落地，REST/task/risk 使用，2 项单测；
-4. 删除旧本地指标死代码，统一 WASM 入口（待做）。
+4. ✅ 删除旧本地指标计算/旧 `tqsdk.indicators.v1` storage API，统一 WASM 入口。
 
 ### P1（需要验收）
 

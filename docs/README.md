@@ -43,6 +43,7 @@
 | [TICK_DATA.md](TICK_DATA.md) | Tick/DataSeries/DataDownloader |
 | [OPTION_ANALYTICS.md](OPTION_ANALYTICS.md) | 期权 ATM、Black-Scholes、Greeks |
 | [TRADING_STATUS.md](TRADING_STATUS.md) | TradingStatus 与动态 MD/TD URL |
+| [MULTI_ACCOUNT_ACCEPTANCE.md](MULTI_ACCOUNT_ACCEPTANCE.md) | 双 Sim gw 进程级多账户验收 |
 | [MULTI_ACCOUNT_BACKTEST.md](MULTI_ACCOUNT_BACKTEST.md) | 多账户门面与 bar 回测 |
 | [ORDER_TASKS.md](ORDER_TASKS.md) | TargetPosTask / InsertOrderTask 设计与用法 |
 | [RISK_CONTROL.md](RISK_CONTROL.md) | RiskManager、规则接口、REST 验收 |

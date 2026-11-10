@@ -18,15 +18,7 @@ import {
   type UTCTimestamp,
   TickMarkType,
 } from "lightweight-charts";
-import {
-  boll,
-  customIndicator,
-  macd,
-  rsi,
-  sma,
-  type IndicatorConfig,
-  type OHLCV,
-} from "../indicators/indicators";
+import type { OHLCV } from "../indicators/indicators";
 import { chartColors, type Theme } from "./theme";
 import type { WasmSeries } from "../indicators/wasm/types";
 import { chinaDateTime, chinaTickMark } from "./time";
@@ -40,7 +32,6 @@ interface Props {
   resetKey?: string;
   theme: Theme;
   priceDecimals?: number;
-  indicators?: IndicatorConfig;
   wasmSeries?: WasmSeries[];
 }
 
@@ -174,133 +165,8 @@ export default function KLineChart(props: Props) {
   function rebuildIndicators() {
     if (!chart || !candle) return;
     clearIndicators();
-    const config = props.indicators;
-    if (!config) {
-      addWasmSeries();
-      updateIndicators(props.bars);
-      return;
-    }
-    const theme = colors();
-    for (let index = 0; index < config.maPeriods.length; index++) {
-      const period = config.maPeriods[index];
-      addLine(`ma-${period}`, {
-        color: config.maColors?.[index] ?? theme.ma[index % theme.ma.length],
-        lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: false,
-        crosshairMarkerVisible: false,
-        title: `MA${period}`,
-      });
-    }
-    if (config.boll) {
-      const pane = 0;
-      addLine(
-        "boll-upper",
-        {
-          color: config.bollColors?.bollUpper ?? theme.bollUpper,
-          lineWidth: 1,
-          lineStyle: 2,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
-          title: "BOLL UP",
-        },
-        pane,
-      );
-      addLine(
-        "boll-middle",
-        {
-          color: config.bollColors?.bollMiddle ?? theme.bollMiddle,
-          lineWidth: 1,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
-          title: "BOLL MID",
-        },
-        pane,
-      );
-      addLine(
-        "boll-lower",
-        {
-          color: config.bollColors?.bollLower ?? theme.bollLower,
-          lineWidth: 1,
-          lineStyle: 2,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
-          title: "BOLL LOW",
-        },
-        pane,
-      );
-    }
-    if (config.macd) {
-      ensurePane(1);
-      const pane = 1;
-      const histogram = chart.addSeries(
-        HistogramSeries,
-        {
-          priceScaleId: "right",
-          priceLineVisible: false,
-          lastValueVisible: false,
-          title: "MACD",
-        },
-        pane,
-      );
-      indicatorSeries.set("macd-histogram", histogram as AnySeries);
-      addLine(
-        "macd-dif",
-        {
-          color: config.macdColors?.macdDif ?? theme.macdDif,
-          lineWidth: 1,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
-          title: "DIF",
-        },
-        pane,
-      );
-      addLine(
-        "macd-dea",
-        {
-          color: config.macdColors?.macdDea ?? theme.macdDea,
-          lineWidth: 1,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
-          title: "DEA",
-        },
-        pane,
-      );
-    }
-    if (config.rsi) {
-      const pane = config.macd ? 2 : 1;
-      ensurePane(pane);
-      addLine(
-        "rsi",
-        {
-          color: config.rsiColors?.rsi ?? theme.average,
-          lineWidth: 1,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
-          title: `RSI${config.rsiPeriod}`,
-        },
-        pane,
-      );
-    }
-    for (const custom of config.customIndicators ?? []) {
-      if (!custom.enabled) continue;
-      addLine(`custom-${custom.id}`, {
-        color: custom.color,
-        lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: false,
-        crosshairMarkerVisible: false,
-        title: `${custom.kind}${custom.period}`,
-      });
-    }
     addWasmSeries();
-    updateIndicators(props.bars);
+    updateWasmIndicators(props.bars);
   }
 
   function updateWasmIndicators(bars: OHLCV[]) {
@@ -341,71 +207,6 @@ export default function KLineChart(props: Props) {
     }
   }
 
-  function updateIndicators(bars: OHLCV[]) {
-    if (!chart || !candle) return;
-    const config = props.indicators;
-    if (!config) {
-      updateWasmIndicators(bars);
-      return;
-    }
-    const theme = colors();
-    for (const period of config.maPeriods) {
-      indicatorSeries.get(`ma-${period}`)?.setData(
-        sma(bars, period).map((point) => ({ time: point.time as UTCTimestamp, value: point.value })),
-      );
-    }
-    if (config.boll) {
-      const bands = boll(bars, config.bollPeriod, config.bollMultiplier);
-      indicatorSeries.get("boll-upper")?.setData(
-        bands.upper.map((point) => ({ time: point.time as UTCTimestamp, value: point.value })),
-      );
-      indicatorSeries.get("boll-middle")?.setData(
-        bands.middle.map((point) => ({ time: point.time as UTCTimestamp, value: point.value })),
-      );
-      indicatorSeries.get("boll-lower")?.setData(
-        bands.lower.map((point) => ({ time: point.time as UTCTimestamp, value: point.value })),
-      );
-    }
-    if (config.macd) {
-      const values = macd(bars, config.macdFast, config.macdSlow, config.macdSignal);
-      const histogram = indicatorSeries.get("macd-histogram");
-      const dif = indicatorSeries.get("macd-dif");
-      const dea = indicatorSeries.get("macd-dea");
-      histogram?.setData(
-        values.histogram.map((point) => ({
-          time: point.time as UTCTimestamp,
-          value: point.value,
-          color:
-            point.value >= 0
-              ? config.macdColors?.macdHistUp ?? theme.positive + "80"
-              : config.macdColors?.macdHistDown ?? theme.negative + "80",
-        })),
-      );
-      dif?.setData(
-        values.dif.map((point) => ({ time: point.time as UTCTimestamp, value: point.value })),
-      );
-      dea?.setData(
-        values.dea.map((point) => ({ time: point.time as UTCTimestamp, value: point.value })),
-      );
-    }
-    if (config.rsi) {
-      const values = rsi(bars, config.rsiPeriod);
-      indicatorSeries.get("rsi")?.setData(
-        values.map((point) => ({ time: point.time as UTCTimestamp, value: point.value })),
-      );
-    }
-    for (const custom of config.customIndicators ?? []) {
-      if (!custom.enabled) continue;
-      indicatorSeries.get(`custom-${custom.id}`)?.setData(
-        customIndicator(bars, custom).map((point) => ({
-          time: point.time as UTCTimestamp,
-          value: point.value,
-        })),
-      );
-    }
-    updateWasmIndicators(bars);
-  }
-
   function updateSeriesData(forceFit: boolean) {
     if (!chart || !candle || !volume) return;
     const resetKey = `${props.symbol}|${props.resetKey ?? ""}`;
@@ -419,7 +220,7 @@ export default function KLineChart(props: Props) {
         candle.removePriceLine(priceLine);
         priceLine = undefined;
       }
-      updateIndicators([]);
+      updateWasmIndicators([]);
     }
     if (forceFit) fitPending = true;
 
@@ -432,7 +233,7 @@ export default function KLineChart(props: Props) {
         candle.removePriceLine(priceLine);
         priceLine = undefined;
       }
-      updateIndicators([]);
+      updateWasmIndicators([]);
       return;
     }
     const nextKey = `${props.symbol}|${props.resetKey ?? ""}|${bars.length}|${bars[0].time}`;
@@ -449,7 +250,7 @@ export default function KLineChart(props: Props) {
       candle.update(toCandlestick(last));
       volume.update(toVolumeData([last], colors().volumeUp, colors().volumeDown)[0]);
     }
-    updateIndicators(bars);
+    updateWasmIndicators(bars);
     const last = props.last ?? bars[bars.length - 1];
     if (!priceLine) {
       priceLine = candle.createPriceLine({
@@ -598,11 +399,10 @@ export default function KLineChart(props: Props) {
 
   createEffect(() => {
     if (!ready() || !chart) return;
-    // Depend on symbol/reset key, config and theme so indicator series are
-    // rebuilt only when their definition changes.
+    // Rebuild only when the symbol/reset key, WASM series definition or theme
+    // changes; incremental price updates must not recreate series.
     props.symbol;
     props.resetKey;
-    JSON.stringify(props.indicators ?? {});
     props.wasmSeries;
     colors();
     rebuildIndicators();

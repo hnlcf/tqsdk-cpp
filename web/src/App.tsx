@@ -5,33 +5,14 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  onCleanup,
   onMount,
   untrack,
 } from "solid-js";
 import {
   API_BASE,
-  cancelOrder,
-  createMarketStream,
-  getAccounts,
   getInstruments,
-  getKline,
-  getQuote,
-  getReadyz,
-  getTradingSnapshot,
-  insertOrder,
-  type AccountSnapshot,
-  type AccountsResponse,
-  type KlineBar,
-  type MarketStream,
-  type OrderSnapshot,
-  type PositionSnapshot,
   type Quote,
-  type ReadyState,
-  type TradeData,
-  type TradeSnapshot,
 } from "./api/client";
-import type { TicketOrder } from "./components/OrderTicketPanel";
 import Topbar from "./components/Topbar";
 import WatchlistPanel from "./components/WatchlistPanel";
 import ChartPanel, { type PeriodOption } from "./components/ChartPanel";
@@ -42,10 +23,12 @@ import TradingTables from "./components/TradingTables";
 import FuturesPage from "./pages/FuturesPage";
 import OptionsPage from "./pages/OptionsPage";
 import OpsPage from "./pages/OpsPage";
-import type { OHLCV } from "./indicators/indicators";
 import { useWasmIndicators } from "./hooks/useWasmIndicators";
 import { finite, priceDecimals } from "./lib/format";
 import { useWorkspaceLayout } from "./hooks/useWorkspaceLayout";
+import { useMarketStream } from "./hooks/useMarketStream";
+import { useChartData } from "./hooks/useChartData";
+import { useTradingSession } from "./hooks/useTradingSession";
 import {
   createWatchlistGroup,
   readChartMode,
@@ -83,27 +66,6 @@ const PERIODS: PeriodOption[] = [
 ];
 const TRADING_TOPICS = ["account", "orders", "trades", "positions"];
 
-function toOHLCV(rows: KlineBar[]): OHLCV[] {
-  return rows
-    .filter((row) => Number.isFinite(row.datetime) && row.datetime > 0)
-    .map((row) => ({
-      time: Math.floor(row.datetime / 1_000_000_000),
-      open: row.open,
-      high: row.high,
-      low: row.low,
-      close: row.close,
-      volume: row.volume,
-    }))
-    .sort((a, b) => a.time - b.time);
-}
-
-function mergeBars(previous: OHLCV[], incoming: OHLCV[]): OHLCV[] {
-  const map = new Map<number, OHLCV>();
-  for (const bar of previous) map.set(bar.time, bar);
-  for (const bar of incoming) map.set(bar.time, bar);
-  return [...map.values()].sort((a, b) => a.time - b.time).slice(-2000);
-}
-
 function initialView(): View {
   const query = new URLSearchParams(window.location.search).get("view");
   return query === "futures" || query === "options" || query === "ops" ? query : "terminal";
@@ -123,26 +85,15 @@ export default function App() {
   const [chartMode, setChartMode] = createSignal<"kline" | "time">(readChartMode());
 
   const [quotes, setQuotes] = createSignal<Record<string, Quote>>({});
-  const [history, setHistory] = createSignal<OHLCV[]>([]);
-  const [liveBars, setLiveBars] = createSignal<OHLCV[]>([]);
-  const [ready, setReady] = createSignal<ReadyState>();
-  const [accounts, setAccounts] = createSignal<AccountsResponse>();
   const [selectedAccount, setSelectedAccount] = createSignal("default");
   const [streamStatus, setStreamStatus] =
     createSignal<"connecting" | "online" | "offline">("connecting");
   const [streamReady, setStreamReady] = createSignal(false);
-  const [account, setAccount] = createSignal<AccountSnapshot>();
-  const [positions, setPositions] = createSignal<Record<string, PositionSnapshot>>({});
-  const [orders, setOrders] = createSignal<Record<string, OrderSnapshot>>({});
-  const [trades, setTrades] = createSignal<Record<string, TradeSnapshot>>({});
   const [tape, setTape] = createSignal<TapeRow[]>([]);
   const [ticketPrice, setTicketPrice] = createSignal(0);
   const [toast, setToast] = createSignal("");
 
-  let stream: MarketStream | undefined;
   let loadGeneration = 0;
-  let snapshotLoaded = false;
-  let tradingRefreshInFlight = false;
   let tapeSequence = 0;
   let priceSymbol = "";
   const lastVolume = new Map<string, number>();
@@ -160,9 +111,33 @@ export default function App() {
   const activeDuration = createMemo(() =>
     chartMode() === "time" ? 60_000_000_000 : periodDuration(),
   );
-  const chartBars = createMemo(() =>
-    liveBars().length > 0 ? mergeBars(history(), liveBars()) : history(),
-  );
+  const chartData = useChartData({
+    symbol: selected,
+    duration: activeDuration,
+    onQuote: (symbol, quote) =>
+      setQuotes((previous) => ({ ...previous, [symbol]: quote })),
+    onError: notify,
+  });
+  const chartBars = chartData.chartBars;
+  const trading = useTradingSession({
+    account: selectedAccount,
+    setAccount: setSelectedAccount,
+    symbol: selected,
+    streamStatus,
+    notify,
+  });
+  const {
+    ready,
+    accounts,
+    account,
+    positions,
+    orders,
+    trades,
+    tradingReady,
+    applyTradeData,
+    submitTicket,
+    cancelLiveOrder,
+  } = trading;
   const {
     series: wasmSeries,
     plugins: wasmPlugins,
@@ -170,17 +145,6 @@ export default function App() {
     setEnabled: setWasmEnabled,
     updateOutput: updateWasmOutput,
   } = useWasmIndicators(chartBars, () => `${selected()}|${activeDuration()}`);
-  const defaultAccountId = createMemo(() => accounts()?.default ?? "default");
-  const isDefaultAccount = createMemo(() => selectedAccount() === defaultAccountId());
-  const selectedAccountInfo = createMemo(() =>
-    accounts()?.accounts.find((item) => item.account_id === selectedAccount()),
-  );
-  const tradingReady = createMemo(
-    () =>
-      Boolean(ready()?.ready) &&
-      streamStatus() === "online" &&
-      (isDefaultAccount() || Boolean(selectedAccountInfo()?.ready)),
-  );
   const liveFloatProfit = createMemo(() => {
     let total = 0;
     for (const row of Object.values(positions())) {
@@ -224,19 +188,6 @@ export default function App() {
     window.setTimeout(() => setToast((current) => (current === message ? "" : current)), 4000);
   }
 
-  function applyTradeData(data: TradeData, snapshot: boolean) {
-    if (data.account) setAccount(data.account);
-    if (snapshot) {
-      setPositions(data.positions ?? {});
-      setOrders(data.orders ?? {});
-      setTrades(data.trades ?? {});
-      return;
-    }
-    if (data.positions) setPositions((previous) => ({ ...previous, ...data.positions }));
-    if (data.orders) setOrders((previous) => ({ ...previous, ...data.orders }));
-    if (data.trades) setTrades((previous) => ({ ...previous, ...data.trades }));
-  }
-
   function recordTape(symbol: string, quote: Quote) {
     const previousVolume = lastVolume.get(symbol);
     const previousPrice = lastPrice.get(symbol);
@@ -256,67 +207,6 @@ export default function App() {
       side,
     };
     setTape((previous) => [row, ...previous].slice(0, 80));
-  }
-
-  async function refreshReady() {
-    try {
-      setReady(await getReadyz());
-    } catch {
-      setReady(undefined);
-    }
-  }
-
-  async function loadAccounts() {
-    try {
-      const data = await getAccounts();
-      setAccounts(data);
-      const ids = data.accounts.map((item) => item.account_id);
-      if (!ids.includes(selectedAccount())) {
-        setSelectedAccount(data.default || ids[0] || "default");
-      }
-    } catch {
-      // Keep the last known account list; HTTP health/poll will retry.
-    }
-  }
-
-  async function loadTradingSnapshot(account = selectedAccount()) {
-    try {
-      applyTradeData(await getTradingSnapshot(undefined, account), true);
-      snapshotLoaded = true;
-    } catch {
-      snapshotLoaded = false;
-    }
-  }
-
-  async function refreshTradingSnapshot() {
-    if (tradingRefreshInFlight || !tradingReady()) return;
-    tradingRefreshInFlight = true;
-    try {
-      applyTradeData(await getTradingSnapshot(undefined, selectedAccount()), true);
-      snapshotLoaded = true;
-    } catch {
-      // Keep the last WS snapshot; the next poll/reconnect will resync.
-    } finally {
-      tradingRefreshInFlight = false;
-    }
-  }
-
-  async function loadChart(symbol: string, duration: number) {
-    const generation = ++loadGeneration;
-    setHistory([]);
-    setLiveBars([]);
-    try {
-      const [quote, kline] = await Promise.all([
-        getQuote(symbol),
-        getKline(symbol, duration),
-      ]);
-      if (generation !== loadGeneration) return;
-      setQuotes((previous) => ({ ...previous, [symbol]: quote }));
-      setHistory(toOHLCV(kline.bars));
-    } catch (error) {
-      if (generation !== loadGeneration) return;
-      notify(error instanceof Error ? error.message : String(error));
-    }
   }
 
   function selectSymbol(symbol: string) {
@@ -413,119 +303,36 @@ export default function App() {
     return searchFallbackInstruments(value);
   }
 
-  async function submitTicket(order: TicketOrder): Promise<string> {
-    if (!tradingReady()) throw new Error("交易网关未就绪");
-    if (order.priceType === "LIMIT" && (!Number.isFinite(order.price) || order.price <= 0)) {
-      throw new Error("请输入有效限价");
-    }
-    const result = await insertOrder({
-      instrument_id: selected(),
-      exchange_id: selected().split(".")[0],
-      direction: order.side,
-      offset: order.offset,
-      price_type: order.priceType,
-      limit_price: order.priceType === "LIMIT" ? order.price : 0,
-      time_cond: order.priceType === "LIMIT" && order.advanced === "NONE" ? "GFD" : "IOC",
-      volume_cond: order.advanced === "FOK" ? "ALL" : order.volumeCond,
-      min_volume: order.volumeCond === "MIN" ? order.minVolume : 0,
-      advanced: order.advanced,
-      volume: order.volume,
-    }, selectedAccount());
-    if (!result.success) throw new Error(result.error || "报单失败");
-    void refreshReady();
-    return result.order_id ? `已提交 ${result.order_id}` : "已提交";
-  }
-
-  async function cancelLiveOrder(orderId: string) {
-    try {
-      const result = await cancelOrder(orderId, selectedAccount());
-      notify(result.success ? `撤单已提交 ${orderId}` : result.error || "撤单失败");
-    } catch (error) {
-      notify(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  function openMarketStream(account: string): MarketStream {
-    return createMarketStream(
-      {
-        onStatus: (status) => {
-          if (account === selectedAccount()) setStreamStatus(status);
-        },
-        onQuote: (next) => {
-          setQuotes((previous) => ({ ...previous, ...next }));
-          for (const [symbol, quote] of Object.entries(next)) recordTape(symbol, quote);
-        },
-        onTradeData: (data, snapshot) => {
-          if (account !== selectedAccount()) return;
-          applyTradeData(data, snapshot);
-        },
-        onKline: (symbol, duration, payload) => {
-          if (symbol !== selected() || Number(duration) !== activeDuration()) return;
-          const update = payload as { reset?: boolean; bars?: KlineBar[] };
-          const incoming = toOHLCV(update.bars ?? []);
-          if (incoming.length === 0) return;
-          if (update.reset) {
-            setLiveBars(incoming);
-          } else {
-            setLiveBars((previous) => mergeBars(previous, incoming));
-          }
-        },
-      },
-      account === "default" ? undefined : account,
-    );
-  }
+  const marketStream = useMarketStream({
+    enabled: streamReady,
+    account: selectedAccount,
+    onStatus: (status, account) => {
+      if (account === selectedAccount()) setStreamStatus(status);
+    },
+    onQuote: (next) => {
+      setQuotes((previous) => ({ ...previous, ...next }));
+      for (const [symbol, quote] of Object.entries(next)) recordTape(symbol, quote);
+    },
+    onTradeData: (data, snapshot, account) => {
+      if (account !== selectedAccount()) return;
+      applyTradeData(data, snapshot);
+    },
+    onKline: (symbol, duration, payload) => chartData.applyKline(symbol, duration, payload),
+  });
 
   onMount(() => {
     setStreamReady(true);
-    void refreshReady();
-    void loadAccounts();
-    void loadTradingSnapshot();
-    const timer = window.setInterval(() => {
-      void refreshReady();
-      void loadAccounts();
-      if (!snapshotLoaded && ready()?.ready) void loadTradingSnapshot();
-    }, 3000);
-    const tradingTimer = window.setInterval(() => {
-      void refreshTradingSnapshot();
-    }, 5000);
-    onCleanup(() => {
-      window.clearInterval(timer);
-      window.clearInterval(tradingTimer);
-      stream?.close();
-      stream = undefined;
-    });
   });
 
   createEffect(() => {
     if (!streamReady()) return;
-    const account = selectedAccount();
-    untrack(() => {
-      stream?.close();
-      stream = openMarketStream(account);
-    });
-  });
-
-  createEffect(() => {
-    if (!streamReady() || !stream) return;
     selectedAccount();
     const symbols = [...new Set([...watchlist(), selected(), ...Object.keys(positions())])];
-    stream.setSubscription(
+    marketStream.setSubscription(
       symbols,
       [{ symbol: selected(), duration_ns: activeDuration(), view_width: 600 }],
       TRADING_TOPICS,
     );
-  });
-
-  createEffect(() => {
-    const account = selectedAccount();
-    untrack(() => {
-      snapshotLoaded = false;
-      setAccount(undefined);
-      setPositions({});
-      setOrders({});
-      setTrades({});
-      void loadTradingSnapshot(account);
-    });
   });
 
   createEffect(() => {
@@ -535,7 +342,6 @@ export default function App() {
       setTape([]);
       lastVolume.clear();
       lastPrice.clear();
-      void loadChart(symbol, duration);
     });
   });
 

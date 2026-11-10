@@ -12,10 +12,9 @@ Web 端已经支持：
 - 配置保存在 `localStorage`，刷新/重连后恢复；
 - 指标设置入口在 K 线工具栏。
 
-当前实现是两条路径：
-
-- WASM 指标插件：`WasmManifest + Worker + ABI`，MA/BOLL/MACD/RSI/EMA/ATR/Donchian 已迁移；
-- 内置指标参数化：MA/BOLL/MACD/RSI 和兼容用 EMA/SMA 参数配置。
+当前实现只有 WASM 指标插件路径：`WasmManifest + Worker + ABI`，
+MA/BOLL/MACD/RSI/EMA/ATR/Donchian 已迁移。旧内置指标参数化和
+`tqsdk.indicators.v1` storage API 已删除，避免两套指标语义并存。
 
 WASM 路径的 ABI、Manifest、安全边界和构建流程见
 [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md)。下面保留指标实例/配置容器的演进设计。
@@ -100,12 +99,8 @@ interface IndicatorWorkspace {
 }
 ```
 
-当前 `IndicatorConfig` 是第一版兼容层。迁移时：
-
-- 读取 v1 `maPeriods/bollPeriod/...`；
-- 生成默认 `instances`；
-- 写回 v2；
-- 旧 query `?indicators=ma,boll,macd,rsi` 仍映射到默认实例。
+旧 `IndicatorConfig` 兼容层和 `?indicators=...` query 已移除；指标状态统一由
+`tqsdk.wasm.indicators.v1` 管理，见 [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md)。
 
 ## 4. 渲染架构
 
@@ -143,22 +138,16 @@ Chart adapter
 
 ## 6. 设置 UI
 
-当前已实现内置指标的设置弹层：
+当前设置弹层由 WASM manifest 驱动：
 
-- MA：增删周期、逐条颜色；
-- BOLL：周期、倍数、上/中/下轨颜色；
-- MACD：快慢信号周期、DIF/DEA 颜色；
-- RSI：周期、颜色；
-- 恢复默认。
+- 插件启用/停用；
+- 参数表单（整数/浮点/枚举/bool）；
+- 每个输出的颜色、线型、线宽、显隐；
+- EMA/MA 最多 8 个动态周期槽位；
+- 恢复默认由 manifest 默认值 + 浏览器本地配置提供。
 
-下一版扩展为：
-
-- 指标实例列表：添加/删除/排序；
-- 每个实例独立参数表单；
-- 线宽、线型、可见性；
-- 副图高度拖动；
-- 按 symbol 保存覆盖；
-- 导入/导出指标配置 JSON。
+旧内置指标参数配置、`tqsdk.indicators.v1` 和 `?indicators=...` 已移除；后续扩展应
+继续通过 WASM manifest/ABI 完成，见 [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md)。
 
 ## 7. 自定义指标注册
 

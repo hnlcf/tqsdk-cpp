@@ -36,9 +36,9 @@ artifacts/p6_campaign_20261109/p63_asan_build.log
 artifacts/tsan/tsan.log
 ```
 
-2026-11-10 当前结果：ASan/TSan/UBSan 346/346；新增多账户 WS、
-账户级 task/risk、IPC/WS fuzz 后普通 CTest 为 346 项通过（2 项 TqMdNetwork
-网络测试按环境跳过）；Web Vitest 21 项，Playwright E2E 1 项，另有 WASM 插件 ABI 脚本。
+2026-11-10 当前结果：ASan/TSan/UBSan 347/347（本轮末重跑）；新增多账户 WS、
+账户级 task/risk、IPC/WS fuzz 后普通 CTest 为 347 项通过（2 项 TqMdNetwork
+网络测试按环境跳过）；Web Vitest 20 项，Playwright E2E 1 项，另有 WASM 插件 ABI 脚本。
 
 ### GitHub Actions
 
@@ -81,6 +81,15 @@ python3 scripts/soak_two_process.py \
 
 输出包含 `soak_*.json`、CSV 和进程日志；真实 24h/72h 必须在专用环境执行并归档，
 短 soak 不能替代。
+
+### 双账户进程级验收（可选）
+
+```bash
+./scripts/multi_account_acceptance.py --bin-dir build-ui
+```
+
+需要 `websockets` Python 包；脚本自动启动两个 Sim gw + node 并清理进程。它不是
+真实 CTP 柜台验收，边界见 [MULTI_ACCOUNT_ACCEPTANCE.md](MULTI_ACCOUNT_ACCEPTANCE.md)。
 
 ## 5. 说明
 

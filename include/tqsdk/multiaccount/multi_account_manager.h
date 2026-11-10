@@ -28,6 +28,12 @@ public:
                                              const CancelOrderReq& req);
 
     /// 关闭全部账户的 TqApi（幂等）。
+    ///
+    /// Closed TqApis are retired into an internal vector instead of being
+    /// destroyed immediately: their coroutines may still be queued on the
+    /// io_context after close(), and destroying the API before draining them
+    /// causes use-after-free/double-free. The vector is released with this
+    /// manager (after the caller has drained io_context).
     void close();
 
     /// 账户/持仓/委托/成交快照聚合；键为 account_id。
@@ -36,6 +42,7 @@ public:
 private:
     mutable std::mutex                                    mutex_;
     std::unordered_map<AccountId, std::shared_ptr<TqApi>> accounts_;
+    std::vector<std::shared_ptr<TqApi>>                   retired_apis_;
     std::string                                           default_account_id_;
 };
 
