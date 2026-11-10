@@ -1,0 +1,16 @@
+[package]
+name = "tqsdk-indicator-rsi"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+tqsdk-indicator-sdk = { path = "../../indicator-sdk" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"

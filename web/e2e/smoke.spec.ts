@@ -9,7 +9,21 @@ test("symbol search preserves SHFE contract casing and shows safe custom indicat
   await page.goto("/?theme=dark");
   await expect(page.locator(".symbol-title h1")).toHaveText("SHFE.rb2701");
   await expect(page.locator(".account-select select")).toBeVisible();
-  await expect(page.locator(".chart-wasm")).toHaveText(["EMA6", "EMA12", "EMA24", "EMA60"]);
+  await expect(page.locator(".chart-wasm")).toHaveText([
+    "EMA5",
+    "EMA10",
+    "EMA20",
+    "EMA60",
+    "EMA120",
+    "EMA200",
+    "MA5",
+    "MA10",
+    "MA20",
+    "MA60",
+    "ATR14",
+    "DC20",
+    "DC20 MID",
+  ]);
 
   await page.getByTitle("添加合约").click();
   const search = page.locator('.watch-add input[placeholder^="代码/名称"]');
@@ -28,15 +42,24 @@ test("symbol search preserves SHFE contract casing and shows safe custom indicat
   await page.locator(".indicator-settings-trigger").click();
   const settings = page.locator(".indicator-settings");
   await expect(settings).toBeVisible();
-  await expect(settings.getByText("WASM 插件", { exact: true })).toBeVisible();
-  await expect(settings.getByText("EMA 多均线 v0.2.0")).toBeVisible();
+  await expect(settings.getByText("EMA 多均线", { exact: true })).toBeVisible();
+  await expect(settings.getByText("MA 多均线", { exact: true })).toBeVisible();
+  await expect(settings.getByText("ATR", { exact: true })).toBeVisible();
+  await expect(settings.getByText("Donchian Channel", { exact: true })).toBeVisible();
+  await expect(settings.getByText("BOLL", { exact: true })).toBeVisible();
+  await expect(settings.getByText("MACD", { exact: true })).toBeVisible();
+  await expect(settings.getByText("RSI", { exact: true })).toBeVisible();
   const wasmPeriod = settings.locator(".wasm-indicator-block input[type=number]").first();
-  await expect(wasmPeriod).toHaveValue("6");
+  await expect(wasmPeriod).toHaveValue("5");
   await wasmPeriod.fill("8");
   await wasmPeriod.blur();
-  await expect(page.locator(".chart-wasm")).toHaveText(["EMA8", "EMA12", "EMA24", "EMA60"]);
-  await expect(settings.getByText("内置参数指标", { exact: true })).toBeVisible();
-  await expect(settings.getByText("兼容旧配置：仅 EMA/SMA 参数化计算；WASM 插件见上方。")).toBeVisible();
+  await expect(page.locator(".chart-wasm").first()).toHaveText("EMA8");
+
+  const macdBlock = settings.locator(".wasm-indicator-block", { hasText: "MACD" }).first();
+  await macdBlock.locator("input[type=checkbox]").check();
+  await settings.locator(".submit-order").click();
+  await expect(page.locator(".chart-wasm", { hasText: "MACD DIF" })).toBeVisible();
+  await expect(page.locator(".chart-wasm", { hasText: "MACD HIST" })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });

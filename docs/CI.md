@@ -10,7 +10,8 @@
 
 1. 构建 `tqsdk_tests` / `tqsdk-gw` / `tqsdk-node`；
 2. CTest 全量；
-3. Web `pnpm typecheck`、`pnpm test`、`pnpm build`。
+3. Web `pnpm typecheck`、`pnpm test`、`pnpm build`；
+4. `node scripts/check_wasm_plugins.mjs` 检查所有 WASM ABI。
 
 可选：
 
@@ -36,7 +37,7 @@ artifacts/tsan/tsan.log
 ```
 
 2026-11-09 当前结果：ASan 338/338、TSan 338/338、UBSan 338/338（2 项 TqMdNetwork 网络测试按环境跳过；
-新增 Tick UI 与 WASM ABI 测试后 Web 为 14 项）。
+新增 Tick UI 与 WASM ABI 测试后 Web 为 14 项，另有 WASM 插件 ABI 脚本）。
 
 ## 3. 短 soak
 

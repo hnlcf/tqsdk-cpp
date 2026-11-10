@@ -14,7 +14,7 @@ Web 端已经支持：
 
 当前实现是两条路径：
 
-- WASM 自定义指标：`WasmManifest + Worker + ABI`，作为自定义指标主路径；
+- WASM 指标插件：`WasmManifest + Worker + ABI`，MA/BOLL/MACD/RSI/EMA/ATR/Donchian 已迁移；
 - 内置指标参数化：MA/BOLL/MACD/RSI 和兼容用 EMA/SMA 参数配置。
 
 WASM 路径的 ABI、Manifest、安全边界和构建流程见

@@ -174,3 +174,36 @@ pub fn execute(
     }
     output_len as i32
 }
+
+/// Export the standard WebAssembly entry points for a plugin.
+///
+/// The plugin only needs to provide an entry function:
+///
+/// ```ignore
+/// fn indicator(ctx: &mut Context<'_>) -> i32 { ... }
+/// tqsdk_indicator_sdk::export_indicator!(indicator);
+/// ```
+#[macro_export]
+macro_rules! export_indicator {
+    ($entry:path) => {
+        #[no_mangle]
+        pub extern "C" fn alloc(size: u32) -> *mut u8 {
+            $crate::alloc(size)
+        }
+
+        #[no_mangle]
+        pub extern "C" fn dealloc(ptr: *mut u8, size: u32) {
+            $crate::dealloc(ptr, size);
+        }
+
+        #[no_mangle]
+        pub extern "C" fn run(
+            input_ptr: *const u8,
+            input_len: usize,
+            output_ptr: *mut u8,
+            output_capacity: usize,
+        ) -> i32 {
+            $crate::execute(input_ptr, input_len, output_ptr, output_capacity, $entry)
+        }
+    };
+}

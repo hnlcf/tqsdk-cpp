@@ -33,7 +33,7 @@
 |---|---|
 | [WEB_FRONTEND.md](WEB_FRONTEND.md) | TQSDK Board（SolidJS/pnpm/Lightweight Charts）架构与功能 |
 | [WEB_INDICATORS.md](WEB_INDICATORS.md) | 指标参数/颜色/自定义指标演进方案 |
-| [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md) | WASM 自定义指标、ABI/Manifest/SDK、安全与扩展边界 |
+| [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md) | WASM 指标插件、ABI/Manifest/SDK、安全与扩展边界 |
 | [TQ_AUTH.md](TQ_AUTH.md) | 快期账户 TqAuth、token 刷新和目录下载 Bearer header |
 | [INSTRUMENTS.md](INSTRUMENTS.md) | 合约目录格式、加载与刷新 |
 | [KLINE_CACHE.md](KLINE_CACHE.md) | SQLite K 线缓存、恢复与容量 |

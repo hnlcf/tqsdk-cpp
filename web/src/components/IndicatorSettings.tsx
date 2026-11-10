@@ -1,74 +1,29 @@
 import { For, Show } from "solid-js";
-import {
-  DEFAULT_INDICATORS,
-  type CustomIndicatorSpec,
-  type IndicatorConfig,
-  type IndicatorColors,
-} from "../indicators/indicators";
-import { chartColors, type Theme } from "../chart/theme";
-import type { WasmManifest } from "../indicators/wasm/types";
+import type { WasmPluginView } from "../indicators/wasm/types";
 
 interface Props {
-  config: IndicatorConfig;
-  theme: Theme;
-  onChange: (next: IndicatorConfig) => void;
-  wasmManifest?: WasmManifest;
-  wasmParams?: number[];
-  onWasmParams?: (values: number[]) => void;
+  plugins: WasmPluginView[];
+  onWasmParams?: (id: string, values: number[]) => void;
+  onWasmEnabled?: (id: string, enabled: boolean) => void;
   onClose: () => void;
 }
 
-function colorValue(value: string | undefined, fallback: string): string {
-  if (value && /^#[0-9a-f]{6}$/i.test(value)) return value;
-  if (/^#[0-9a-f]{6}$/i.test(fallback)) return fallback;
-  return "#53b7ff";
-}
-
 export default function IndicatorSettings(props: Props) {
-  const colors = () => chartColors(props.theme);
-  const patch = (next: Partial<IndicatorConfig>) => props.onChange({ ...props.config, ...next });
-  const patchColors = (key: "bollColors" | "macdColors" | "rsiColors", next: IndicatorColors) =>
-    patch({ [key]: { ...(props.config[key] ?? {}), ...next } } as Partial<IndicatorConfig>);
-
-  function setMaPeriod(index: number, value: string) {
-    const period = Number(value);
-    if (!Number.isInteger(period) || period <= 0) return;
-    const periods = props.config.maPeriods.slice();
-    periods[index] = period;
-    patch({ maPeriods: [...new Set(periods)] });
-  }
-
-  function addMa() {
-    const next = (props.config.maPeriods.at(-1) ?? 10) + 10;
-    patch({ maPeriods: [...props.config.maPeriods, next] });
-  }
-
-  function removeMa(index: number) {
-    patch({ maPeriods: props.config.maPeriods.filter((_, current) => current !== index) });
-  }
-
-  function addCustom() {
-    if (props.config.customIndicators.length >= 12) return;
-    const next: CustomIndicatorSpec = {
-      id: `custom-${Date.now()}`,
-      kind: "EMA",
-      period: 6,
-      color: "#f0b90b",
-      enabled: true,
-    };
-    patch({ customIndicators: [...props.config.customIndicators, next] });
-  }
-
-  function patchCustom(index: number, next: Partial<CustomIndicatorSpec>) {
-    const items = props.config.customIndicators.slice();
-    items[index] = { ...items[index], ...next };
-    patch({ customIndicators: items });
-  }
-
-  function removeCustom(index: number) {
-    patch({
-      customIndicators: props.config.customIndicators.filter((_, current) => current !== index),
-    });
+  function setParam(plugin: WasmPluginView, index: number, raw: string) {
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return;
+    const spec = plugin.params[index];
+    if (!spec) return;
+    const clamped = Math.min(
+      spec.max ?? Number.POSITIVE_INFINITY,
+      Math.max(spec.min ?? Number.NEGATIVE_INFINITY, value),
+    );
+    const values = [...plugin.values];
+    while (values.length < plugin.params.length) {
+      values.push(plugin.params[values.length]?.default ?? 0);
+    }
+    values[index] = spec.type === "int" ? Math.round(clamped) : clamped;
+    props.onWasmParams?.(plugin.id, values);
   }
 
   return (
@@ -81,7 +36,7 @@ export default function IndicatorSettings(props: Props) {
       >
         <div class="indicator-settings-head">
           <div>
-            <span class="eyebrow">INDICATORS</span>
+            <span class="eyebrow">WASM INDICATORS</span>
             <h2>指标设置</h2>
           </div>
           <button type="button" class="icon-button" onClick={props.onClose} title="关闭">
@@ -90,354 +45,67 @@ export default function IndicatorSettings(props: Props) {
         </div>
 
         <div class="indicator-settings-body">
-          <Show when={props.wasmManifest}>
-            <div class="indicator-block wasm-indicator-block">
-              <div class="indicator-block-title">
-                <strong>WASM 插件</strong>
-                <span class="wasm-badge">
-                  {props.wasmManifest?.name} v{props.wasmManifest?.version}
-                </span>
-              </div>
-              <small class="indicator-hint">
-                Worker + WebAssembly 沙箱 · 无 host imports · 只读历史 bars
-              </small>
-              <For each={props.wasmManifest?.params ?? []}>
-                {(param, index) => (
-                  <div class="indicator-param-row">
-                    <label>
-                      {param.label}
-                      <input
-                        type="number"
-                        min={param.min}
-                        max={param.max}
-                        step={param.type === "int" ? 1 : 0.1}
-                        value={props.wasmParams?.[index()] ?? param.default}
-                        onChange={(event) => {
-                          const raw = Number(event.currentTarget.value);
-                          if (!Number.isFinite(raw)) return;
-                          const value = Math.min(
-                            param.max ?? Number.POSITIVE_INFINITY,
-                            Math.max(param.min ?? Number.NEGATIVE_INFINITY, raw),
-                          );
-                          const next = [
-                            ...(props.wasmParams ??
-                              props.wasmManifest!.params.map((item) => item.default)),
-                          ];
-                          next[index()] = param.type === "int" ? Math.round(value) : value;
-                          props.onWasmParams?.(next);
-                        }}
-                      />
-                    </label>
-                  </div>
-                )}
-              </For>
-            </div>
+          <small class="indicator-hint">
+            Worker + WebAssembly 沙箱 · 无 host imports · 只读历史 OHLCV
+          </small>
+          <Show when={props.plugins.length === 0}>
+            <div class="empty-state small">正在加载 WASM 指标...</div>
           </Show>
-
-          <div class="indicator-block">
-            <div class="indicator-block-title">
-              <strong>MA</strong>
-              <button type="button" class="table-action" onClick={addMa}>
-                + 加一条
-              </button>
-            </div>
-            <Show when={props.config.maPeriods.length === 0}>
-              <small class="indicator-hint">当前没有 MA 线。</small>
-            </Show>
-            <For each={props.config.maPeriods}>
-              {(period, index) => (
-                <div class="indicator-param-row">
-                  <label>
-                    周期
-                    <input
-                      type="number"
-                      min="1"
-                      value={period}
-                      onChange={(event) => setMaPeriod(index(), event.currentTarget.value)}
-                    />
-                  </label>
-                  <label>
-                    颜色
-                    <input
-                      type="color"
-                      value={colorValue(
-                        props.config.maColors?.[index()],
-                        colors().ma[index() % colors().ma.length],
-                      )}
-                      onChange={(event) => {
-                        const next = [...(props.config.maColors ?? [])];
-                        next[index()] = event.currentTarget.value;
-                        patch({ maColors: next });
-                      }}
-                    />
-                  </label>
-                  <button type="button" class="table-action danger" onClick={() => removeMa(index())}>
-                    删除
-                  </button>
+          <For each={props.plugins}>
+            {(plugin) => (
+              <div class="indicator-block wasm-indicator-block">
+                <div class="indicator-block-title">
+                  <strong>{plugin.name || plugin.id}</strong>
+                  <span class="wasm-badge">
+                    {plugin.version ? `v${plugin.version}` : plugin.status}
+                  </span>
                 </div>
-              )}
-            </For>
-          </div>
-
-          <div class="indicator-block">
-            <label class="indicator-toggle">
-              <input
-                type="checkbox"
-                checked={props.config.boll}
-                onChange={(event) => patch({ boll: event.currentTarget.checked })}
-              />
-              <strong>BOLL</strong>
-            </label>
-            <div class="indicator-param-row">
-              <label>
-                周期
-                <input
-                  type="number"
-                  min="2"
-                  value={props.config.bollPeriod}
-                  onChange={(event) =>
-                    patch({ bollPeriod: Math.max(2, Number(event.currentTarget.value)) })
-                  }
-                />
-              </label>
-              <label>
-                倍数
-                <input
-                  type="number"
-                  min="0.1"
-                  step="0.1"
-                  value={props.config.bollMultiplier}
-                  onChange={(event) =>
-                    patch({ bollMultiplier: Math.max(0.1, Number(event.currentTarget.value)) })
-                  }
-                />
-              </label>
-            </div>
-            <div class="indicator-color-row">
-              <label>
-                上轨
-                <input
-                  type="color"
-                  value={colorValue(props.config.bollColors?.bollUpper, colors().bollUpper)}
-                  onChange={(event) => patchColors("bollColors", { bollUpper: event.currentTarget.value })}
-                />
-              </label>
-              <label>
-                中轨
-                <input
-                  type="color"
-                  value={colorValue(props.config.bollColors?.bollMiddle, colors().bollMiddle)}
-                  onChange={(event) =>
-                    patchColors("bollColors", { bollMiddle: event.currentTarget.value })
-                  }
-                />
-              </label>
-              <label>
-                下轨
-                <input
-                  type="color"
-                  value={colorValue(props.config.bollColors?.bollLower, colors().bollLower)}
-                  onChange={(event) => patchColors("bollColors", { bollLower: event.currentTarget.value })}
-                />
-              </label>
-            </div>
-          </div>
-
-          <div class="indicator-block">
-            <label class="indicator-toggle">
-              <input
-                type="checkbox"
-                checked={props.config.macd}
-                onChange={(event) => patch({ macd: event.currentTarget.checked })}
-              />
-              <strong>MACD</strong>
-            </label>
-            <div class="indicator-param-row">
-              <label>
-                快线
-                <input
-                  type="number"
-                  min="1"
-                  value={props.config.macdFast}
-                  onChange={(event) =>
-                    patch({ macdFast: Math.max(1, Number(event.currentTarget.value)) })
-                  }
-                />
-              </label>
-              <label>
-                慢线
-                <input
-                  type="number"
-                  min="1"
-                  value={props.config.macdSlow}
-                  onChange={(event) =>
-                    patch({ macdSlow: Math.max(1, Number(event.currentTarget.value)) })
-                  }
-                />
-              </label>
-              <label>
-                信号
-                <input
-                  type="number"
-                  min="1"
-                  value={props.config.macdSignal}
-                  onChange={(event) =>
-                    patch({ macdSignal: Math.max(1, Number(event.currentTarget.value)) })
-                  }
-                />
-              </label>
-            </div>
-            <div class="indicator-color-row">
-              <label>
-                DIF
-                <input
-                  type="color"
-                  value={colorValue(props.config.macdColors?.macdDif, colors().macdDif)}
-                  onChange={(event) => patchColors("macdColors", { macdDif: event.currentTarget.value })}
-                />
-              </label>
-              <label>
-                DEA
-                <input
-                  type="color"
-                  value={colorValue(props.config.macdColors?.macdDea, colors().macdDea)}
-                  onChange={(event) => patchColors("macdColors", { macdDea: event.currentTarget.value })}
-                />
-              </label>
-              <label>
-                柱涨
-                <input
-                  type="color"
-                  value={colorValue(props.config.macdColors?.macdHistUp, colors().positive)}
-                  onChange={(event) =>
-                    patchColors("macdColors", { macdHistUp: event.currentTarget.value })
-                  }
-                />
-              </label>
-              <label>
-                柱跌
-                <input
-                  type="color"
-                  value={colorValue(props.config.macdColors?.macdHistDown, colors().negative)}
-                  onChange={(event) =>
-                    patchColors("macdColors", { macdHistDown: event.currentTarget.value })
-                  }
-                />
-              </label>
-            </div>
-          </div>
-
-          <div class="indicator-block">
-            <label class="indicator-toggle">
-              <input
-                type="checkbox"
-                checked={props.config.rsi}
-                onChange={(event) => patch({ rsi: event.currentTarget.checked })}
-              />
-              <strong>RSI</strong>
-            </label>
-            <div class="indicator-param-row">
-              <label>
-                周期
-                <input
-                  type="number"
-                  min="2"
-                  value={props.config.rsiPeriod}
-                  onChange={(event) =>
-                    patch({ rsiPeriod: Math.max(2, Number(event.currentTarget.value)) })
-                  }
-                />
-              </label>
-              <label>
-                颜色
-                <input
-                  type="color"
-                  value={colorValue(props.config.rsiColors?.rsi, colors().average)}
-                  onChange={(event) => patchColors("rsiColors", { rsi: event.currentTarget.value })}
-                />
-              </label>
-            </div>
-          </div>
-
-          <div class="indicator-block">
-            <div class="indicator-block-title">
-              <strong>内置参数指标</strong>
-              <button type="button" class="table-action" onClick={addCustom}>
-                + 加一条
-              </button>
-            </div>
-            <small class="indicator-hint">
-              兼容旧配置：仅 EMA/SMA 参数化计算；WASM 插件见上方。
-            </small>
-            <Show when={props.config.customIndicators.length === 0}>
-              <small class="indicator-hint">当前没有内置参数指标。</small>
-            </Show>
-            <For each={props.config.customIndicators}>
-              {(item, index) => (
-                <div class="indicator-param-row custom-indicator-row">
-                  <label class="indicator-toggle compact">
-                    <input
-                      type="checkbox"
-                      checked={item.enabled}
-                      onChange={(event) =>
-                        patchCustom(index(), { enabled: event.currentTarget.checked })
-                      }
-                    />
-                    显示
-                  </label>
-                  <label>
-                    计算
-                    <select
-                      value={item.kind}
-                      onChange={(event) =>
-                        patchCustom(index(), {
-                          kind: event.currentTarget.value as "EMA" | "SMA",
-                        })
-                      }
-                    >
-                      <option value="EMA">EMA</option>
-                      <option value="SMA">SMA</option>
-                    </select>
-                  </label>
-                  <label>
-                    周期
-                    <input
-                      type="number"
-                      min="1"
-                      max="500"
-                      value={item.period}
-                      onChange={(event) =>
-                        patchCustom(index(), {
-                          period: Math.min(500, Math.max(1, Number(event.currentTarget.value))),
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    颜色
-                    <input
-                      type="color"
-                      value={colorValue(item.color, "#f0b90b")}
-                      onChange={(event) => patchCustom(index(), { color: event.currentTarget.value })}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    class="table-action danger"
-                    onClick={() => removeCustom(index())}
-                  >
-                    删除
-                  </button>
-                </div>
-              )}
-            </For>
-          </div>
+                <label class="indicator-toggle">
+                  <input
+                    type="checkbox"
+                    checked={plugin.enabled}
+                    disabled={plugin.status !== "ready"}
+                    onChange={(event) =>
+                      props.onWasmEnabled?.(plugin.id, event.currentTarget.checked)
+                    }
+                  />
+                  <strong>启用</strong>
+                </label>
+                <Show when={plugin.status === "loading"}>
+                  <small class="indicator-hint">正在加载插件...</small>
+                </Show>
+                <Show when={plugin.status === "error"}>
+                  <small class="indicator-hint negative">
+                    加载失败：{plugin.error ?? "unknown error"}
+                  </small>
+                </Show>
+                <For each={plugin.params}>
+                  {(param, index) => (
+                    <div class="indicator-param-row">
+                      <label>
+                        {param.label}
+                        <input
+                          type="number"
+                          min={param.min}
+                          max={param.max}
+                          step={param.type === "int" ? 1 : 0.1}
+                          value={plugin.values[index()] ?? param.default}
+                          disabled={plugin.status !== "ready"}
+                          onChange={(event) =>
+                            setParam(plugin, index(), event.currentTarget.value)
+                          }
+                        />
+                      </label>
+                    </div>
+                  )}
+                </For>
+              </div>
+            )}
+          </For>
         </div>
 
         <div class="indicator-settings-foot">
-          <button type="button" class="table-action" onClick={() => props.onChange({ ...DEFAULT_INDICATORS })}>
-            恢复默认
-          </button>
+          <span class="indicator-hint">参数修改后自动重算</span>
           <button type="button" class="submit-order buy" onClick={props.onClose}>
             完成
           </button>

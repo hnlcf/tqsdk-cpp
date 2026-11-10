@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "abi": 1,
+  "id": "donchian",
+  "name": "Donchian Channel",
+  "version": "0.1.0",
+  "wasm": "donchian.wasm",
+  "params": [
+    {
+      "id": "period",
+      "label": "\u5468\u671f",
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 500
+    }
+  ],
+  "outputs": [
+    {
+      "id": "dc-band",
+      "title": "DC{period}",
+      "pane": "main",
+      "plot": "band",
+      "channels": 2,
+      "color": "#53b7ff"
+    },
+    {
+      "id": "dc-mid",
+      "title": "DC{period} MID",
+      "pane": "main",
+      "plot": "line",
+      "color": "#f0b90b"
+    }
+  ]
+}

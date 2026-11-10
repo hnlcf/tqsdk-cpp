@@ -43,6 +43,18 @@ export interface WasmSeries {
   lower?: Float64Array;
 }
 
+/** UI/runtime state for one loaded or loading plugin. */
+export interface WasmPluginView {
+  id: string;
+  name: string;
+  version: string;
+  enabled: boolean;
+  status: "loading" | "ready" | "error";
+  params: WasmParamSpec[];
+  values: number[];
+  error?: string;
+}
+
 const ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
 const PLOTS = new Set<WasmPlotKind>(["line", "histogram", "area", "band", "markers"]);

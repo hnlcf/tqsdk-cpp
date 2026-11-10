@@ -47,6 +47,7 @@ echo "== web =="
     pnpm test
     pnpm build
 )
+node "$ROOT/scripts/check_wasm_plugins.mjs"
 
 if (( RUN_ASAN )); then
     echo "== ASan =="

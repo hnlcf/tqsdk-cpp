@@ -8,7 +8,13 @@ custom-indicator runtime.
 ```text
 wasm/
   indicator-sdk/       ABI helpers, allocator, input parser
-  plugins/ema6/        multi EMA example plugin and manifest
+  plugins/ema6/        EMA multi-line example
+  plugins/ma/          MA multi-line
+  plugins/boll/        Bollinger Bands
+  plugins/macd/        MACD
+  plugins/rsi/         RSI
+  plugins/atr/         ATR
+  plugins/donchian/    Donchian Channel
 ```
 
 The generated public assets live in:
@@ -25,6 +31,18 @@ web/public/plugins/ema6/
 ```bash
 rustup target add wasm32-unknown-unknown
 ./scripts/build_wasm_plugins.sh
+```
+
+Build one plugin only:
+
+```bash
+./scripts/build_wasm_plugins.sh wasm/plugins/atr
+```
+
+Verify every generated ABI:
+
+```bash
+node scripts/check_wasm_plugins.mjs
 ```
 
 The script builds with:
@@ -52,7 +70,9 @@ Input format `TQW1` and output layout are documented in
 
 ## Writing a plugin
 
-The bundled example exports four EMA outputs with periods 6/12/24/60.
+The bundled examples cover multiple EMA/MA lines, BOLL band, MACD histogram,
+RSI, ATR and Donchian channel. See `web/src/indicators/wasm/registry.ts` for the
+runtime registry.
 
 The plugin only computes numbers:
 

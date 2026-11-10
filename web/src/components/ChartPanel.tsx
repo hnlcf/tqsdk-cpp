@@ -2,8 +2,8 @@ import { For, Show, createMemo, createSignal } from "solid-js";
 import type { Quote } from "../api/client";
 import { formatPrice, formatVolume, quoteChange } from "../lib/format";
 import { instrumentName } from "../lib/instruments";
-import type { OHLCV, IndicatorConfig } from "../indicators/indicators";
-import type { WasmManifest, WasmSeries } from "../indicators/wasm/types";
+import type { OHLCV } from "../indicators/indicators";
+import type { WasmPluginView, WasmSeries } from "../indicators/wasm/types";
 import KLineChart from "../chart/KLineChart";
 import IntradayChart from "../chart/IntradayChart";
 import IndicatorSettings from "./IndicatorSettings";
@@ -24,28 +24,20 @@ interface Props {
   mode: "kline" | "time";
   theme: Theme;
   decimals: number;
-  indicators: IndicatorConfig;
   wasmSeries?: WasmSeries[];
-  wasmManifest?: WasmManifest;
-  wasmParams?: number[];
-  onWasmParams?: (values: number[]) => void;
+  wasmPlugins?: WasmPluginView[];
+  onWasmParams?: (id: string, values: number[]) => void;
+  onWasmEnabled?: (id: string, enabled: boolean) => void;
   onPeriod: (period: string) => void;
   onMode: (mode: "kline" | "time") => void;
-  onIndicators: (next: IndicatorConfig) => void;
 }
 
 export default function ChartPanel(props: Props) {
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const last = createMemo(() => props.bars.at(-1));
   const change = createMemo(() => quoteChange(props.quote));
-  const maActive = () => props.indicators.maPeriods.length > 0;
-
-  function toggleMa() {
-    props.onIndicators({
-      ...props.indicators,
-      maPeriods: maActive() ? [] : [5, 10, 20],
-    });
-  }
+  const activeWasm = () =>
+    (props.wasmPlugins ?? []).filter((plugin) => plugin.enabled && plugin.status === "ready").length;
 
   return (
     <section class="center-column">
@@ -108,38 +100,7 @@ export default function ChartPanel(props: Props) {
           </For>
         </div>
         <div class="toolbar-tools">
-          <button
-            type="button"
-            class={`tool-button ${maActive() ? "active" : ""}`}
-            disabled={props.mode !== "kline"}
-            onClick={toggleMa}
-          >
-            MA
-          </button>
-          <button
-            type="button"
-            class={`tool-button ${props.indicators.boll ? "active" : ""}`}
-            disabled={props.mode !== "kline"}
-            onClick={() => props.onIndicators({ ...props.indicators, boll: !props.indicators.boll })}
-          >
-            BOLL
-          </button>
-          <button
-            type="button"
-            class={`tool-button ${props.indicators.macd ? "active" : ""}`}
-            disabled={props.mode !== "kline"}
-            onClick={() => props.onIndicators({ ...props.indicators, macd: !props.indicators.macd })}
-          >
-            MACD
-          </button>
-          <button
-            type="button"
-            class={`tool-button ${props.indicators.rsi ? "active" : ""}`}
-            disabled={props.mode !== "kline"}
-            onClick={() => props.onIndicators({ ...props.indicators, rsi: !props.indicators.rsi })}
-          >
-            RSI
-          </button>
+          <span class="wasm-toolbar-badge">WASM {activeWasm()}</span>
           <button type="button" class="tool-button indicator-settings-trigger" onClick={() => setSettingsOpen(true)}>
             指标设置
           </button>
@@ -167,7 +128,6 @@ export default function ChartPanel(props: Props) {
             resetKey={`${props.symbol}|${props.period}|${props.mode}`}
             theme={props.theme}
             priceDecimals={props.decimals}
-            indicators={props.indicators}
             wasmSeries={props.wasmSeries}
           />
         </Show>
@@ -183,12 +143,9 @@ export default function ChartPanel(props: Props) {
       </div>
       <Show when={settingsOpen()}>
         <IndicatorSettings
-          config={props.indicators}
-          theme={props.theme}
-          onChange={props.onIndicators}
-          wasmManifest={props.wasmManifest}
-          wasmParams={props.wasmParams}
+          plugins={props.wasmPlugins ?? []}
           onWasmParams={props.onWasmParams}
+          onWasmEnabled={props.onWasmEnabled}
           onClose={() => setSettingsOpen(false)}
         />
       </Show>

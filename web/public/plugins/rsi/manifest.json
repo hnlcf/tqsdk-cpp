@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "abi": 1,
+  "id": "rsi",
+  "name": "RSI",
+  "version": "0.1.0",
+  "wasm": "rsi.wasm",
+  "params": [
+    {
+      "id": "period",
+      "label": "\u5468\u671f",
+      "type": "int",
+      "default": 14,
+      "min": 2,
+      "max": 500
+    }
+  ],
+  "outputs": [
+    {
+      "id": "rsi",
+      "title": "RSI{period}",
+      "pane": "sub:rsi",
+      "plot": "line",
+      "color": "#f0b90b"
+    }
+  ]
+}

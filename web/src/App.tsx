@@ -42,26 +42,19 @@ import TradingTables from "./components/TradingTables";
 import FuturesPage from "./pages/FuturesPage";
 import OptionsPage from "./pages/OptionsPage";
 import OpsPage from "./pages/OpsPage";
-import {
-  DEFAULT_INDICATORS,
-  ema,
-  type IndicatorConfig,
-  type OHLCV,
-} from "./indicators/indicators";
+import type { OHLCV } from "./indicators/indicators";
 import { WasmIndicatorHost } from "./indicators/wasm/host";
 import { DEFAULT_WASM_PLUGINS } from "./indicators/wasm/registry";
-import { seriesFromManifest, type WasmManifest, type WasmSeries } from "./indicators/wasm/types";
+import { seriesFromManifest, type WasmPluginView, type WasmSeries } from "./indicators/wasm/types";
 import { finite, priceDecimals } from "./lib/format";
 import {
   createWatchlistGroup,
   readChartMode,
-  readIndicators,
   readPeriod,
   readSelected,
   readTheme,
   readWatchlists,
   saveChartMode,
-  saveIndicators,
   savePeriod,
   saveSelected,
   saveTheme,
@@ -128,13 +121,8 @@ export default function App() {
   const [selected, setSelected] = createSignal(readSelected());
   const [period, setPeriod] = createSignal(readPeriod());
   const [chartMode, setChartMode] = createSignal<"kline" | "time">(readChartMode());
-  const [indicators, setIndicators] = createSignal<IndicatorConfig>(
-    readIndicators(DEFAULT_INDICATORS),
-  );
   const [wasmSeries, setWasmSeries] = createSignal<WasmSeries[]>([]);
-  const [wasmManifest, setWasmManifest] = createSignal<WasmManifest>();
-  const [wasmParams, setWasmParams] = createSignal<number[]>([]);
-  const [wasmReady, setWasmReady] = createSignal(false);
+  const [wasmPlugins, setWasmPlugins] = createSignal<WasmPluginView[]>([]);
 
   const [quotes, setQuotes] = createSignal<Record<string, Quote>>({});
   const [history, setHistory] = createSignal<OHLCV[]>([]);
@@ -154,7 +142,7 @@ export default function App() {
   const [toast, setToast] = createSignal("");
 
   let stream: MarketStream | undefined;
-  let wasmHost: WasmIndicatorHost | undefined;
+  const wasmHosts = new Map<string, WasmIndicatorHost>();
   let wasmTimer: number | undefined;
   let loadGeneration = 0;
   let snapshotLoaded = false;
@@ -454,25 +442,18 @@ export default function App() {
     }
   }
 
-  function nativeEmaFallback(bars: OHLCV[]): WasmSeries[] {
-    const periods = [6, 12, 24, 60];
-    const colors = ["#f0b90b", "#53b7ff", "#ff7a90", "#a78bfa"];
-    return periods.map((period, index) => {
-      const byTime = new Map(ema(bars, period).map((point) => [point.time, point.value]));
-      const values = new Float64Array(bars.length);
-      for (let barIndex = 0; barIndex < bars.length; barIndex++) {
-        values[barIndex] = byTime.get(bars[barIndex].time) ?? Number.NaN;
-      }
-      return {
-        id: `fallback:ema${period}`,
-        title: `EMA${period} (fallback)`,
-        pane: "main",
-        plot: "line",
-        color: colors[index],
-        lineWidth: 1,
-        values,
-      };
-    });
+  function patchWasmPlugin(id: string, patch: Partial<WasmPluginView>) {
+    setWasmPlugins((previous) =>
+      previous.map((plugin) => (plugin.id === id ? { ...plugin, ...patch } : plugin)),
+    );
+  }
+
+  function updateWasmParams(id: string, values: number[]) {
+    patchWasmPlugin(id, { values });
+  }
+
+  function setWasmEnabled(id: string, enabled: boolean) {
+    patchWasmPlugin(id, { enabled });
   }
 
   function scheduleWasm() {
@@ -480,35 +461,39 @@ export default function App() {
       window.clearTimeout(wasmTimer);
       wasmTimer = undefined;
     }
-    const host = wasmHost;
-    const manifest = host?.manifest;
     const bars = chartBars();
-    const params = wasmParams();
-    if (!host || !manifest || bars.length === 0) {
-      setWasmSeries(bars.length > 0 ? nativeEmaFallback(bars) : []);
+    const active = wasmPlugins().filter(
+      (plugin) => plugin.enabled && plugin.status === "ready",
+    );
+    if (bars.length === 0 || active.length === 0) {
+      setWasmSeries([]);
       return;
     }
+    const snapshot = active.map((plugin) => ({ ...plugin, values: [...plugin.values] }));
     wasmTimer = window.setTimeout(() => {
       wasmTimer = undefined;
       const latest = chartBars();
       if (latest.length === 0) return;
-      const values =
-        params.length === manifest.params.length
-          ? params
-          : manifest.params.map((param) => param.default);
-      void host
-        .compute(latest, values)
-        .then((outputs) => {
-          setWasmSeries(
-            seriesFromManifest(manifest, outputs, values).map((item) => ({
+      void Promise.all(
+        snapshot.map(async (plugin) => {
+          const host = wasmHosts.get(plugin.id);
+          const manifest = host?.manifest;
+          if (!host || !manifest) return [] as WasmSeries[];
+          const values =
+            plugin.values.length === manifest.params.length
+              ? plugin.values
+              : manifest.params.map((param) => param.default);
+          try {
+            const outputs = await host.compute(latest, values);
+            return seriesFromManifest(manifest, outputs, values).map((item) => ({
               ...item,
               id: `${manifest.id}:${item.id}`,
-            })),
-          );
-        })
-        .catch(() => {
-          setWasmSeries(nativeEmaFallback(latest));
-        });
+            }));
+          } catch {
+            return [] as WasmSeries[];
+          }
+        }),
+      ).then((results) => setWasmSeries(results.flat()));
     }, 120);
   }
 
@@ -536,18 +521,37 @@ export default function App() {
       },
     });
     setStreamReady(true);
-    const plugin = DEFAULT_WASM_PLUGINS[0];
-    if (plugin) {
-      wasmHost = new WasmIndicatorHost();
-      void wasmHost
-        .load(plugin.manifestUrl)
+    for (const descriptor of DEFAULT_WASM_PLUGINS) {
+      const host = new WasmIndicatorHost();
+      wasmHosts.set(descriptor.id, host);
+      setWasmPlugins((previous) => [
+        ...previous,
+        {
+          id: descriptor.id,
+          name: descriptor.id,
+          version: "",
+          enabled: descriptor.defaultEnabled,
+          status: "loading",
+          params: [],
+          values: [],
+        },
+      ]);
+      void host
+        .load(descriptor.manifestUrl)
         .then((manifest) => {
-          setWasmManifest(manifest);
-          setWasmParams(manifest.params.map((param) => param.default));
-          setWasmReady(true);
+          patchWasmPlugin(descriptor.id, {
+            name: manifest.name,
+            version: manifest.version,
+            status: "ready",
+            params: manifest.params,
+            values: manifest.params.map((param) => param.default),
+          });
         })
-        .catch(() => {
-          setWasmReady(false);
+        .catch((error) => {
+          patchWasmPlugin(descriptor.id, {
+            status: "error",
+            error: error instanceof Error ? error.message : String(error),
+          });
         });
     }
     void refreshReady();
@@ -568,8 +572,8 @@ export default function App() {
         window.clearTimeout(wasmTimer);
         wasmTimer = undefined;
       }
-      wasmHost?.close();
-      wasmHost = undefined;
+      for (const host of wasmHosts.values()) host.close();
+      wasmHosts.clear();
       stream?.close();
       stream = undefined;
     });
@@ -610,8 +614,7 @@ export default function App() {
 
   createEffect(() => {
     chartBars();
-    wasmReady();
-    wasmParams();
+    wasmPlugins();
     untrack(scheduleWasm);
   });
 
@@ -645,10 +648,6 @@ export default function App() {
 
   createEffect(() => {
     saveChartMode(chartMode());
-  });
-
-  createEffect(() => {
-    saveIndicators(indicators());
   });
 
   createEffect(() => {
@@ -703,17 +702,15 @@ export default function App() {
               mode={chartMode()}
               theme={theme()}
               decimals={decimals()}
-              indicators={indicators()}
               wasmSeries={wasmSeries()}
-              wasmManifest={wasmManifest()}
-              wasmParams={wasmParams()}
-              onWasmParams={setWasmParams}
+              wasmPlugins={wasmPlugins()}
+              onWasmParams={updateWasmParams}
+              onWasmEnabled={setWasmEnabled}
               onPeriod={(next) => {
                 setPeriod(next);
                 setChartMode("kline");
               }}
               onMode={setChartMode}
-              onIndicators={setIndicators}
             />
             <div class="right-rail">
               <OrderTicketPanel

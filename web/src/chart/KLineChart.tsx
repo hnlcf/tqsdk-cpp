@@ -115,16 +115,80 @@ export default function KLineChart(props: Props) {
     return series as AnySeries;
   }
 
+  function addWasmSeries() {
+    if (!chart || !candle) return;
+    const wasmPanes = new Map<string, number>();
+    for (const item of props.wasmSeries ?? []) {
+      let pane = 0;
+      if (item.pane !== "main") {
+        const existing = wasmPanes.get(item.pane);
+        if (existing !== undefined) {
+          pane = existing;
+        } else {
+          pane = Math.max(1, chart.panes().length);
+          ensurePane(pane);
+          wasmPanes.set(item.pane, pane);
+        }
+      }
+      const key = `wasm-${item.id}`;
+      const lineWidth = Math.min(4, Math.max(1, Math.round(item.lineWidth))) as 1 | 2 | 3 | 4;
+      const common = {
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+        title: item.title,
+      };
+      if (item.plot === "markers") {
+        wasmMarkers.set(key, createSeriesMarkers(candle, [], {}));
+      } else if (item.plot === "band") {
+        addLine(`${key}:upper`, {
+          ...common,
+          color: item.color,
+          lineWidth,
+          lineStyle: 2,
+        }, pane);
+        addLine(`${key}:lower`, {
+          ...common,
+          color: item.color,
+          lineWidth,
+          lineStyle: 2,
+        }, pane);
+      } else if (item.plot === "histogram") {
+        indicatorSeries.set(
+          key,
+          chart.addSeries(HistogramSeries, { ...common, color: item.color }, pane) as AnySeries,
+        );
+      } else if (item.plot === "area") {
+        indicatorSeries.set(
+          key,
+          chart.addSeries(
+            AreaSeries,
+            {
+              ...common,
+              lineColor: item.color,
+              topColor: `${item.color}40`,
+              bottomColor: `${item.color}00`,
+              lineWidth,
+            },
+            pane,
+          ) as AnySeries,
+        );
+      } else {
+        addLine(key, { ...common, color: item.color, lineWidth }, pane);
+      }
+    }
+  }
+
   function rebuildIndicators() {
     if (!chart || !candle) return;
     clearIndicators();
     const config = props.indicators;
     if (!config) {
+      addWasmSeries();
       updateIndicators(props.bars);
       return;
     }
     const theme = colors();
-    const wasmPanes = new Map<string, number>();
     for (let index = 0; index < config.maPeriods.length; index++) {
       const period = config.maPeriods[index];
       addLine(`ma-${period}`, {
@@ -243,76 +307,7 @@ export default function KLineChart(props: Props) {
         title: `${custom.kind}${custom.period}`,
       });
     }
-    for (const item of props.wasmSeries ?? []) {
-      let pane = 0;
-      if (item.pane !== "main") {
-        const existing = wasmPanes.get(item.pane);
-        if (existing !== undefined) {
-          pane = existing;
-        } else {
-          pane = Math.max(1, chart.panes().length);
-          ensurePane(pane);
-          wasmPanes.set(item.pane, pane);
-        }
-      }
-      const key = `wasm-${item.id}`;
-      const lineWidth = Math.min(4, Math.max(1, Math.round(item.lineWidth))) as 1 | 2 | 3 | 4;
-      const common = {
-        priceLineVisible: false,
-        lastValueVisible: false,
-        crosshairMarkerVisible: false,
-        title: item.title,
-      };
-      if (item.plot === "markers") {
-        wasmMarkers.set(
-          key,
-          createSeriesMarkers(candle, [], {}),
-        );
-      } else if (item.plot === "band") {
-        addLine(`${key}:upper`, {
-          ...common,
-          color: item.color,
-          lineWidth,
-          lineStyle: 2,
-        }, pane);
-        addLine(`${key}:lower`, {
-          ...common,
-          color: item.color,
-          lineWidth,
-          lineStyle: 2,
-        }, pane);
-      } else if (item.plot === "histogram") {
-        indicatorSeries.set(
-          key,
-          chart.addSeries(HistogramSeries, { ...common, color: item.color }, pane) as AnySeries,
-        );
-      } else if (item.plot === "area") {
-        indicatorSeries.set(
-          key,
-          chart.addSeries(
-            AreaSeries,
-            {
-              ...common,
-              lineColor: item.color,
-              topColor: `${item.color}40`,
-              bottomColor: `${item.color}00`,
-              lineWidth,
-            },
-            pane,
-          ) as AnySeries,
-        );
-      } else {
-        addLine(
-          key,
-          {
-            ...common,
-            color: item.color,
-            lineWidth,
-          },
-          pane,
-        );
-      }
-    }
+    addWasmSeries();
     updateIndicators(props.bars);
   }
 

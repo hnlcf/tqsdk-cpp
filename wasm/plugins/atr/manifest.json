@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "abi": 1,
+  "id": "atr",
+  "name": "ATR",
+  "version": "0.1.0",
+  "wasm": "atr.wasm",
+  "params": [
+    {
+      "id": "period",
+      "label": "\u5468\u671f",
+      "type": "int",
+      "default": 14,
+      "min": 1,
+      "max": 500
+    }
+  ],
+  "outputs": [
+    {
+      "id": "atr",
+      "title": "ATR{period}",
+      "pane": "sub:atr",
+      "plot": "line",
+      "color": "#ff9f43"
+    }
+  ]
+}

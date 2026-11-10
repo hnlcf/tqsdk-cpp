@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "abi": 1,
+  "id": "boll",
+  "name": "BOLL",
+  "version": "0.1.0",
+  "wasm": "boll.wasm",
+  "params": [
+    {
+      "id": "period",
+      "label": "\u5468\u671f",
+      "type": "int",
+      "default": 20,
+      "min": 2,
+      "max": 500
+    },
+    {
+      "id": "multiplier",
+      "label": "\u500d\u6570",
+      "type": "float",
+      "default": 2,
+      "min": 0.1,
+      "max": 10
+    }
+  ],
+  "outputs": [
+    {
+      "id": "boll-band",
+      "title": "BOLL{period}",
+      "pane": "main",
+      "plot": "band",
+      "channels": 2,
+      "color": "#53b7ff"
+    },
+    {
+      "id": "boll-mid",
+      "title": "BOLL{period} MID",
+      "pane": "main",
+      "plot": "line",
+      "color": "#f0b90b"
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "abi": 1,
+  "id": "ma",
+  "name": "MA \u591a\u5747\u7ebf",
+  "version": "0.1.0",
+  "wasm": "ma.wasm",
+  "params": [
+    {
+      "id": "period1",
+      "label": "MA1 \u5468\u671f",
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period2",
+      "label": "MA2 \u5468\u671f",
+      "type": "int",
+      "default": 10,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period3",
+      "label": "MA3 \u5468\u671f",
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period4",
+      "label": "MA4 \u5468\u671f",
+      "type": "int",
+      "default": 60,
+      "min": 1,
+      "max": 500
+    }
+  ],
+  "outputs": [
+    {
+      "id": "ma1",
+      "title": "MA{period1}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#f0b90b"
+    },
+    {
+      "id": "ma2",
+      "title": "MA{period2}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#53b7ff"
+    },
+    {
+      "id": "ma3",
+      "title": "MA{period3}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#ff7a90"
+    },
+    {
+      "id": "ma4",
+      "title": "MA{period4}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#a78bfa"
+    }
+  ]
+}
