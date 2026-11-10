@@ -22,14 +22,14 @@
       "pane": "main",
       "plot": "band",
       "channels": 2,
-      "color": "#53b7ff"
+      "color": "#000000"
     },
     {
       "id": "dc-mid",
       "title": "DC{period} MID",
       "pane": "main",
       "plot": "line",
-      "color": "#f0b90b"
+      "color": "#ffffff"
     }
   ]
 }

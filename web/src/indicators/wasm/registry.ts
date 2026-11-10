@@ -13,10 +13,10 @@ export interface WasmPluginDescriptor {
  */
 export const DEFAULT_WASM_PLUGINS: WasmPluginDescriptor[] = [
   { id: "ema6", manifestUrl: "/plugins/ema6/manifest.json", defaultEnabled: true },
-  { id: "ma", manifestUrl: "/plugins/ma/manifest.json", defaultEnabled: true },
+  { id: "ma", manifestUrl: "/plugins/ma/manifest.json", defaultEnabled: false },
   { id: "boll", manifestUrl: "/plugins/boll/manifest.json", defaultEnabled: false },
-  { id: "macd", manifestUrl: "/plugins/macd/manifest.json", defaultEnabled: false },
+  { id: "macd", manifestUrl: "/plugins/macd/manifest.json", defaultEnabled: true },
   { id: "rsi", manifestUrl: "/plugins/rsi/manifest.json", defaultEnabled: false },
-  { id: "atr", manifestUrl: "/plugins/atr/manifest.json", defaultEnabled: true },
-  { id: "donchian", manifestUrl: "/plugins/donchian/manifest.json", defaultEnabled: true },
+  { id: "atr", manifestUrl: "/plugins/atr/manifest.json", defaultEnabled: false },
+  { id: "donchian", manifestUrl: "/plugins/donchian/manifest.json", defaultEnabled: false },
 ];

@@ -39,25 +39,4 @@ fn indicator(ctx: &mut Context<'_>) -> i32 {
     0
 }
 
-#[no_mangle]
-pub extern "C" fn alloc(size: u32) -> *mut u8 {
-    tqsdk_indicator_sdk::alloc(size)
-}
-
-#[no_mangle]
-pub extern "C" fn dealloc(ptr: *mut u8, size: u32) {
-    tqsdk_indicator_sdk::dealloc(ptr, size);
-}
-
-#[no_mangle]
-pub extern "C" fn run(
-    input_ptr: *const u8,
-    input_len: usize,
-    output_ptr: *mut u8,
-    output_capacity: usize,
-) -> i32 {
-    // Keep these constants referenced so the ABI layout stays visible in the
-    // compiled plugin source and accidental layout changes fail in tests.
-    let _ = (HEADER_BYTES, FIELD_COUNT);
-    tqsdk_indicator_sdk::execute(input_ptr, input_len, output_ptr, output_capacity, indicator)
-}
+tqsdk_indicator_sdk::export_indicator!(indicator);
