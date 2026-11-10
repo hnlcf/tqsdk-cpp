@@ -10,7 +10,7 @@
       "id": "period1",
       "label": "EMA1 周期",
       "type": "int",
-      "default": 6,
+      "default": 5,
       "min": 1,
       "max": 500
     },
@@ -18,7 +18,7 @@
       "id": "period2",
       "label": "EMA2 周期",
       "type": "int",
-      "default": 12,
+      "default": 10,
       "min": 1,
       "max": 500
     },
@@ -26,7 +26,7 @@
       "id": "period3",
       "label": "EMA3 周期",
       "type": "int",
-      "default": 24,
+      "default": 20,
       "min": 1,
       "max": 500
     },
@@ -35,6 +35,22 @@
       "label": "EMA4 周期",
       "type": "int",
       "default": 60,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period5",
+      "label": "EMA5 周期",
+      "type": "int",
+      "default": 120,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period6",
+      "label": "EMA6 周期",
+      "type": "int",
+      "default": 200,
       "min": 1,
       "max": 500
     }
@@ -53,7 +69,7 @@
       "title": "EMA{period2}",
       "pane": "main",
       "plot": "line",
-      "color": "#53b7ff",
+      "color": "#a78bfa",
       "lineWidth": 1
     },
     {
@@ -61,7 +77,7 @@
       "title": "EMA{period3}",
       "pane": "main",
       "plot": "line",
-      "color": "#ff7a90",
+      "color": "#53b7ff",
       "lineWidth": 1
     },
     {
@@ -69,7 +85,23 @@
       "title": "EMA{period4}",
       "pane": "main",
       "plot": "line",
-      "color": "#a78bfa",
+      "color": "#22c55e",
+      "lineWidth": 1
+    },
+    {
+      "id": "ema5",
+      "title": "EMA{period5}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#ff7a90",
+      "lineWidth": 1
+    },
+    {
+      "id": "ema6",
+      "title": "EMA{period6}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#f97316",
       "lineWidth": 1
     }
   ]
