@@ -32,9 +32,9 @@ test("symbol search preserves SHFE contract casing and shows safe custom indicat
   await expect(settings.getByText("EMA 多均线 v0.2.0")).toBeVisible();
   const wasmPeriod = settings.locator(".wasm-indicator-block input[type=number]").first();
   await expect(wasmPeriod).toHaveValue("6");
-  await wasmPeriod.fill("12");
+  await wasmPeriod.fill("8");
   await wasmPeriod.blur();
-  await expect(page.locator(".chart-wasm")).toHaveText(["EMA6", "EMA12", "EMA24", "EMA60"]);
+  await expect(page.locator(".chart-wasm")).toHaveText(["EMA8", "EMA12", "EMA24", "EMA60"]);
   await expect(settings.getByText("内置参数指标", { exact: true })).toBeVisible();
   await expect(settings.getByText("兼容旧配置：仅 EMA/SMA 参数化计算；WASM 插件见上方。")).toBeVisible();
 
