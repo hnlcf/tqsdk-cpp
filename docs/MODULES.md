@@ -179,7 +179,7 @@ router.h               类型化路径/Query/Body 路由
 http_server.*          accept/session/dispatch
 account_router.*       ?account= 解析、默认账户、AccountScope
 web hooks/*            布局拖动、WASM 指标运行时
-http_routes.cpp        REST 路由表
+http_routes*.cpp       REST 路由表（catalog/market/trading/task-risk）
 ws_protocol.h          WS 强类型消息
 ws_stream.*            WebSocketHub：连接/订阅/push_loop
 ws_entity_filter.*     客户端快照裁剪/topic 过滤/实体去重
@@ -231,7 +231,7 @@ web/src/api/client.ts           REST/WS、重连、订阅
 web/src/chart/                  K线、分时、指标
 web/src/components/             自选/下单/盘口/分笔/交易表/顶栏
 web/src/pages/                  期货列表、期权链
-web/src/indicators/             MA/EMA/BOLL/MACD/RSI
+web/src/indicators/             WASM manifest/ABI + KDJ/CCI/OBV/VWAP
 web/src/lib/                    localStorage、格式化
 ```
 

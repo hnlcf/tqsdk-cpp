@@ -27,7 +27,11 @@ web/src/chart/data.ts                    25 行
 web/src/chart/seriesMapping.ts           56 行
 web/src/components/IndicatorSettings.tsx 408 行
 web/src/api/client.ts                   666 行
-src/serve/http_routes.cpp               706 行
+src/serve/http_routes.cpp               199 行
+src/serve/http_routes_catalog.cpp       197 行
+src/serve/http_routes_market.cpp         73 行
+src/serve/http_routes_trading.cpp        55 行
+src/serve/http_routes_task_risk.cpp     135 行
 src/serve/account_router.{h,cpp}        105 行
 src/serve/http_server.cpp               270 行
 src/gateway/ctp/ctp_td_gateway.cpp      326 行
@@ -84,7 +88,7 @@ markers 与颜色/线型。
 `HttpServer::account_scope()` 解析账户，未知账户抛 404；任务/风控不再各自判空。
 新增 `tests/serve/account_router_test.cpp` 覆盖无 manager、默认账户、未知账户。
 
-仍建议下一步把 `TaskRegistry` 也纳入 `AccountScope`：
+`TaskRegistry` 已纳入 `AccountScope`：
 
 ```text
 AccountScope {
@@ -95,10 +99,8 @@ AccountScope {
 }
 ```
 
-由 `AccountRouter` 从 query 解析一次，handler 接收 `AccountScope`，而不是每个
-handler 自己处理空账户、错误 404 和 task owner map。这样后续动态增删账户、账户
-级指标/限流不会重复写。当前 `account_scope` 已完成；task map 仍是 server 级全局
-map + account owner，下一步可随动态账户一起收敛。
+handler 通过 `scope.tasks` 直接访问本账户任务，task id 在账户内独立；新增
+`TaskRegistryIdsArePerAccount` 集成测试验证 A/B 任务隔离和同 id 不串账户。
 
 ### 4.2 WebSocket hub 生命周期（2026-11-10 已改为懒创建）
 
@@ -154,10 +156,10 @@ src/serve/routes/task_risk_routes.cpp
 
 ### P1（需要验收）
 
-5. WS hub 动态账户生命周期；
-6. 路由按资源拆分；
-7. 指标增量计算/Worker 池按 profile 决定；
-8. 前端虚拟列表按实际行数决定。
+5. WS hub 动态账户生命周期：懒创建和 `drop_account_hub()` 已完成；运行中新增/移除账户的完整验收仍待补；
+6. ✅ 路由按资源拆分；
+7. ✅ 增加 KDJ/CCI/OBV/VWAP；指标增量计算/Worker 池仍按 profile 决定；
+8. 前端虚拟列表按实际行数决定（待实测）。
 
 ### P2（协议/平台）
 

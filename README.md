@@ -10,6 +10,7 @@ C++20 期货数据与交易基础设施，目标是把 TqSdk 的“异步数据�
 - TradingView Lightweight Charts K 线/分时/指标；
 - 多自选列表、代码/名称模糊搜索、快捷下单（买开/卖开/平多/平空）、合并持仓、账户权益联动；
 - WASM 指标插件：自动扫描 manifest、浮动指标选择器、逐输出颜色/线型/显隐、EMA/MA 动态均线；
+  已内置 EMA/MA/BOLL/MACD/RSI/ATR/Donchian/KDJ/CCI/OBV/VWAP；
 - 高级报单 FAK/FOK、市价/对价/五档价、TargetPosTask/InsertOrderTask、RiskManager 风控；
 - Tick/DataSeries/DataDownloader、期权 ATM+Greeks、TradingStatus/动态 URL、多账户与回测；
 - 合约目录、节假日日历、统一市场 SQLite 缓存（K 线 + tick）；
@@ -157,8 +158,10 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/OPTION_ANALYTICS.md](docs/OPTION_ANALYTICS.md)
 - [docs/TRADING_STATUS.md](docs/TRADING_STATUS.md)
 - [docs/MULTI_ACCOUNT_ACCEPTANCE.md](docs/MULTI_ACCOUNT_ACCEPTANCE.md)
+- [docs/SOAK_AUTOMATION.md](docs/SOAK_AUTOMATION.md)
 - [docs/MULTI_ACCOUNT_BACKTEST.md](docs/MULTI_ACCOUNT_BACKTEST.md)
 - [docs/SOAK_PERF.md](docs/SOAK_PERF.md)
+- [docs/CTP_TRADE_MATRIX.md](docs/CTP_TRADE_MATRIX.md)
 - [docs/CTP_WEEKLY_TEST_PLAN.md](docs/CTP_WEEKLY_TEST_PLAN.md)
 - [docs/P6_AUTOMATION.md](docs/P6_AUTOMATION.md)
 
@@ -167,7 +170,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 
 ## 当前状态
 
-- `ctest`：347 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
+- `ctest`：348 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
 - Web：`pnpm typecheck`、`pnpm test`（20 项）、`pnpm build`、Playwright E2E 通过；
   K 线/分时/WASM 指标/盘口/三键下单/合并持仓/委托/成交/权益已完成浏览器验证；
 - 多账户：REST/WS/task/risk 均支持 `?account=`，双 Sim 账户集成测试通过；

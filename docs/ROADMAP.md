@@ -97,7 +97,7 @@
 
 - TQSDK Board：多自选模糊搜索/K 线/分时/盘口/快捷下单/合并持仓/委托/成交/权益已落地；
 - 指标参数/颜色设置、动态均线、输出样式和启用状态本地持久化已落地；
-- ✅ WASM 指标插件：自动扫描注册、浮动选择器、逐输出颜色/线型/显隐、EMA/MA 动态均线；MA/BOLL/MACD/RSI/ATR/Donchian；
+- ✅ WASM 指标插件：自动扫描注册、浮动选择器、逐输出颜色/线型/显隐、EMA/MA 动态均线；MA/BOLL/MACD/RSI/ATR/Donchian/KDJ/CCI/OBV/VWAP；
 - ✅ 前端 Playwright E2E（搜索/大小写/WASM/下单板按钮）；
 - TqAuth 快期认证与目录 Bearer header 已接入；
 - ✅ 顶栏账户选择器、运维页、持仓固定列宽、K 线切换缩放/本地时间；
@@ -111,7 +111,7 @@
 
 - ✅ `CtpQueryPipeline`、`MarketSnapshotService` 服务边界已收敛；
 - ✅ HttpServer 路由 handler 已拆为独立方法，setup_routes 只做注册；
-- 下一步按 catalog/market/trading 文件拆分路由实现；
+- ✅ 路由已按 catalog/market/trading/task-risk 拆分；
 - IPC 可选 MessagePack/共享内存快路径；
 - WS 二进制行情帧评估；
 - KlineStore 仅 node 构建依赖；

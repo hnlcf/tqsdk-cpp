@@ -8,6 +8,7 @@
 #include "tqsdk/multiaccount/multi_account_manager.h"
 #include "tqsdk/serve/account_router.h"
 #include "tqsdk/serve/router.h"
+#include "tqsdk/serve/task_registry.h"
 #include "tqsdk/serve/ws_stream.h"
 #include "tqsdk/tqapi.h"
 #include "tqsdk/trading/order_tasks.h"
@@ -188,6 +189,11 @@ public:
     /// 实际监听的端口（port=0 时由系统分配，可通过此值读取）。listen 后有效。
     uint16_t port() const noexcept { return port_; }
 
+    /// Stop and remove the lazily-created hub for an account. Safe to call from
+    /// a control thread; connected clients are shut down. The primary hub is
+    /// retained because HttpServer still owns the primary TqApi.
+    void drop_account_hub(std::string_view account_id);
+
 private:
     asio::awaitable<void> accept_loop();
     asio::awaitable<void> session(tcp::socket sock);
@@ -201,8 +207,8 @@ private:
 
     /// 注册全部路由（构造时调用一次）。
     void         setup_routes();
-    AccountScope account_scope(std::string_view account_id) const;
-    TqApi*       account_api(std::string_view account_id) const;
+    AccountScope account_scope(std::string_view account_id);
+    TqApi*       account_api(std::string_view account_id);
 
     /// Lazily create/select the hub for a resolved account. Hubs are created on
     /// data_ex_ so the map is serialized with client/subscription mutations.
@@ -218,10 +224,7 @@ private:
     InstrumentCatalog*   catalog_    = nullptr;
     AccountRouter        account_router_;
 
-    std::uint64_t                                                     task_seq_ = 0;
-    std::unordered_map<std::string, std::shared_ptr<TargetPosTask>>   target_tasks_;
-    std::unordered_map<std::string, std::shared_ptr<InsertOrderTask>> order_tasks_;
-    std::unordered_map<std::string, std::string>                      task_accounts_;
+    std::unordered_map<std::string, TaskRegistry> task_registries_;
 
     asio::any_io_executor                                          io_ex_;
     asio::any_io_executor                                          data_ex_;
@@ -230,6 +233,7 @@ private:
     std::atomic<bool>                                              stopped_{false};
     Router                                                         router_;
     std::shared_ptr<WebSocketHub>                                  ws_;
+    mutable std::mutex                                             ws_hubs_mu_;
     std::unordered_map<std::string, std::shared_ptr<WebSocketHub>> ws_hubs_;
 
     static constexpr std::size_t kMaxBody = constants::kMaxHttpBodyBytes;

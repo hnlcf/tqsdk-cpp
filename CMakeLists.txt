@@ -55,6 +55,10 @@ add_library(tqsdk_core SHARED
     src/ipc/gateway_server_control.cpp
     src/serve/http_server.cpp
     src/serve/http_routes.cpp
+    src/serve/http_routes_task_risk.cpp
+    src/serve/http_routes_catalog.cpp
+    src/serve/http_routes_market.cpp
+    src/serve/http_routes_trading.cpp
     src/serve/account_router.cpp
     src/serve/snapshot_service.cpp
     src/instrument/instrument_catalog.cpp

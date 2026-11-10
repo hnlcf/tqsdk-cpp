@@ -1,0 +1,59 @@
+name: soak
+
+# Long-running soak must use a self-hosted runner with a persistent CTP/Sim
+# environment. GitHub-hosted jobs are capped at 6 hours and are not suitable
+# for 24h/72h campaigns.
+on:
+  workflow_dispatch:
+    inputs:
+      duration_seconds:
+        description: "Soak duration (86400 = 24h, 259200 = 72h)"
+        required: true
+        default: "86400"
+      reconnect_interval:
+        description: "Gateway restart interval in seconds"
+        required: true
+        default: "600"
+  schedule:
+    # Friday 18:00 Asia/Shanghai; start the weekly 72h campaign.
+    - cron: "0 10 * * 5"
+
+jobs:
+  soak:
+    runs-on: [self-hosted, linux, tqsdk-soak]
+    timeout-minutes: 4500
+    env:
+      VCPKG_ROOT: /opt/vcpkg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-soak -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DTQSDK_ENABLE_CTP=ON \
+            -DTQSDK_BUILD_TESTS=OFF \
+            -DTQSDK_BUILD_APPS=ON
+
+      - name: Build gw/node
+        run: cmake --build build-soak --target tqsdk-gw tqsdk-node -j 4
+
+      - name: Run soak
+        run: |
+          DURATION="${{ github.event.inputs.duration_seconds }}"
+          RECONNECT="${{ github.event.inputs.reconnect_interval }}"
+          if [ -z "$DURATION" ]; then DURATION=259200; fi
+          if [ -z "$RECONNECT" ]; then RECONNECT=600; fi
+          ./scripts/soak_long_job.sh \
+            --duration "$DURATION" \
+            --reconnect-interval "$RECONNECT" \
+            --out-dir "artifacts/soak_${DURATION}"
+
+      - name: Upload soak artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-artifacts
+          path: artifacts/soak_*
+          if-no-files-found: warn

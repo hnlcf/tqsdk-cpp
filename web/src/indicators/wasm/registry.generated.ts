@@ -7,4 +7,8 @@ export const WASM_PLUGIN_REGISTRY = [
   { id: "rsi", name: "RSI", version: "0.1.0", manifestUrl: "/plugins/rsi/manifest.json", defaultEnabled: false },
   { id: "atr", name: "ATR", version: "0.1.0", manifestUrl: "/plugins/atr/manifest.json", defaultEnabled: false },
   { id: "donchian", name: "Donchian Channel", version: "0.1.0", manifestUrl: "/plugins/donchian/manifest.json", defaultEnabled: false },
+  { id: "kdj", name: "KDJ", version: "0.1.0", manifestUrl: "/plugins/kdj/manifest.json", defaultEnabled: false },
+  { id: "cci", name: "CCI", version: "0.1.0", manifestUrl: "/plugins/cci/manifest.json", defaultEnabled: false },
+  { id: "obv", name: "OBV", version: "0.1.0", manifestUrl: "/plugins/obv/manifest.json", defaultEnabled: false },
+  { id: "vwap", name: "VWAP", version: "0.1.0", manifestUrl: "/plugins/vwap/manifest.json", defaultEnabled: false },
 ] as const;

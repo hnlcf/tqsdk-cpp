@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "abi": 1,
+  "id": "vwap",
+  "name": "VWAP",
+  "version": "0.1.0",
+  "wasm": "vwap.wasm",
+  "params": [],
+  "outputs": [
+    {
+      "id": "vwap",
+      "title": "VWAP",
+      "pane": "main",
+      "plot": "line",
+      "color": "#ff8fab"
+    }
+  ],
+  "defaultEnabled": false,
+  "order": 100
+}

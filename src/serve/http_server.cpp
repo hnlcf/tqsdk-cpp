@@ -38,7 +38,8 @@ HttpServer::HttpServer(TqApi*                api,
 }
 
 std::shared_ptr<WebSocketHub> HttpServer::ensure_ws_hub(const AccountScope& scope) {
-    auto it = ws_hubs_.find(scope.id);
+    std::lock_guard lock(ws_hubs_mu_);
+    auto            it = ws_hubs_.find(scope.id);
     if (it != ws_hubs_.end())
         return it->second;
     if (scope.api == api_) {
@@ -53,16 +54,32 @@ std::shared_ptr<WebSocketHub> HttpServer::ensure_ws_hub(const AccountScope& scop
     return hub;
 }
 
-AccountScope HttpServer::account_scope(std::string_view account_id) const {
+void HttpServer::drop_account_hub(std::string_view account_id) {
+    std::shared_ptr<WebSocketHub> retired;
+    {
+        std::lock_guard lock(ws_hubs_mu_);
+        auto            it = ws_hubs_.find(std::string(account_id));
+        if (it == ws_hubs_.end() || it->second == ws_)
+            return;
+        retired = std::move(it->second);
+        ws_hubs_.erase(it);
+    }
+    if (retired)
+        retired->stop();
+}
+
+AccountScope HttpServer::account_scope(std::string_view account_id) {
     try {
-        return account_router_.resolve(account_id);
+        auto scope  = account_router_.resolve(account_id);
+        scope.tasks = &task_registries_[scope.id];
+        return scope;
     } catch (const AccountNotFound& e) {
         throw HttpError{http::status::not_found,
                         json{{"error", "account not found"}, {"account", e.account_id}}};
     }
 }
 
-TqApi* HttpServer::account_api(std::string_view account_id) const {
+TqApi* HttpServer::account_api(std::string_view account_id) {
     return account_scope(account_id).api;
 }
 
@@ -104,14 +121,22 @@ void HttpServer::stop() noexcept {
     if (stopped_.exchange(true, std::memory_order_acq_rel)) {
         return;
     }
-    target_tasks_.clear();
-    order_tasks_.clear();
-    task_accounts_.clear();
+    task_registries_.clear();
     if (ws_) {
         ws_->stop();
     }
-    for (const auto& [_, hub] : ws_hubs_) {
-        if (hub && hub != ws_)
+    std::vector<std::shared_ptr<WebSocketHub>> hubs;
+    {
+        std::lock_guard lock(ws_hubs_mu_);
+        hubs.reserve(ws_hubs_.size());
+        for (const auto& [_, hub] : ws_hubs_) {
+            if (hub && hub != ws_)
+                hubs.push_back(hub);
+        }
+        ws_hubs_.clear();
+    }
+    for (const auto& hub : hubs) {
+        if (hub)
             hub->stop();
     }
     boost::system::error_code ec;

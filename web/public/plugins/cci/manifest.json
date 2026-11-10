@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "abi": 1,
+  "id": "cci",
+  "name": "CCI",
+  "version": "0.1.0",
+  "wasm": "cci.wasm",
+  "params": [
+    {
+      "id": "period",
+      "label": "周期",
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 500
+    }
+  ],
+  "outputs": [
+    {
+      "id": "cci",
+      "title": "CCI{period}",
+      "pane": "sub:cci",
+      "plot": "line",
+      "color": "#55c7a1"
+    }
+  ],
+  "defaultEnabled": false,
+  "order": 80
+}

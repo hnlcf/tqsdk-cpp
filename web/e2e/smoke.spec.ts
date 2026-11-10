@@ -32,6 +32,20 @@ test("indicator picker, multi-EMA editing, output visibility and symbol casing",
     "MACD DEA",
     "MACD HIST",
   ]);
+  await expect(page.locator(".account-select select")).toHaveValue("default");
+  const fiveMinute = page.getByRole("button", { name: "5m", exact: true });
+  await fiveMinute.click();
+  await expect(fiveMinute).toHaveClass(/active/);
+  const canvas = page.locator(".chart-canvas");
+  await expect(canvas).toBeVisible();
+  const canvasBox = await canvas.boundingBox();
+  if (!canvasBox) throw new Error("chart canvas box missing");
+  await page.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+  await page.mouse.wheel(0, -240);
+  await page.getByRole("button", { name: "分时", exact: true }).click();
+  await expect(page.getByRole("button", { name: "分时", exact: true })).toHaveClass(/active/);
+  await page.getByRole("button", { name: "1m", exact: true }).click();
+  await expect(page.getByRole("button", { name: "1m", exact: true })).toHaveClass(/active/);
 
   await page.getByTitle("添加合约").click();
   const search = page.locator('.watch-add input[placeholder^="代码/名称"]');
@@ -46,8 +60,8 @@ test("indicator picker, multi-EMA editing, output visibility and symbol casing",
   await page.locator(".indicator-settings-trigger").click();
   const popover = page.locator(".indicator-popover");
   await expect(popover).toBeVisible();
-  await expect(popover.locator(".indicator-picker-row")).toHaveCount(7);
-  for (const name of [/^EMA 多均线/, /^MA 多均线/, /^BOLL/, /^MACD/, /^RSI/, /^ATR/, /^Donchian Channel/]) {
+  await expect(popover.locator(".indicator-picker-row")).toHaveCount(11);
+  for (const name of [/^EMA 多均线/, /^MA 多均线/, /^BOLL/, /^MACD/, /^RSI/, /^ATR/, /^Donchian Channel/, /^KDJ/, /^CCI/, /^OBV/, /^VWAP/]) {
     await expect(popover.locator(".indicator-picker-row", { hasText: name }).first()).toBeVisible();
   }
 

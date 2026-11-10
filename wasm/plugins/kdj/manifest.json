@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "abi": 1,
+  "id": "kdj",
+  "name": "KDJ",
+  "version": "0.1.0",
+  "wasm": "kdj.wasm",
+  "params": [
+    {
+      "id": "period",
+      "label": "周期",
+      "type": "int",
+      "default": 9,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "k_smooth",
+      "label": "K平滑",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 100
+    },
+    {
+      "id": "d_smooth",
+      "label": "D平滑",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 100
+    }
+  ],
+  "outputs": [
+    {
+      "id": "k",
+      "title": "K",
+      "pane": "sub:kdj",
+      "plot": "line",
+      "color": "#f0b90b"
+    },
+    {
+      "id": "d",
+      "title": "D",
+      "pane": "sub:kdj",
+      "plot": "line",
+      "color": "#2f9bff"
+    },
+    {
+      "id": "j",
+      "title": "J",
+      "pane": "sub:kdj",
+      "plot": "line",
+      "color": "#e052ff"
+    }
+  ],
+  "defaultEnabled": false,
+  "order": 70
+}

@@ -36,8 +36,8 @@ artifacts/p6_campaign_20261109/p63_asan_build.log
 artifacts/tsan/tsan.log
 ```
 
-2026-11-10 当前结果：ASan/TSan/UBSan 347/347（本轮末重跑）；新增多账户 WS、
-账户级 task/risk、IPC/WS fuzz 后普通 CTest 为 347 项通过（2 项 TqMdNetwork
+2026-11-10 当前结果：ASan/TSan/UBSan 348/348（本轮末重跑）；新增多账户 WS、
+账户级 task/risk、IPC/WS fuzz 后普通 CTest 为 348 项通过（2 项 TqMdNetwork
 网络测试按环境跳过）；Web Vitest 20 项，Playwright E2E 1 项，另有 WASM 插件 ABI 脚本。
 
 ### GitHub Actions
@@ -90,6 +90,11 @@ python3 scripts/soak_two_process.py \
 
 需要 `websockets` Python 包；脚本自动启动两个 Sim gw + node 并清理进程。它不是
 真实 CTP 柜台验收，边界见 [MULTI_ACCOUNT_ACCEPTANCE.md](MULTI_ACCOUNT_ACCEPTANCE.md)。
+
+### 24h/72h 自动化
+
+长稳 workflow 见 [SOAK_AUTOMATION.md](SOAK_AUTOMATION.md)：必须使用带
+`tqsdk-soak` 标签的 self-hosted runner，GitHub 托管 runner 不支持 24h/72h。
 
 ## 5. 说明
 

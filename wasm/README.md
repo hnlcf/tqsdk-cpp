@@ -15,6 +15,10 @@ wasm/
   plugins/rsi/         RSI
   plugins/atr/         ATR
   plugins/donchian/    Donchian Channel
+  plugins/kdj/         KDJ
+  plugins/cci/         CCI
+  plugins/obv/         OBV
+  plugins/vwap/        VWAP
 ```
 
 The generated public assets live in:
@@ -88,7 +92,7 @@ Input format `TQW1` and output layout are documented in
 ## Writing a plugin
 
 The bundled examples cover multiple EMA/MA lines, BOLL band, MACD histogram,
-RSI, ATR and Donchian channel. See `web/src/indicators/wasm/registry.ts` for the
+RSI, ATR, Donchian channel, KDJ, CCI, OBV and VWAP. See `web/src/indicators/wasm/registry.ts` for the
 runtime registry.
 
 The plugin only computes numbers:

@@ -241,6 +241,7 @@ TEST(MultiAccountHttp, WebSocketRoutesByAccount) {
                                          {"topics", {"account", "positions"}}});
             a_snapshot = co_await read_snapshot(a_ws);
             co_await a_ws.close();
+            server.drop_account_hub("B");
             co_return;
         },
         [&](std::exception_ptr ep) {
@@ -344,6 +345,77 @@ TEST(MultiAccountHttp, TasksAndRiskAreAccountScoped) {
     EXPECT_EQ(b_risk_body["rules"], 1u);
     EXPECT_EQ(a_risk_status, 200u) << a_risk_body.dump();
     EXPECT_EQ(a_risk_body["rules"], 0u);
+
+    io.restart();
+    server.stop();
+    manager.close();
+    io.run_for(std::chrono::milliseconds(100));
+}
+
+TEST(MultiAccountHttp, TaskRegistryIdsArePerAccount) {
+    asio::io_context io;
+    auto             a = make_account(io, 1'000'000);
+    auto             b = make_account(io, 2'000'000);
+
+    tqsdk::MultiAccountManager manager;
+    ASSERT_TRUE(manager.add_account("A", a.api));
+    ASSERT_TRUE(manager.add_account("B", b.api));
+    tqsdk::serve::HttpServer server(
+        a.api.get(), io.get_executor(), {}, io.get_executor(), nullptr, &manager);
+    server.listen("127.0.0.1", 0);
+
+    std::string a_id;
+    std::string b_id;
+    json        a_tasks;
+    json        b_tasks;
+    unsigned    a_create_status = 0;
+    unsigned    b_create_status = 0;
+
+    asio::co_spawn(
+        io,
+        [&]() -> asio::awaitable<void> {
+            const auto target =
+                json{{"symbol", "SHFE.rb2701"}, {"target_volume", 0}, {"mode", "ACTIVE"}};
+            auto ra         = co_await request_json(io.get_executor(),
+                                                    server.port(),
+                                                    http::verb::post,
+                                                    "/task/target?account=A",
+                                                    target);
+            auto rb         = co_await request_json(io.get_executor(),
+                                                    server.port(),
+                                                    http::verb::post,
+                                                    "/task/target?account=B",
+                                                    target);
+            a_create_status = ra.first;
+            b_create_status = rb.first;
+            a_id            = ra.second.value("task_id", "");
+            b_id            = rb.second.value("task_id", "");
+
+            auto ta = co_await request_json(
+                io.get_executor(), server.port(), http::verb::get, "/tasks?account=A");
+            auto tb = co_await request_json(
+                io.get_executor(), server.port(), http::verb::get, "/tasks?account=B");
+            a_tasks = std::move(ta.second);
+            b_tasks = std::move(tb.second);
+
+            co_return;
+        },
+        [&](std::exception_ptr ep) {
+            if (ep)
+                std::rethrow_exception(ep);
+            io.stop();
+        });
+    io.run();
+
+    EXPECT_EQ(a_create_status, 200u);
+    EXPECT_EQ(b_create_status, 200u);
+    EXPECT_FALSE(a_id.empty());
+    EXPECT_FALSE(b_id.empty());
+    EXPECT_EQ(a_id, b_id); // ids are local to each account registry
+    ASSERT_EQ(a_tasks["targets"].size(), 1u);
+    ASSERT_EQ(b_tasks["targets"].size(), 1u);
+    EXPECT_EQ(a_tasks["targets"][0]["task_id"], a_id);
+    EXPECT_EQ(b_tasks["targets"][0]["task_id"], b_id);
 
     io.restart();
     server.stop();

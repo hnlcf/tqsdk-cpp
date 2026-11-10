@@ -18,6 +18,10 @@ UI 默认路径，指标设置里看到的是插件列表和插件参数。
 | `rsi` | RSI | 副图 | 否 |
 | `atr` | ATR | 副图 | 否 |
 | `donchian` | Donchian Channel | 上下轨 band + 中轨，主图 | 否 |
+| `kdj` | KDJ | K/D/J 三条线，副图 | 否 |
+| `cci` | CCI | CCI 单线，副图 | 否 |
+| `obv` | OBV | 能量潮，副图 | 否 |
+| `vwap` | VWAP | 累计成交量加权均价，主图 | 否 |
 
 插件的 `defaultEnabled` 和 `order` 写在 manifest 中，前端注册表由脚本扫描生成，
 不再在 TS 文件里手工维护插件列表。
@@ -397,7 +401,7 @@ Playwright: 1/1
 
 Playwright 覆盖：
 
-- 浮动列表包含 EMA/MA/BOLL/MACD/RSI/ATR/Donchian，列表由 auto-registry 生成；
+- 浮动列表包含 EMA/MA/BOLL/MACD/RSI/ATR/Donchian/KDJ/CCI/OBV/VWAP，列表由 auto-registry 生成；
 - 指标启用/参数/输出样式/动态均线增删刷新后恢复；
 - 点击 EMA 进入详情，修改周期、线型颜色、添加/移除均线；
 - 默认图例包含 EMA5/10/20/60/120/200 和 MACD DIF/DEA/HIST；

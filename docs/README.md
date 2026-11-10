@@ -21,9 +21,11 @@
 | [CI.md](CI.md) | 本地 CI、ASan/TSan、短 soak 和回归门禁 |
 | [SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md) | SimNow 真实 CTP 验收流程和报告 |
 | [P0_SIMNOW_TEST_PLAN.md](P0_SIMNOW_TEST_PLAN.md) | P0 高级报单/执行任务/风控 SimNow 验收清单 |
+| [SOAK_AUTOMATION.md](SOAK_AUTOMATION.md) | 24h/72h self-hosted soak 自动化 |
 | [SOAK_PERF.md](SOAK_PERF.md) | 24h SimTd soak、CTP session monitor、性能结果 |
 | [PERFORMANCE_BASELINE.md](PERFORMANCE_BASELINE.md) | WASM/HTTP/WS 可重复性能基线 |
 | [REFACTOR_ASSESSMENT.md](REFACTOR_ASSESSMENT.md) | 前后端重构评估与建议顺序 |
+| [CTP_TRADE_MATRIX.md](CTP_TRADE_MATRIX.md) | CTP 交易矩阵与 5 交易日执行清单 |
 | [CTP_WEEKLY_TEST_PLAN.md](CTP_WEEKLY_TEST_PLAN.md) | 连续交易日 CTP soak、每日对账、执行清单 |
 | [P6_AUTOMATION.md](P6_AUTOMATION.md) | 2026-11-09 09:00 P6.1/P6.2/P6.3 自动排期与产物 |
 | [CTP.md](CTP.md) | CTP 接入、SHFE 价格转换、平今平昨、节假日 |

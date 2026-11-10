@@ -8,13 +8,16 @@
 namespace tqsdk {
 namespace serve {
 
+struct TaskRegistry;
+
 /// Resolved account context for one HTTP request.
 ///
 /// `id` is the concrete account key (never empty); `api` is owned by the
 /// MultiAccountManager and must outlive the request.
 struct AccountScope {
-    std::string id;
-    TqApi*      api = nullptr;
+    std::string   id;
+    TqApi*        api   = nullptr;
+    TaskRegistry* tasks = nullptr;
 
     explicit operator bool() const noexcept { return api != nullptr; }
 };
