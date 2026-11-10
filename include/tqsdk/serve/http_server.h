@@ -6,6 +6,7 @@
 
 #include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/multiaccount/multi_account_manager.h"
+#include "tqsdk/serve/account_router.h"
 #include "tqsdk/serve/router.h"
 #include "tqsdk/serve/ws_stream.h"
 #include "tqsdk/tqapi.h"
@@ -199,8 +200,9 @@ private:
     make_json_response(http::status code, const nlohmann::json& body, unsigned version);
 
     /// 注册全部路由（构造时调用一次）。
-    void   setup_routes();
-    TqApi* account_api(std::string_view account_id) const;
+    void         setup_routes();
+    AccountScope account_scope(std::string_view account_id) const;
+    TqApi*       account_api(std::string_view account_id) const;
 
     /// Select the WebSocket hub for `?account=...`; no query uses the default
     /// account. Returns nullptr for an unknown account.
@@ -214,6 +216,7 @@ private:
     MultiAccountManager* accounts_   = nullptr;
     TickStore*           tick_store_ = nullptr;
     InstrumentCatalog*   catalog_    = nullptr;
+    AccountRouter        account_router_;
 
     std::uint64_t                                                     task_seq_ = 0;
     std::unordered_map<std::string, std::shared_ptr<TargetPosTask>>   target_tasks_;

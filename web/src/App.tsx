@@ -43,17 +43,9 @@ import FuturesPage from "./pages/FuturesPage";
 import OptionsPage from "./pages/OptionsPage";
 import OpsPage from "./pages/OpsPage";
 import type { OHLCV } from "./indicators/indicators";
-import { WasmIndicatorHost } from "./indicators/wasm/host";
-import { DEFAULT_WASM_PLUGINS } from "./indicators/wasm/registry";
-import { applyWasmPreference, readWasmPreferences, saveWasmPreferences } from "./indicators/wasm/preferences";
-import {
-  seriesFromManifest,
-  type WasmManifest,
-  type WasmOutputConfig,
-  type WasmPluginView,
-  type WasmSeries,
-} from "./indicators/wasm/types";
+import { useWasmIndicators } from "./hooks/useWasmIndicators";
 import { finite, priceDecimals } from "./lib/format";
+import { useWorkspaceLayout } from "./hooks/useWorkspaceLayout";
 import {
   createWatchlistGroup,
   readChartMode,
@@ -61,15 +53,12 @@ import {
   readSelected,
   readTheme,
   readWatchlists,
-  readWorkspaceLayout,
   saveChartMode,
   savePeriod,
   saveSelected,
   saveTheme,
   saveWatchlists,
-  saveWorkspaceLayout,
   type Theme,
-  type WorkspaceLayout,
   type View,
   type WatchlistGroup,
 } from "./lib/storage";
@@ -124,7 +113,7 @@ export default function App() {
   const initialWatchlists = readWatchlists();
   const [view, setView] = createSignal<View>(initialView());
   const [theme, setTheme] = createSignal<Theme>(readTheme());
-  const [layout, setLayout] = createSignal<WorkspaceLayout>(readWorkspaceLayout());
+  const { layout, startResize } = useWorkspaceLayout();
   const [watchlistGroups, setWatchlistGroups] = createSignal<WatchlistGroup[]>(
     initialWatchlists.groups,
   );
@@ -132,8 +121,6 @@ export default function App() {
   const [selected, setSelected] = createSignal(readSelected());
   const [period, setPeriod] = createSignal(readPeriod());
   const [chartMode, setChartMode] = createSignal<"kline" | "time">(readChartMode());
-  const [wasmSeries, setWasmSeries] = createSignal<WasmSeries[]>([]);
-  const [wasmPlugins, setWasmPlugins] = createSignal<WasmPluginView[]>([]);
 
   const [quotes, setQuotes] = createSignal<Record<string, Quote>>({});
   const [history, setHistory] = createSignal<OHLCV[]>([]);
@@ -153,12 +140,6 @@ export default function App() {
   const [toast, setToast] = createSignal("");
 
   let stream: MarketStream | undefined;
-  const wasmHosts = new Map<string, WasmIndicatorHost>();
-  const wasmOutputCache = new Map<
-    string,
-    { key: string; outputs: Float64Array[]; manifest: WasmManifest }
-  >();
-  let wasmTimer: number | undefined;
   let loadGeneration = 0;
   let snapshotLoaded = false;
   let tradingRefreshInFlight = false;
@@ -166,47 +147,6 @@ export default function App() {
   let priceSymbol = "";
   const lastVolume = new Map<string, number>();
   const lastPrice = new Map<string, number>();
-
-  type ResizeKind = "watchlist" | "rightRail" | "table";
-  let resize: {
-    kind: ResizeKind;
-    startX: number;
-    startY: number;
-    startLayout: WorkspaceLayout;
-  } | null = null;
-
-  function resizeMove(event: PointerEvent) {
-    if (!resize) return;
-    const dx = event.clientX - resize.startX;
-    const dy = event.clientY - resize.startY;
-    const start = resize.startLayout;
-    if (resize.kind === "watchlist") {
-      setLayout({ ...start, watchlistWidth: Math.min(420, Math.max(180, start.watchlistWidth + dx)) });
-    } else if (resize.kind === "rightRail") {
-      setLayout({ ...start, rightRailWidth: Math.min(520, Math.max(220, start.rightRailWidth - dx)) });
-    } else {
-      setLayout({ ...start, tableHeight: Math.min(520, Math.max(120, start.tableHeight + dy)) });
-    }
-  }
-
-  function stopResize() {
-    resize = null;
-    window.removeEventListener("pointermove", resizeMove);
-    window.removeEventListener("pointerup", stopResize);
-    saveWorkspaceLayout(layout());
-  }
-
-  function startResize(kind: ResizeKind, event: PointerEvent) {
-    event.preventDefault();
-    resize = {
-      kind,
-      startX: event.clientX,
-      startY: event.clientY,
-      startLayout: layout(),
-    };
-    window.addEventListener("pointermove", resizeMove);
-    window.addEventListener("pointerup", stopResize, { once: true });
-  }
 
   const activeGroup = createMemo(
     () => watchlistGroups().find((group) => group.id === activeListId()) ?? watchlistGroups()[0],
@@ -223,6 +163,13 @@ export default function App() {
   const chartBars = createMemo(() =>
     liveBars().length > 0 ? mergeBars(history(), liveBars()) : history(),
   );
+  const {
+    series: wasmSeries,
+    plugins: wasmPlugins,
+    updateParams: updateWasmParams,
+    setEnabled: setWasmEnabled,
+    updateOutput: updateWasmOutput,
+  } = useWasmIndicators(chartBars, () => `${selected()}|${activeDuration()}`);
   const defaultAccountId = createMemo(() => accounts()?.default ?? "default");
   const isDefaultAccount = createMemo(() => selectedAccount() === defaultAccountId());
   const selectedAccountInfo = createMemo(() =>
@@ -498,102 +445,6 @@ export default function App() {
     }
   }
 
-  function patchWasmPlugin(id: string, patch: Partial<WasmPluginView>) {
-    setWasmPlugins((previous) =>
-      previous.map((plugin) => (plugin.id === id ? { ...plugin, ...patch } : plugin)),
-    );
-  }
-
-  function updateWasmParams(id: string, values: number[]) {
-    patchWasmPlugin(id, { values });
-  }
-
-  function setWasmEnabled(id: string, enabled: boolean) {
-    patchWasmPlugin(id, { enabled });
-  }
-
-  function updateWasmOutput(
-    id: string,
-    outputId: string,
-    patch: Partial<WasmOutputConfig>,
-  ) {
-    setWasmPlugins((previous) =>
-      previous.map((plugin) =>
-        plugin.id === id
-          ? {
-              ...plugin,
-              outputConfig: {
-                ...plugin.outputConfig,
-                [outputId]: { ...plugin.outputConfig[outputId], ...patch },
-              },
-            }
-          : plugin,
-      ),
-    );
-  }
-
-  function scheduleWasm() {
-    if (wasmTimer !== undefined) {
-      window.clearTimeout(wasmTimer);
-      wasmTimer = undefined;
-    }
-    const bars = chartBars();
-    const active = wasmPlugins().filter(
-      (plugin) =>
-        plugin.enabled &&
-        plugin.status === "ready" &&
-        plugin.outputs.some((output) => plugin.outputConfig[output.id]?.visible !== false),
-    );
-    if (bars.length === 0 || active.length === 0) {
-      setWasmSeries([]);
-      return;
-    }
-    const snapshot = active.map((plugin) => ({ ...plugin, values: [...plugin.values] }));
-    wasmTimer = window.setTimeout(() => {
-      wasmTimer = undefined;
-      const latest = chartBars();
-      if (latest.length === 0) return;
-      const barsKey = [
-        latest.length,
-        latest[0]?.time ?? 0,
-        latest.at(-1)?.time ?? 0,
-        latest.at(-1)?.close ?? 0,
-        latest.at(-1)?.high ?? 0,
-        latest.at(-1)?.low ?? 0,
-        latest.at(-1)?.volume ?? 0,
-      ].join(":");
-      void Promise.all(
-        snapshot.map(async (plugin) => {
-          const host = wasmHosts.get(plugin.id);
-          const manifest = host?.manifest;
-          if (!host || !manifest) return [] as WasmSeries[];
-          const values =
-            plugin.values.length === manifest.params.length
-              ? plugin.values
-              : manifest.params.map((param) => param.default);
-          const key = `${selected()}|${activeDuration()}|${barsKey}|${values.join(",")}`;
-          const cache = wasmOutputCache.get(plugin.id);
-          let outputs: Float64Array[];
-          try {
-            if (cache?.key === key && cache.manifest === manifest) {
-              outputs = cache.outputs;
-            } else {
-              outputs = await host.compute(latest, values);
-              wasmOutputCache.set(plugin.id, { key, outputs, manifest });
-            }
-            return seriesFromManifest(manifest, outputs, values, plugin.outputConfig).map((item) => ({
-              ...item,
-              id: `${manifest.id}:${item.id}`,
-            }));
-          } catch {
-            wasmOutputCache.delete(plugin.id);
-            return [] as WasmSeries[];
-          }
-        }),
-      ).then((results) => setWasmSeries(results.flat()));
-    }, 120);
-  }
-
   function openMarketStream(account: string): MarketStream {
     return createMarketStream(
       {
@@ -626,51 +477,6 @@ export default function App() {
 
   onMount(() => {
     setStreamReady(true);
-    const preferences = readWasmPreferences();
-    for (const descriptor of DEFAULT_WASM_PLUGINS) {
-      const host = new WasmIndicatorHost();
-      wasmHosts.set(descriptor.id, host);
-      setWasmPlugins((previous) => [
-        ...previous,
-        {
-          id: descriptor.id,
-          name: descriptor.name,
-          version: descriptor.version,
-          enabled: descriptor.defaultEnabled,
-          status: "loading",
-          params: [],
-          values: [],
-          outputs: [],
-          outputConfig: {},
-        },
-      ]);
-      void host
-        .load(descriptor.manifestUrl)
-        .then((manifest) => {
-          const applied = applyWasmPreference(
-            manifest,
-            descriptor.defaultEnabled,
-            preferences.plugins[descriptor.id],
-          );
-          patchWasmPlugin(descriptor.id, {
-            name: manifest.name,
-            version: manifest.version,
-            status: "ready",
-            params: manifest.params,
-            values: applied.values,
-            outputs: manifest.outputs,
-            outputConfig: applied.outputConfig,
-            dynamicLines: manifest.dynamicLines === true,
-            enabled: applied.enabled,
-          });
-        })
-        .catch((error) => {
-          patchWasmPlugin(descriptor.id, {
-            status: "error",
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
-    }
     void refreshReady();
     void loadAccounts();
     void loadTradingSnapshot();
@@ -685,12 +491,6 @@ export default function App() {
     onCleanup(() => {
       window.clearInterval(timer);
       window.clearInterval(tradingTimer);
-      if (wasmTimer !== undefined) {
-        window.clearTimeout(wasmTimer);
-        wasmTimer = undefined;
-      }
-      for (const host of wasmHosts.values()) host.close();
-      wasmHosts.clear();
       stream?.close();
       stream = undefined;
     });
@@ -740,17 +540,6 @@ export default function App() {
   });
 
   createEffect(() => {
-    chartBars();
-    wasmPlugins();
-    untrack(scheduleWasm);
-  });
-
-  createEffect(() => {
-    const ready = wasmPlugins().filter((plugin) => plugin.status === "ready");
-    if (ready.length > 0) saveWasmPreferences(ready);
-  });
-
-  createEffect(() => {
     const symbol = selected();
     const quote = quotes()[symbol];
     if (priceSymbol !== symbol) {
@@ -780,10 +569,6 @@ export default function App() {
 
   createEffect(() => {
     saveChartMode(chartMode());
-  });
-
-  createEffect(() => {
-    saveWorkspaceLayout(layout());
   });
 
   createEffect(() => {

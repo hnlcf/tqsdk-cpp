@@ -166,8 +166,8 @@ docs/             架构、模块、信息流、状态机、运维、专题
 
 ## 当前状态
 
-- `ctest`：344 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
-- Web：`pnpm typecheck`、`pnpm test`（16 项）、`pnpm build`、Playwright E2E 通过；
+- `ctest`：346 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
+- Web：`pnpm typecheck`、`pnpm test`（21 项）、`pnpm build`、Playwright E2E 通过；
   K 线/分时/WASM 指标/盘口/三键下单/合并持仓/委托/成交/权益已完成浏览器验证；
 - 多账户：REST/WS/task/risk 均支持 `?account=`，双 Sim 账户集成测试通过；
 - 指标配置/启用状态/输出样式/动态均线和 panel 尺寸浏览器本地持久化；

@@ -163,7 +163,10 @@ TradingView **Advanced Charts / Charting Library** 提供完整指标和画线�
 ```text
 web/src/
   api/client.ts            REST/WS、重连、订阅 release
-  chart/KLineChart.tsx      K线 + 指标 + panes
+  hooks/useWorkspaceLayout.ts  可拖动布局 + localStorage
+  hooks/useWasmIndicators.ts   WASM 生命周期 + 计算缓存
+  chart/seriesMapping.ts       纯 candle/line/volume 映射
+  chart/KLineChart.tsx         K线 + 指标 + panes
   chart/IntradayChart.tsx  分时
   chart/theme.ts           图表主题
   indicators/indicators.ts MA/EMA/BOLL/MACD/RSI/session
@@ -181,7 +184,7 @@ pnpm typecheck
 pnpm build
 ```
 
-当前 Vitest 覆盖（16 项）；Playwright E2E：
+当前 Vitest 覆盖（21 项）；Playwright E2E：
 
 - 自选搜索 `SHFE.ao2701` 后大小写不变；
 - 账户选择器可见；

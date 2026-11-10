@@ -177,6 +177,8 @@ TqApi 是唯一门面：
 ```text
 router.h               类型化路径/Query/Body 路由
 http_server.*          accept/session/dispatch
+account_router.*       ?account= 解析、默认账户、AccountScope
+web hooks/*            布局拖动、WASM 指标运行时
 http_routes.cpp        REST 路由表
 ws_protocol.h          WS 强类型消息
 ws_stream.*            WebSocketHub：连接/订阅/push_loop

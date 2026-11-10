@@ -55,6 +55,7 @@ add_library(tqsdk_core SHARED
     src/ipc/gateway_server_control.cpp
     src/serve/http_server.cpp
     src/serve/http_routes.cpp
+    src/serve/account_router.cpp
     src/serve/snapshot_service.cpp
     src/instrument/instrument_catalog.cpp
     src/serve/ws_stream.cpp
@@ -284,6 +285,7 @@ if(TQSDK_BUILD_TESTS)
         tests/gateway/tq_md_protocol_test.cpp
         tests/instrument/instrument_catalog_test.cpp
         tests/serve/ws_protocol_test.cpp
+        tests/serve/account_router_test.cpp
         tests/serve/ws_fuzz_test.cpp
         tests/serve/ws_stream_test.cpp
         tests/serve/ws_entity_filter_test.cpp

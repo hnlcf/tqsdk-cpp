@@ -28,6 +28,7 @@ HttpServer::HttpServer(TqApi*                api,
       accounts_(accounts),
       tick_store_(tick_store),
       catalog_(catalog),
+      account_router_(api_, accounts_),
       io_ex_(std::move(io_ex)),
       data_ex_(data_ex ? std::move(data_ex) : io_ex_),
       acceptor_(io_ex_),
@@ -65,19 +66,17 @@ std::shared_ptr<WebSocketHub> HttpServer::ws_hub_for(std::string_view account_id
     return it == ws_hubs_.end() ? nullptr : it->second;
 }
 
-TqApi* HttpServer::account_api(std::string_view account_id) const {
-    if (accounts_ == nullptr) {
-        return api_;
-    }
-    std::string id{account_id};
-    if (id.empty())
-        id = accounts_->default_account_id();
-    auto api = accounts_->find_account(id);
-    if (!api) {
+AccountScope HttpServer::account_scope(std::string_view account_id) const {
+    try {
+        return account_router_.resolve(account_id);
+    } catch (const AccountNotFound& e) {
         throw HttpError{http::status::not_found,
-                        json{{"error", "account not found"}, {"account", id}}};
+                        json{{"error", "account not found"}, {"account", e.account_id}}};
     }
-    return api.get();
+}
+
+TqApi* HttpServer::account_api(std::string_view account_id) const {
+    return account_scope(account_id).api;
 }
 
 void HttpServer::listen(const std::string& address, uint16_t port) {

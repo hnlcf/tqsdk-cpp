@@ -6,10 +6,9 @@ import {
   CrosshairMode,
   HistogramSeries,
   LineSeries,
-  LineStyle,
+  type CandlestickData,
   createChart,
   createSeriesMarkers,
-  type CandlestickData,
   type IChartApi,
   type IPriceLine,
   type ISeriesMarkersPluginApi,
@@ -29,8 +28,9 @@ import {
   type OHLCV,
 } from "../indicators/indicators";
 import { chartColors, type Theme } from "./theme";
-import type { WasmLineStyle, WasmSeries } from "../indicators/wasm/types";
+import type { WasmSeries } from "../indicators/wasm/types";
 import { chinaDateTime, chinaTickMark } from "./time";
+import { formatLegendPrice, toCandlestick, toLineData, toLineStyle, toVolumeData } from "./seriesMapping";
 
 interface Props {
   bars: OHLCV[];
@@ -45,26 +45,6 @@ interface Props {
 }
 
 type AnySeries = ISeriesApi<SeriesType>;
-
-function toCandlestick(bar: OHLCV): CandlestickData<UTCTimestamp> {
-  return {
-    time: bar.time as UTCTimestamp,
-    open: bar.open,
-    high: bar.high,
-    low: bar.low,
-    close: bar.close,
-  };
-}
-
-function formatLegendPrice(value: number | undefined, decimals: number): string {
-  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(decimals) : "—";
-}
-
-function toLineStyle(style: WasmLineStyle | undefined): LineStyle {
-  if (style === "dashed") return LineStyle.Dashed;
-  if (style === "dotted") return LineStyle.Dotted;
-  return LineStyle.Solid;
-}
 
 export default function KLineChart(props: Props) {
   let container: HTMLDivElement | undefined;
@@ -333,12 +313,7 @@ export default function KLineChart(props: Props) {
         ] as const) {
           const series = indicatorSeries.get(`${key}:${suffix}`);
           if (!series) continue;
-          const data: Array<{ time: UTCTimestamp; value: number }> = [];
-          for (let index = 0; index < bars.length && index < values.length; index++) {
-            const value = values[index];
-            if (Number.isFinite(value)) data.push({ time: bars[index].time as UTCTimestamp, value });
-          }
-          series.setData(data);
+          series.setData(toLineData(bars, values));
         }
         continue;
       }
@@ -362,14 +337,7 @@ export default function KLineChart(props: Props) {
       }
       const series = indicatorSeries.get(key);
       if (!series) continue;
-      const data: Array<{ time: UTCTimestamp; value: number }> = [];
-      for (let index = 0; index < bars.length && index < item.values.length; index++) {
-        const value = item.values[index];
-        if (Number.isFinite(value)) {
-          data.push({ time: bars[index].time as UTCTimestamp, value });
-        }
-      }
-      series.setData(data);
+      series.setData(toLineData(bars, item.values));
     }
   }
 
@@ -471,13 +439,7 @@ export default function KLineChart(props: Props) {
     if (nextKey !== dataKey) {
       dataKey = nextKey;
       candle.setData(bars.map(toCandlestick));
-      volume.setData(
-        bars.map((bar) => ({
-          time: bar.time as UTCTimestamp,
-          value: bar.volume,
-          color: bar.close >= bar.open ? colors().volumeUp : colors().volumeDown,
-        })),
-      );
+      volume.setData(toVolumeData(bars, colors().volumeUp, colors().volumeDown));
       if (fitPending) {
         chart.timeScale().fitContent();
         fitPending = false;
@@ -485,11 +447,7 @@ export default function KLineChart(props: Props) {
     } else {
       const last = props.last ?? bars[bars.length - 1];
       candle.update(toCandlestick(last));
-      volume.update({
-        time: last.time as UTCTimestamp,
-        value: last.volume,
-        color: last.close >= last.open ? colors().volumeUp : colors().volumeDown,
-      });
+      volume.update(toVolumeData([last], colors().volumeUp, colors().volumeDown)[0]);
     }
     updateIndicators(bars);
     const last = props.last ?? bars[bars.length - 1];

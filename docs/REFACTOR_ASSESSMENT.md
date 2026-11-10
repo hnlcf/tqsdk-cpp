@@ -16,12 +16,16 @@
 ## 2. 现状规模
 
 ```text
-web/src/App.tsx                         935 行
-web/src/chart/KLineChart.tsx            686 行
-web/src/components/IndicatorSettings.tsx  408 行
+web/src/App.tsx                         720 行（已抽出 layout + WASM runtime）
+web/src/hooks/useWorkspaceLayout.ts     115 行
+web/src/hooks/useWasmIndicators.ts      210 行
+web/src/chart/KLineChart.tsx            644 行（已抽出纯映射）
+web/src/chart/seriesMapping.ts           56 行
+web/src/components/IndicatorSettings.tsx 408 行
 web/src/api/client.ts                   666 行
-src/serve/http_routes.cpp               709 行
-src/serve/http_server.cpp               271 行
+src/serve/http_routes.cpp               706 行
+src/serve/account_router.{h,cpp}        105 行
+src/serve/http_server.cpp               270 行
 src/gateway/ctp/ctp_td_gateway.cpp      326 行
 src/gateway/ctp/ctp_query_pipeline.cpp  234 行
 ```
@@ -32,16 +36,17 @@ src/gateway/ctp/ctp_query_pipeline.cpp  234 行
 
 ### 3.1 App.tsx 是主要复杂度热点
 
-`App` 同时负责：行情流创建/重连、账户切换、REST 快照、下单/撤单、WASM 插件
-生命周期、指标缓存、布局持久化、图表状态、URL/主题、Toast。
+`App` 同时负责：行情流创建/重连、账户切换、REST 快照、下单/撤单、图表状态、
+URL/主题、Toast。WASM 生命周期/计算缓存和布局拖动已分别抽到
+`useWasmIndicators`、`useWorkspaceLayout`。
 
 建议按**可测试控制器**拆分（不是简单拆组件）：
 
-1. `useMarketStream(account)`：WebSocket 连接、订阅 diff、重连、状态；
-2. `useTradingSession(account)`：REST 快照、WS diff 合并、下单/撤单；
-3. `useIndicatorRuntime()`：WASM worker、参数、输出缓存、计算结果；
-4. `useWorkspaceLayout()`：尺寸/拖动/localStorage；
-5. `useChartData(symbol, period)`：K 线加载、live bar 合并、周期切换。
+1. `useMarketStream(account)`：WebSocket 连接、订阅 diff、重连、状态（待做）；
+2. `useTradingSession(account)`：REST 快照、WS diff 合并、下单/撤单（待做）；
+3. `useWasmIndicators()`：WASM worker、参数、输出缓存、计算结果（✅ 已抽出）；
+4. `useWorkspaceLayout()`：尺寸/拖动/localStorage（✅ 已抽出）；
+5. `useChartData(symbol, period)`：K 线加载、live bar 合并、周期切换（待做）。
 
 目标是 `App.tsx` 回到 250–350 行，只负责组合和路由。
 
@@ -70,10 +75,13 @@ markers 与颜色/线型。
 
 ## 4. 后端发现
 
-### 4.1 账户上下文已经基本收敛，但仍是手写
+### 4.1 账户上下文已收敛（2026-11-10 已完成第一步）
 
-`account_api()` 已统一解析 `?account=`，HTTP REST/WS/task/risk 都能按账户路由。
-下一步建议引入：
+`AccountRouter`/`AccountScope` 已落地，HTTP REST/task/risk 统一通过
+`HttpServer::account_scope()` 解析账户，未知账户抛 404；任务/风控不再各自判空。
+新增 `tests/serve/account_router_test.cpp` 覆盖无 manager、默认账户、未知账户。
+
+仍建议下一步把 `TaskRegistry` 也纳入 `AccountScope`：
 
 ```text
 AccountScope {
@@ -86,7 +94,8 @@ AccountScope {
 
 由 `AccountRouter` 从 query 解析一次，handler 接收 `AccountScope`，而不是每个
 handler 自己处理空账户、错误 404 和 task owner map。这样后续动态增删账户、账户
-级指标/限流不会重复写。
+级指标/限流不会重复写。当前 `account_scope` 已完成；task map 仍是 server 级全局
+map + account owner，下一步可随动态账户一起收敛。
 
 ### 4.2 WebSocket hub 映射是启动期静态的
 
@@ -133,9 +142,14 @@ src/serve/routes/task_risk_routes.cpp
 ### P0（低风险，先做）
 
 1. `App` 控制器拆分 + 单元测试（stream/trading/indicators/layout）；
+   - ✅ `useWorkspaceLayout` 已抽出 + 纯 `applyResize` 测试；
+   - ✅ `useWasmIndicators` 已抽出（WASM 生命周期、参数、输出缓存、debounce）；
+   - 待做：stream/trading/chart-data 控制器；
 2. `KLineChart` 纯映射层拆分；
+   - ✅ `seriesMapping.ts` 已抽出 candle/line/volume 映射 + 3 项测试；
 3. `AccountRouter/AccountScope`；
-4. 删除旧本地指标死代码，统一 WASM 入口。
+   - ✅ 已落地，REST/task/risk 使用，2 项单测；
+4. 删除旧本地指标死代码，统一 WASM 入口（待做）。
 
 ### P1（需要验收）
 
