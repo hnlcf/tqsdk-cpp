@@ -96,11 +96,11 @@ TEST(AdvancedOrder, JsonRoundtripsOfficialAdvancedFields) {
     EXPECT_EQ(req.advanced, AdvancedOrder::FAK);
     EXPECT_EQ(req.offset_leg2, "CLOSETODAY");
 
-    auto null_advanced = nlohmann::json{{"instrument_id", "SHFE.rb2701"},
-                                        {"volume", 1},
-                                        {"advanced", nullptr},
-                                        {"offset_leg2", nullptr}};
-    const auto parsed = null_advanced.get<InsertOrderReq>();
+    auto       null_advanced = nlohmann::json{{"instrument_id", "SHFE.rb2701"},
+                                              {"volume", 1},
+                                              {"advanced", nullptr},
+                                              {"offset_leg2", nullptr}};
+    const auto parsed        = null_advanced.get<InsertOrderReq>();
     EXPECT_EQ(parsed.advanced, AdvancedOrder::NONE);
     EXPECT_TRUE(parsed.offset_leg2.empty());
 }

@@ -26,7 +26,8 @@ struct WsOptions {
     std::string path = "/stream";
 
     /// 服务端 WebSocket ping 间隔（前端应据此设置 pong 超时）。
-    std::chrono::milliseconds heartbeat_interval{std::chrono::seconds(constants::kDefaultWsHeartbeatSec)};
+    std::chrono::milliseconds heartbeat_interval{
+        std::chrono::seconds(constants::kDefaultWsHeartbeatSec)};
 
     /// 同时在线连接上限；超过后升级请求返回 503。
     std::size_t max_clients = constants::kDefaultWsMaxClients;

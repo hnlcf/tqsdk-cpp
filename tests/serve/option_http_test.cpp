@@ -5,9 +5,9 @@
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
-#include <fstream>
 #include <gtest/gtest.h>
 #include <unistd.h>
+#include <fstream>
 
 namespace asio  = boost::asio;
 namespace beast = boost::beast;
@@ -64,17 +64,18 @@ TEST(OptionHttp, OptionAnalyticsReturnsAtmAndGreeks) {
     auto             catalog =
         std::make_shared<tqsdk::InstrumentCatalog>(tqsdk::InstrumentCatalog::Config{.file = path});
     ASSERT_TRUE(catalog->load_local());
-    tqsdk::TqApi              api(core_ex, nullptr, nullptr);
+    tqsdk::TqApi             api(core_ex, nullptr, nullptr);
     tqsdk::serve::HttpServer server(&api, io.get_executor(), {}, core_ex, catalog.get());
     server.listen("127.0.0.1", 0);
 
-    unsigned            status = 0;
-    nlohmann::json      body;
+    unsigned       status = 0;
+    nlohmann::json body;
     asio::co_spawn(
         io,
         [&]() -> asio::awaitable<void> {
             auto result = co_await get_json(
-                io.get_executor(), server.port(),
+                io.get_executor(),
+                server.port(),
                 "/option/analytics/SHFE.rb2701?spot=3000&rate=0.02&vol=0.2&window=1");
             status = result.first;
             body   = std::move(result.second);

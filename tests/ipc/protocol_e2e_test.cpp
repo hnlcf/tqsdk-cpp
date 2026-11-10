@@ -192,7 +192,8 @@ TEST(ProtocolE2E, TcpMsgpackHandshake) {
     auto cli = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
         auto ch = TcpChannel::connect(io, "127.0.0.1", port);
 
-        auto [e, b] = encode_frame<FrameType::Hello>(HelloBody{1, IpcRole::Gateway, "tcp-gw"}, kEnc);
+        auto [e, b] =
+            encode_frame<FrameType::Hello>(HelloBody{1, IpcRole::Gateway, "tcp-gw"}, kEnc);
         co_await ch->async_send(FrameType::Hello, e, ConstSlice{b});
         auto r = co_await ch->async_recv();
         if (!r.has_value()) {

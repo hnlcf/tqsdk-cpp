@@ -8,15 +8,15 @@ namespace {
 
 using namespace tqsdk;
 
-std::chrono::system_clock::time_point local_time(int year, int month, int day, int hour,
-                                                 int minute) {
+std::chrono::system_clock::time_point
+local_time(int year, int month, int day, int hour, int minute) {
     std::tm tm{};
-    tm.tm_year = year - 1900;
-    tm.tm_mon  = month - 1;
-    tm.tm_mday = day;
-    tm.tm_hour = hour;
-    tm.tm_min  = minute;
-    tm.tm_isdst = -1;
+    tm.tm_year          = year - 1900;
+    tm.tm_mon           = month - 1;
+    tm.tm_mday          = day;
+    tm.tm_hour          = hour;
+    tm.tm_min           = minute;
+    tm.tm_isdst         = -1;
     const std::time_t t = std::mktime(&tm);
     return std::chrono::system_clock::from_time_t(t);
 }
@@ -39,8 +39,8 @@ TEST(TradingStatus, NightSessionBelongsToNextTradingDay) {
 }
 
 TEST(TradingStatus, ClosedAndSettlementAreExpectedDisconnects) {
-    const auto closed = TradingStatus::from_phase(TradingCalendar::Phase::Closed,
-                                                  local_time(2026, 11, 9, 8, 0));
+    const auto closed =
+        TradingStatus::from_phase(TradingCalendar::Phase::Closed, local_time(2026, 11, 9, 8, 0));
     EXPECT_FALSE(closed.trading);
     EXPECT_TRUE(closed.expected_disconnect);
     EXPECT_EQ(closed.session, "closed");

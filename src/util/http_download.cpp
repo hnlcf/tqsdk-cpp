@@ -56,10 +56,10 @@ std::string request_http(std::string_view          url,
                          std::string_view          body,
                          std::string_view          content_type,
                          const HttpHeaders&        headers) {
-    const auto               parsed = parse_url(url);
-    asio::io_context         io;
-    asio::ip::tcp::resolver  resolver(io);
-    const auto               endpoints = resolver.resolve(parsed.host, parsed.port);
+    const auto                       parsed = parse_url(url);
+    asio::io_context                 io;
+    asio::ip::tcp::resolver          resolver(io);
+    const auto                       endpoints = resolver.resolve(parsed.host, parsed.port);
     http::request<http::string_body> req{method, parsed.target, 11};
     req.set(http::field::host, parsed.host);
     req.set(http::field::user_agent, user_agent);
@@ -75,9 +75,9 @@ std::string request_http(std::string_view          url,
         }
     }
 
-    beast::flat_buffer                        buffer;
-    http::response<http::string_body>         res;
-    http::response_parser<http::string_body>  parser;
+    beast::flat_buffer                       buffer;
+    http::response<http::string_body>        res;
+    http::response_parser<http::string_body> parser;
     // 合约目录 symbol.json 可能超过 10MB，latest.json 更大；Beast 默认
     // body limit 会提前截断并留下无法解析的文件。该下载器只用于低频刷新。
     parser.body_limit(512ull * 1024 * 1024);
@@ -120,8 +120,7 @@ std::string http_get(std::string_view          url,
                      std::string_view          user_agent,
                      std::chrono::milliseconds timeout,
                      const HttpHeaders&        headers) {
-    return request_http(
-        url, http::verb::get, user_agent, timeout, {}, "application/json", headers);
+    return request_http(url, http::verb::get, user_agent, timeout, {}, "application/json", headers);
 }
 
 std::string http_put(std::string_view          url,
@@ -129,13 +128,8 @@ std::string http_put(std::string_view          url,
                      std::string_view          user_agent,
                      std::chrono::milliseconds timeout,
                      const HttpHeaders&        headers) {
-    return request_http(url,
-                        http::verb::put,
-                        user_agent,
-                        timeout,
-                        body,
-                        "application/json",
-                        headers);
+    return request_http(
+        url, http::verb::put, user_agent, timeout, body, "application/json", headers);
 }
 
 std::string http_post_form(std::string_view          url,

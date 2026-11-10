@@ -16,10 +16,12 @@ struct SimAccount {
     SimTdGateway*          td = nullptr;
 };
 
-SimAccount make_account(asio::io_context& io, const std::string& symbol, double balance,
+SimAccount make_account(asio::io_context&  io,
+                        const std::string& symbol,
+                        double             balance,
                         const std::string& key) {
-    auto td_owner = std::make_unique<SimTdGateway>(io.get_executor(), balance);
-    auto* td      = td_owner.get();
+    auto         td_owner = std::make_unique<SimTdGateway>(io.get_executor(), balance);
+    auto*        td       = td_owner.get();
     ContractSpec spec;
     spec.volume_multiple    = 10.0;
     spec.price_tick         = 1.0;
@@ -51,19 +53,21 @@ TEST(MultiAccount, RoutesOrdersByAccountAndAggregatesSnapshots) {
     request.price_type    = PriceType::ANY;
     request.volume        = 1;
 
-    bool done = false;
+    bool               done = false;
     std::exception_ptr error;
-    std::string a_order;
-    std::string b_order;
-    Order*      unknown = nullptr;
+    std::string        a_order;
+    std::string        b_order;
+    Order*             unknown = nullptr;
     asio::co_spawn(
         io,
         [&]() -> asio::awaitable<void> {
-            auto* first = co_await manager.insert_order("A", request);
+            auto* first  = co_await manager.insert_order("A", request);
             auto* second = co_await manager.insert_order("B", request);
-            unknown     = co_await manager.insert_order("missing", request);
-            if (first) a_order = first->order_id;
-            if (second) b_order = second->order_id;
+            unknown      = co_await manager.insert_order("missing", request);
+            if (first)
+                a_order = first->order_id;
+            if (second)
+                b_order = second->order_id;
             co_await a.api->wait_update();
             co_await b.api->wait_update();
         },
@@ -77,7 +81,8 @@ TEST(MultiAccount, RoutesOrdersByAccountAndAggregatesSnapshots) {
         test::pump(io, 10);
     }
     ASSERT_TRUE(done);
-    if (error) std::rethrow_exception(error);
+    if (error)
+        std::rethrow_exception(error);
     EXPECT_FALSE(a_order.empty());
     EXPECT_FALSE(b_order.empty());
     EXPECT_EQ(unknown, nullptr);

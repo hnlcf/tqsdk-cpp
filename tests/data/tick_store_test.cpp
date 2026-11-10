@@ -5,9 +5,9 @@
 
 #include <gtest/gtest.h>
 
-using tqsdk::Tick;
 using tqsdk::KlineBar;
 using tqsdk::KlineStore;
+using tqsdk::Tick;
 using tqsdk::TickStore;
 
 namespace {

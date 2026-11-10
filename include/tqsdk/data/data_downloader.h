@@ -1,8 +1,8 @@
 #pragma once
 
-#include "tqsdk/pch.h"
 #include "tqsdk/data/tick_series.h"
 #include "tqsdk/domain/kline.h"
+#include "tqsdk/pch.h"
 
 namespace tqsdk {
 
@@ -13,18 +13,17 @@ namespace tqsdk {
 class DataDownloader {
 public:
     struct Options {
-        char        delimiter   = ',';
-        bool        header      = true;
-        std::size_t limit       = 0; ///< 0 = 全部
+        char        delimiter = ',';
+        bool        header    = true;
+        std::size_t limit     = 0; ///< 0 = 全部
     };
 
     DataDownloader() = default;
-    explicit DataDownloader(Options options) : options_(options) {}
+    explicit DataDownloader(Options options)
+        : options_(options) {}
 
-    bool download_ticks(const TickSeries& series,
-                        const std::filesystem::path& path) const;
-    bool download_klines(const KlineStream& series,
-                         const std::filesystem::path& path) const;
+    bool download_ticks(const TickSeries& series, const std::filesystem::path& path) const;
+    bool download_klines(const KlineStream& series, const std::filesystem::path& path) const;
 
     /// 纯字符串形式，便于测试和无文件系统环境使用。
     std::string ticks_csv(const TickSeries& series) const;

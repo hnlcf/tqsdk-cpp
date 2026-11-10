@@ -14,7 +14,8 @@ namespace tqsdk {
 template <typename T>
 class DataSeries {
 public:
-    explicit DataSeries(std::size_t capacity = 200) : capacity_(normalize_capacity(capacity)) {}
+    explicit DataSeries(std::size_t capacity = 200)
+        : capacity_(normalize_capacity(capacity)) {}
 
     void reset(std::size_t capacity) {
         capacity_ = normalize_capacity(capacity);
@@ -35,15 +36,13 @@ public:
         ++revision_;
     }
 
-    std::size_t size() const noexcept { return items_.size(); }
-    bool        empty() const noexcept { return items_.empty(); }
-    std::size_t capacity() const noexcept { return capacity_; }
-    void        set_capacity(std::size_t capacity) { capacity_ = normalize_capacity(capacity); }
+    std::size_t   size() const noexcept { return items_.size(); }
+    bool          empty() const noexcept { return items_.empty(); }
+    std::size_t   capacity() const noexcept { return capacity_; }
+    void          set_capacity(std::size_t capacity) { capacity_ = normalize_capacity(capacity); }
     std::uint64_t revision() const noexcept { return revision_; }
 
-    T*       at(std::size_t index) noexcept {
-        return index < items_.size() ? &items_[index] : nullptr;
-    }
+    T* at(std::size_t index) noexcept { return index < items_.size() ? &items_[index] : nullptr; }
     const T* at(std::size_t index) const noexcept {
         return index < items_.size() ? &items_[index] : nullptr;
     }
@@ -60,9 +59,9 @@ private:
         return value == 0 ? 1 : value;
     }
 
-    std::size_t    capacity_;
-    std::deque<T>  items_;
-    std::uint64_t  revision_ = 0;
+    std::size_t   capacity_;
+    std::deque<T> items_;
+    std::uint64_t revision_ = 0;
 };
 
 } // namespace tqsdk

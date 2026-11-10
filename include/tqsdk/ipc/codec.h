@@ -90,7 +90,9 @@ inline const ICodec& codec_for(FrameEncoding enc) {
 inline constexpr FrameEncoding kDefaultEncoding = FrameEncoding::Json;
 
 /// 默认 codec 单例。
-inline const ICodec& default_codec() { return codec_for(kDefaultEncoding); }
+inline const ICodec& default_codec() {
+    return codec_for(kDefaultEncoding);
+}
 
 } // namespace ipc
 } // namespace tqsdk
