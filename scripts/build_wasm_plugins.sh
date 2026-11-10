@@ -35,3 +35,5 @@ print(manifest["package"]["name"].replace("-", "_"))
     (cd "$TARGET" && sha256sum "$NAME.wasm" >sha256.txt)
     echo "built $TARGET"
 done
+
+(cd "$ROOT/web" && node scripts/generate-indicator-registry.mjs)

@@ -2,13 +2,13 @@
   "schema": 1,
   "abi": 1,
   "id": "ema6",
-  "name": "EMA 多均线",
+  "name": "EMA \u591a\u5747\u7ebf",
   "version": "0.2.0",
   "wasm": "ema6.wasm",
   "params": [
     {
       "id": "period1",
-      "label": "EMA1 周期",
+      "label": "EMA1 \u5468\u671f",
       "type": "int",
       "default": 5,
       "min": 1,
@@ -16,7 +16,7 @@
     },
     {
       "id": "period2",
-      "label": "EMA2 周期",
+      "label": "EMA2 \u5468\u671f",
       "type": "int",
       "default": 10,
       "min": 1,
@@ -24,7 +24,7 @@
     },
     {
       "id": "period3",
-      "label": "EMA3 周期",
+      "label": "EMA3 \u5468\u671f",
       "type": "int",
       "default": 20,
       "min": 1,
@@ -32,7 +32,7 @@
     },
     {
       "id": "period4",
-      "label": "EMA4 周期",
+      "label": "EMA4 \u5468\u671f",
       "type": "int",
       "default": 60,
       "min": 1,
@@ -40,7 +40,7 @@
     },
     {
       "id": "period5",
-      "label": "EMA5 周期",
+      "label": "EMA5 \u5468\u671f",
       "type": "int",
       "default": 120,
       "min": 1,
@@ -48,9 +48,25 @@
     },
     {
       "id": "period6",
-      "label": "EMA6 周期",
+      "label": "EMA6 \u5468\u671f",
       "type": "int",
       "default": 200,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period7",
+      "label": "EMA7 \u5468\u671f",
+      "type": "int",
+      "default": 250,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period8",
+      "label": "EMA8 \u5468\u671f",
+      "type": "int",
+      "default": 500,
       "min": 1,
       "max": 500
     }
@@ -62,7 +78,9 @@
       "pane": "main",
       "plot": "line",
       "color": "#f0b90b",
-      "lineWidth": 1
+      "lineWidth": 1,
+      "periodParam": "period1",
+      "defaultVisible": true
     },
     {
       "id": "ema2",
@@ -70,7 +88,9 @@
       "pane": "main",
       "plot": "line",
       "color": "#a78bfa",
-      "lineWidth": 1
+      "lineWidth": 1,
+      "periodParam": "period2",
+      "defaultVisible": true
     },
     {
       "id": "ema3",
@@ -78,7 +98,9 @@
       "pane": "main",
       "plot": "line",
       "color": "#53b7ff",
-      "lineWidth": 1
+      "lineWidth": 1,
+      "periodParam": "period3",
+      "defaultVisible": true
     },
     {
       "id": "ema4",
@@ -86,7 +108,9 @@
       "pane": "main",
       "plot": "line",
       "color": "#22c55e",
-      "lineWidth": 1
+      "lineWidth": 1,
+      "periodParam": "period4",
+      "defaultVisible": true
     },
     {
       "id": "ema5",
@@ -94,7 +118,9 @@
       "pane": "main",
       "plot": "line",
       "color": "#ff7a90",
-      "lineWidth": 1
+      "lineWidth": 1,
+      "periodParam": "period5",
+      "defaultVisible": true
     },
     {
       "id": "ema6",
@@ -102,7 +128,32 @@
       "pane": "main",
       "plot": "line",
       "color": "#f97316",
-      "lineWidth": 1
+      "lineWidth": 1,
+      "periodParam": "period6",
+      "defaultVisible": true
+    },
+    {
+      "id": "ema7",
+      "title": "EMA{period7}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#38bdf8",
+      "lineWidth": 1,
+      "defaultVisible": false,
+      "periodParam": "period7"
+    },
+    {
+      "id": "ema8",
+      "title": "EMA{period8}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#e879f9",
+      "lineWidth": 1,
+      "defaultVisible": false,
+      "periodParam": "period8"
     }
-  ]
+  ],
+  "dynamicLines": true,
+  "defaultEnabled": true,
+  "order": 10
 }

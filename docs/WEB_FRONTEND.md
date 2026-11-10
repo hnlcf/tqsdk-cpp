@@ -40,7 +40,7 @@ env VITE_PROXY_TARGET=http://127.0.0.1:18082 pnpm dev
 - 指标统一为 WASM 插件 + Worker + Manifest；MA/BOLL/MACD/RSI 已迁移；
 - Wasm 只读历史 OHLCV，不提供 host imports/网络/DOM；
 - 支持 line/histogram/area/band/markers 和副图；
-- 默认启用 EMA 多均线（6 条）、MA 多均线（4 条）、ATR、Donchian；BOLL/MACD/RSI 可在设置中启用；
+- 默认启用 EMA 多均线（默认 6 条）和 MACD；其他插件在浮动列表中启用；
 - 指标设置中可修改 manifest 参数，并显示插件版本；
 - 详细方案见 [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md)。
 
@@ -166,9 +166,10 @@ pnpm build
 
 - 自选搜索 `SHFE.ao2701` 后大小写不变；
 - 账户选择器可见；
-- 指标设置中可见 EMA/MA/BOLL/MACD/RSI/ATR/Donchian 及参数；
-- 默认输出图例包含 EMA5/10/20/60/120/200、MA5/10/20/60、ATR14、DC20；
-- 启用 MACD 后出现 DIF/HIST。
+- 指标设置是浮动列表，点击插件进入详情；输出可单独配置显示、颜色、线型和线宽；
+- EMA/MA 支持最多 8 个周期槽位的添加/移除。
+- 默认输出图例包含 EMA5/10/20/60/120/200 和 MACD DIF/DEA/HIST；
+- 启用 MA 后出现 MA5；关闭 MACD DIF 后对应输出消失。
 
 Vitest 覆盖：
 

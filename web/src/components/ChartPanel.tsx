@@ -3,7 +3,7 @@ import type { Quote } from "../api/client";
 import { formatPrice, formatVolume, quoteChange } from "../lib/format";
 import { instrumentName } from "../lib/instruments";
 import type { OHLCV } from "../indicators/indicators";
-import type { WasmPluginView, WasmSeries } from "../indicators/wasm/types";
+import type { WasmOutputConfig, WasmPluginView, WasmSeries } from "../indicators/wasm/types";
 import KLineChart from "../chart/KLineChart";
 import IntradayChart from "../chart/IntradayChart";
 import IndicatorSettings from "./IndicatorSettings";
@@ -28,6 +28,7 @@ interface Props {
   wasmPlugins?: WasmPluginView[];
   onWasmParams?: (id: string, values: number[]) => void;
   onWasmEnabled?: (id: string, enabled: boolean) => void;
+  onWasmOutput?: (id: string, outputId: string, patch: Partial<WasmOutputConfig>) => void;
   onPeriod: (period: string) => void;
   onMode: (mode: "kline" | "time") => void;
 }
@@ -142,10 +143,12 @@ export default function ChartPanel(props: Props) {
         <span class="chart-credit">Lightweight Charts · Apache-2.0</span>
       </div>
       <Show when={settingsOpen()}>
+        <div class="indicator-popover-scrim" onClick={() => setSettingsOpen(false)} />
         <IndicatorSettings
           plugins={props.wasmPlugins ?? []}
           onWasmParams={props.onWasmParams}
           onWasmEnabled={props.onWasmEnabled}
+          onWasmOutput={props.onWasmOutput}
           onClose={() => setSettingsOpen(false)}
         />
       </Show>

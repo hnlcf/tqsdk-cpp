@@ -1,5 +1,6 @@
 /** Declarative metadata for a WASM indicator plugin. */
 export type WasmPlotKind = "line" | "histogram" | "area" | "band" | "markers";
+export type WasmLineStyle = "solid" | "dashed" | "dotted";
 
 export interface WasmParamSpec {
   id: string;
@@ -18,6 +19,17 @@ export interface WasmOutputSpec {
   color: string;
   lineWidth?: number;
   channels?: number;
+  /** Hide this slot initially; used by dynamic-line plugins. */
+  defaultVisible?: boolean;
+  /** Parameter that controls the period for a dynamic line. */
+  periodParam?: string;
+}
+
+export interface WasmOutputConfig {
+  visible: boolean;
+  color: string;
+  lineStyle: WasmLineStyle;
+  lineWidth: number;
 }
 
 export interface WasmManifest {
@@ -29,6 +41,12 @@ export interface WasmManifest {
   wasm: string;
   params: WasmParamSpec[];
   outputs: WasmOutputSpec[];
+  /** EMA/MA-style plugins can add/remove output slots in the UI. */
+  dynamicLines?: boolean;
+  /** Default enable state used by the generated registry. */
+  defaultEnabled?: boolean;
+  /** Registry ordering, lower first. */
+  order?: number;
 }
 
 /** A computed output aligned to the input bars. */
@@ -39,6 +57,7 @@ export interface WasmSeries {
   plot: WasmPlotKind;
   color: string;
   lineWidth: number;
+  lineStyle?: WasmLineStyle;
   values: Float64Array;
   lower?: Float64Array;
 }
@@ -52,6 +71,9 @@ export interface WasmPluginView {
   status: "loading" | "ready" | "error";
   params: WasmParamSpec[];
   values: number[];
+  outputs: WasmOutputSpec[];
+  outputConfig: Record<string, WasmOutputConfig>;
+  dynamicLines?: boolean;
   error?: string;
 }
 
@@ -118,6 +140,9 @@ function parseOutput(value: unknown, index: number): WasmOutputSpec {
     ? (plot === "band" ? 2 : 1)
     : finiteNumber(row.channels, `outputs[${index}].channels`);
   if (channels !== 1 && channels !== 2) fail(`outputs[${index}].channels must be 1 or 2`);
+  const defaultVisible = row.defaultVisible === undefined ? true : row.defaultVisible;
+  if (typeof defaultVisible !== "boolean") fail(`outputs[${index}].defaultVisible must be boolean`);
+  const periodParam = row.periodParam === undefined ? undefined : stringField(row.periodParam, `outputs[${index}].periodParam`, 64);
   return {
     id,
     title,
@@ -126,6 +151,8 @@ function parseOutput(value: unknown, index: number): WasmOutputSpec {
     color,
     lineWidth: Math.max(0.5, Math.min(4, width)),
     channels,
+    defaultVisible,
+    ...(periodParam === undefined ? {} : { periodParam }),
   };
 }
 
@@ -148,6 +175,12 @@ export function parseManifest(value: unknown): WasmManifest {
   if (!Array.isArray(row.outputs) || row.outputs.length === 0 || row.outputs.length > 16) {
     fail("outputs must be an array of 1..16 entries");
   }
+  const dynamicLines = row.dynamicLines === undefined ? false : row.dynamicLines;
+  if (typeof dynamicLines !== "boolean") fail("dynamicLines must be boolean");
+  const defaultEnabled = row.defaultEnabled === undefined ? false : row.defaultEnabled;
+  if (typeof defaultEnabled !== "boolean") fail("defaultEnabled must be boolean");
+  const order = row.order === undefined ? 1000 : row.order;
+  if (typeof order !== "number" || !Number.isFinite(order)) fail("order must be a number");
   const params = row.params.map(parseParam);
   const outputs = row.outputs.map(parseOutput);
   if (new Set(params.map((item) => item.id)).size !== params.length) fail("duplicate param id");
@@ -156,12 +189,27 @@ export function parseManifest(value: unknown): WasmManifest {
     for (const match of output.title.matchAll(TITLE_PARAM_RE)) {
       if (!paramIds.has(match[1])) fail(`unknown title parameter ${match[1]}`);
     }
+    if (output.periodParam !== undefined && !paramIds.has(output.periodParam)) {
+      fail(`unknown period parameter ${output.periodParam}`);
+    }
   }
   if (new Set(outputs.map((item) => item.id)).size !== outputs.length) fail("duplicate output id");
   if (outputs.reduce((sum, output) => sum + (output.channels ?? 1), 0) > 16) {
     fail("too many output channels");
   }
-  return { schema: 1, abi: 1, id, name, version, wasm, params, outputs };
+  return {
+    schema: 1,
+    abi: 1,
+    id,
+    name,
+    version,
+    wasm,
+    params,
+    outputs,
+    ...(dynamicLines ? { dynamicLines: true } : {}),
+    defaultEnabled,
+    order,
+  };
 }
 
 export function outputChannelCount(manifest: WasmManifest): number {
@@ -175,7 +223,7 @@ function formatParam(value: number): string {
 
 export function resolveOutputTitle(
   title: string,
-  manifest: WasmManifest,
+  manifest: Pick<WasmManifest, "params">,
   values: number[],
 ): string {
   return title.replace(TITLE_PARAM_RE, (_, id: string) => {
@@ -185,28 +233,43 @@ export function resolveOutputTitle(
   });
 }
 
+export function defaultOutputConfig(output: WasmOutputSpec): WasmOutputConfig {
+  return {
+    visible: output.defaultVisible !== false,
+    color: output.color,
+    lineStyle: "solid",
+    lineWidth: output.lineWidth ?? 1,
+  };
+}
+
 export function seriesFromManifest(
   manifest: WasmManifest,
   arrays: Float64Array[],
   params: number[] = manifest.params.map((param) => param.default),
+  outputConfig: Record<string, WasmOutputConfig> = {},
 ): WasmSeries[] {
   const expected = outputChannelCount(manifest);
   if (arrays.length !== expected) {
     throw new Error(`plugin returned ${arrays.length} channels, expected ${expected}`);
   }
   let cursor = 0;
-  return manifest.outputs.map((output) => {
+  const series: WasmSeries[] = [];
+  for (const output of manifest.outputs) {
     const values = arrays[cursor++];
     const lower = (output.channels ?? 1) > 1 ? arrays[cursor++] : undefined;
-    return {
+    const config = outputConfig[output.id] ?? defaultOutputConfig(output);
+    if (!config.visible) continue;
+    series.push({
       id: output.id,
       title: resolveOutputTitle(output.title, manifest, params),
       pane: output.pane,
       plot: output.plot,
-      color: output.color,
-      lineWidth: output.lineWidth ?? 1,
+      color: config.color,
+      lineWidth: config.lineWidth,
+      lineStyle: config.lineStyle,
       values,
       ...(lower === undefined ? {} : { lower }),
-    };
-  });
+    });
+  }
+  return series;
 }

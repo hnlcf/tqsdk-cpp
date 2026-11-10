@@ -6,6 +6,7 @@ import {
   CrosshairMode,
   HistogramSeries,
   LineSeries,
+  LineStyle,
   createChart,
   createSeriesMarkers,
   type CandlestickData,
@@ -28,7 +29,7 @@ import {
   type OHLCV,
 } from "../indicators/indicators";
 import { chartColors, type Theme } from "./theme";
-import type { WasmSeries } from "../indicators/wasm/types";
+import type { WasmLineStyle, WasmSeries } from "../indicators/wasm/types";
 import { chinaDateTime, chinaTickMark } from "./time";
 
 interface Props {
@@ -57,6 +58,12 @@ function toCandlestick(bar: OHLCV): CandlestickData<UTCTimestamp> {
 
 function formatLegendPrice(value: number | undefined, decimals: number): string {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(decimals) : "—";
+}
+
+function toLineStyle(style: WasmLineStyle | undefined): LineStyle {
+  if (style === "dashed") return LineStyle.Dashed;
+  if (style === "dotted") return LineStyle.Dotted;
+  return LineStyle.Solid;
 }
 
 export default function KLineChart(props: Props) {
@@ -145,13 +152,13 @@ export default function KLineChart(props: Props) {
           ...common,
           color: item.color,
           lineWidth,
-          lineStyle: 2,
+          lineStyle: toLineStyle(item.lineStyle),
         }, pane);
         addLine(`${key}:lower`, {
           ...common,
           color: item.color,
           lineWidth,
-          lineStyle: 2,
+          lineStyle: toLineStyle(item.lineStyle),
         }, pane);
       } else if (item.plot === "histogram") {
         indicatorSeries.set(
@@ -174,7 +181,12 @@ export default function KLineChart(props: Props) {
           ) as AnySeries,
         );
       } else {
-        addLine(key, { ...common, color: item.color, lineWidth }, pane);
+        addLine(key, {
+          ...common,
+          color: item.color,
+          lineWidth,
+          lineStyle: toLineStyle(item.lineStyle),
+        }, pane);
       }
     }
   }

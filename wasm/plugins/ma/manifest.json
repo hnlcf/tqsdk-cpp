@@ -37,6 +37,38 @@
       "default": 60,
       "min": 1,
       "max": 500
+    },
+    {
+      "id": "period5",
+      "label": "MA5 \u5468\u671f",
+      "type": "int",
+      "default": 120,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period6",
+      "label": "MA6 \u5468\u671f",
+      "type": "int",
+      "default": 200,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period7",
+      "label": "MA7 \u5468\u671f",
+      "type": "int",
+      "default": 250,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period8",
+      "label": "MA8 \u5468\u671f",
+      "type": "int",
+      "default": 500,
+      "min": 1,
+      "max": 500
     }
   ],
   "outputs": [
@@ -45,28 +77,83 @@
       "title": "MA{period1}",
       "pane": "main",
       "plot": "line",
-      "color": "#f0b90b"
+      "color": "#f0b90b",
+      "periodParam": "period1",
+      "defaultVisible": true,
+      "lineWidth": 1
     },
     {
       "id": "ma2",
       "title": "MA{period2}",
       "pane": "main",
       "plot": "line",
-      "color": "#53b7ff"
+      "color": "#53b7ff",
+      "periodParam": "period2",
+      "defaultVisible": true,
+      "lineWidth": 1
     },
     {
       "id": "ma3",
       "title": "MA{period3}",
       "pane": "main",
       "plot": "line",
-      "color": "#ff7a90"
+      "color": "#ff7a90",
+      "periodParam": "period3",
+      "defaultVisible": true,
+      "lineWidth": 1
     },
     {
       "id": "ma4",
       "title": "MA{period4}",
       "pane": "main",
       "plot": "line",
-      "color": "#a78bfa"
+      "color": "#a78bfa",
+      "periodParam": "period4",
+      "defaultVisible": true,
+      "lineWidth": 1
+    },
+    {
+      "id": "ma5",
+      "title": "MA{period5}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#22c55e",
+      "lineWidth": 1,
+      "defaultVisible": false,
+      "periodParam": "period5"
+    },
+    {
+      "id": "ma6",
+      "title": "MA{period6}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#f97316",
+      "lineWidth": 1,
+      "defaultVisible": false,
+      "periodParam": "period6"
+    },
+    {
+      "id": "ma7",
+      "title": "MA{period7}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#38bdf8",
+      "lineWidth": 1,
+      "defaultVisible": false,
+      "periodParam": "period7"
+    },
+    {
+      "id": "ma8",
+      "title": "MA{period8}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#e879f9",
+      "lineWidth": 1,
+      "defaultVisible": false,
+      "periodParam": "period8"
     }
-  ]
+  ],
+  "dynamicLines": true,
+  "defaultEnabled": false,
+  "order": 20
 }

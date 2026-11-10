@@ -95,7 +95,7 @@
 
 - TQSDK Board：多自选模糊搜索/K 线/分时/盘口/快捷下单/合并持仓/委托/成交/权益已落地；
 - 指标参数/颜色设置（MA/BOLL/MACD/RSI）已落地；
-- ✅ WASM 指标插件：EMA/MA 多均线、BOLL、MACD、RSI、ATR、Donchian；支持 line/histogram/area/band/markers；
+- ✅ WASM 指标插件：自动扫描注册、浮动选择器、逐输出颜色/线型/显隐、EMA/MA 动态均线；MA/BOLL/MACD/RSI/ATR/Donchian；
 - ✅ 前端 Playwright E2E（搜索/大小写/WASM/下单板按钮）；
 - TqAuth 快期认证与目录 Bearer header 已接入；
 - ✅ 顶栏账户选择器、运维页、持仓固定列宽、K 线切换缩放/本地时间；

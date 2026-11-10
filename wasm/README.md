@@ -54,6 +54,20 @@ The script builds with:
 No WASI imports are used. The worker rejects any module that imports host
 functions.
 
+## Registry generation
+
+The WebUI registry is generated automatically from
+`web/public/plugins/*/manifest.json`:
+
+```bash
+cd web
+pnpm generate:plugins
+```
+
+Each manifest can set `defaultEnabled` and `order`. The generated file is
+`web/src/indicators/wasm/registry.generated.ts`; do not edit it by hand.
+`predev`, `prebuild` and `pretypecheck` regenerate it automatically.
+
 ## Plugin contract
 
 A plugin exports:

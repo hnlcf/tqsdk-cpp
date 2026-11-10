@@ -8,6 +8,10 @@
     "node": ">=22"
   },
   "scripts": {
+    "generate:plugins": "node scripts/generate-indicator-registry.mjs",
+    "predev": "pnpm generate:plugins",
+    "prebuild": "pnpm generate:plugins",
+    "pretypecheck": "pnpm generate:plugins",
     "dev": "vite",
     "build": "pnpm typecheck && vite build",
     "preview": "vite preview",

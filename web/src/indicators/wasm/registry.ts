@@ -1,22 +1,19 @@
+import { WASM_PLUGIN_REGISTRY } from "./registry.generated";
+
 export interface WasmPluginDescriptor {
   id: string;
+  name: string;
+  version: string;
   manifestUrl: string;
   defaultEnabled: boolean;
 }
 
 /**
- * First-party plugins shipped under web/public/plugins/.
+ * Auto-generated from web/public/plugins/<id>/manifest.json.
  *
- * Order controls the settings panel order and legend order. BOLL/MACD/RSI
- * remain opt-in, matching the previous built-in defaults; MA/EMA plus the new
- * ATR/Donchian indicators are visible by default.
+ * Add or remove plugin directories, set `order`/`defaultEnabled` in the
+ * manifest, then run `pnpm generate:plugins`.
  */
-export const DEFAULT_WASM_PLUGINS: WasmPluginDescriptor[] = [
-  { id: "ema6", manifestUrl: "/plugins/ema6/manifest.json", defaultEnabled: true },
-  { id: "ma", manifestUrl: "/plugins/ma/manifest.json", defaultEnabled: false },
-  { id: "boll", manifestUrl: "/plugins/boll/manifest.json", defaultEnabled: false },
-  { id: "macd", manifestUrl: "/plugins/macd/manifest.json", defaultEnabled: true },
-  { id: "rsi", manifestUrl: "/plugins/rsi/manifest.json", defaultEnabled: false },
-  { id: "atr", manifestUrl: "/plugins/atr/manifest.json", defaultEnabled: false },
-  { id: "donchian", manifestUrl: "/plugins/donchian/manifest.json", defaultEnabled: false },
-];
+export const DEFAULT_WASM_PLUGINS: WasmPluginDescriptor[] = WASM_PLUGIN_REGISTRY.map(
+  (plugin) => ({ ...plugin }),
+);

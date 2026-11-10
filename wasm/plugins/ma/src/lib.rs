@@ -21,6 +21,10 @@ fn indicator(ctx: &mut Context<'_>) -> i32 {
         ctx.param_usize(1, 10).clamp(1, 500),
         ctx.param_usize(2, 20).clamp(1, 500),
         ctx.param_usize(3, 60).clamp(1, 500),
+        ctx.param_usize(4, 120).clamp(1, 500),
+        ctx.param_usize(5, 200).clamp(1, 500),
+        ctx.param_usize(6, 250).clamp(1, 500),
+        ctx.param_usize(7, 500).clamp(1, 500),
     ];
     let close = ctx.close();
     for (output, period) in periods.into_iter().enumerate() {

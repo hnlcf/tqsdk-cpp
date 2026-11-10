@@ -11,13 +11,16 @@ UI 默认路径，指标设置里看到的是插件列表和插件参数。
 
 | id | 指标 | 输出 | 默认启用 |
 |---|---|---|---|
-| `ema6` | EMA 多均线 | EMA5/10/20/60/120/200，6 条线 | 是 |
-| `ma` | MA 多均线 | MA5/10/20/60，4 条线 | 是 |
+| `ema6` | EMA 多均线 | 最多 8 个槽位，默认显示 EMA5/10/20/60/120/200 | 是 |
+| `ma` | MA 多均线 | 最多 8 个槽位，默认显示 MA5/10/20/60 | 否 |
 | `boll` | Bollinger Bands | 上下轨 band + 中轨 line | 否 |
-| `macd` | MACD | DIF、DEA、HIST，副图 | 否 |
+| `macd` | MACD | DIF、DEA、HIST，副图 | 是 |
 | `rsi` | RSI | 副图 | 否 |
-| `atr` | ATR | 副图 | 是 |
-| `donchian` | Donchian Channel | 上下轨 band + 中轨，主图 | 是 |
+| `atr` | ATR | 副图 | 否 |
+| `donchian` | Donchian Channel | 上下轨 band + 中轨，主图 | 否 |
+
+插件的 `defaultEnabled` 和 `order` 写在 manifest 中，前端注册表由脚本扫描生成，
+不再在 TS 文件里手工维护插件列表。
 
 插件资源：
 
@@ -84,13 +87,18 @@ wasm/indicator-sdk/
   "name": "EMA 多均线",
   "version": "0.2.0",
   "wasm": "ema6.wasm",
+  "dynamicLines": true,
+  "defaultEnabled": true,
+  "order": 10,
   "params": [
     {"id": "period1", "label": "EMA1 周期", "type": "int", "default": 5, "min": 1, "max": 500},
     {"id": "period2", "label": "EMA2 周期", "type": "int", "default": 10, "min": 1, "max": 500},
     {"id": "period3", "label": "EMA3 周期", "type": "int", "default": 20, "min": 1, "max": 500},
     {"id": "period4", "label": "EMA4 周期", "type": "int", "default": 60, "min": 1, "max": 500},
     {"id": "period5", "label": "EMA5 周期", "type": "int", "default": 120, "min": 1, "max": 500},
-    {"id": "period6", "label": "EMA6 周期", "type": "int", "default": 200, "min": 1, "max": 500}
+    {"id": "period6", "label": "EMA6 周期", "type": "int", "default": 200, "min": 1, "max": 500},
+    {"id": "period7", "label": "EMA7 周期", "type": "int", "default": 250, "min": 1, "max": 500},
+    {"id": "period8", "label": "EMA8 周期", "type": "int", "default": 500, "min": 1, "max": 500}
   ],
   "outputs": [
     {"id": "ema1", "title": "EMA{period1}", "pane": "main", "plot": "line", "color": "#f0b90b"},
@@ -98,12 +106,18 @@ wasm/indicator-sdk/
     {"id": "ema3", "title": "EMA{period3}", "pane": "main", "plot": "line", "color": "#53b7ff"},
     {"id": "ema4", "title": "EMA{period4}", "pane": "main", "plot": "line", "color": "#22c55e"},
     {"id": "ema5", "title": "EMA{period5}", "pane": "main", "plot": "line", "color": "#ff7a90"},
-    {"id": "ema6", "title": "EMA{period6}", "pane": "main", "plot": "line", "color": "#f97316"}
+    {"id": "ema6", "title": "EMA{period6}", "pane": "main", "plot": "line", "color": "#f97316"},
+    {"id": "ema7", "title": "EMA{period7}", "pane": "main", "plot": "line", "color": "#38bdf8", "defaultVisible": false},
+    {"id": "ema8", "title": "EMA{period8}", "pane": "main", "plot": "line", "color": "#e879f9", "defaultVisible": false}
   ]
 }
 ```
 
-标题中的 `{period1}` 会按当前参数值解析，修改周期后图例标题会同步更新为
+`defaultEnabled` 和 `order` 控制自动生成的注册表：前者是默认启用状态，后者是
+列表顺序。`dynamicLines: true` 表示 EMA/MA 支持在详情页添加/移除输出槽位。
+
+输出项中的 `defaultVisible` 控制初始是否显示，`periodParam` 指定该输出对应哪个
+周期参数。标题中的 `{period1}` 会按当前参数值解析，修改周期后图例标题会同步更新为
 `EMA8` 等。
 
 ### 3.1 输出类型
@@ -242,6 +256,21 @@ cargo build --target wasm32-unknown-unknown --release
 ./scripts/build_wasm_plugins.sh wasm/plugins/atr
 ```
 
+构建结束会自动执行：
+
+```bash
+cd web && node scripts/generate-indicator-registry.mjs
+```
+
+它扫描 `web/public/plugins/*/manifest.json`，按 `order` 排序，生成：
+
+```text
+web/src/indicators/wasm/registry.generated.ts
+```
+
+前端 `predev` / `prebuild` / `pretypecheck` 也会自动生成该文件；新增插件目录后
+不需要手工修改 registry。
+
 ## 7. 安全设计
 
 当前已实现：
@@ -316,31 +345,32 @@ pnpm dev
 
 然后：
 
-1. 打开 K 线；
-2. 点击「指标设置」；
-3. 可以看到 EMA、MA、BOLL、MACD、RSI、ATR、Donchian；
-4. 勾选/取消插件启用；
-5. 修改参数后自动重算；
-6. 完成设置。
+1. 打开 K 线，点击「指标设置」；
+2. 出现浮动指标列表，可直接启用/关闭插件；
+3. 点击某个指标进入详情；
+4. 详情页可以修改参数；
+5. 详情页可以逐条配置输出的显示、颜色、线型和线宽；
+6. EMA/MA 详情页支持「+ 添加均线」和「移除」，最多 8 个周期槽位；
+7. 右上角返回列表，关闭后自动重算。
 
-默认启用：
+当前默认启用：
 
 ```text
 EMA 多均线
+MACD
+```
+
+当前默认不启用：
+
+```text
 MA 多均线
+BOLL
+RSI
 ATR
 Donchian Channel
 ```
 
-默认不启用：
-
-```text
-BOLL
-MACD
-RSI
-```
-
-它们可以在指标设置中启用。
+它们都可以在浮动列表中启用。
 
 ## 11. 测试
 
@@ -359,7 +389,7 @@ pnpm e2e
 
 ```text
 node scripts/check_wasm_plugins.mjs
-  PASS atr / boll / donchian / ema6 / ma / macd / rsi
+  PASS atr / boll / donchian / ema6(8ch) / ma(8ch) / macd / rsi
 
 Vitest: 14/14
 Playwright: 1/1
@@ -367,17 +397,17 @@ Playwright: 1/1
 
 Playwright 覆盖：
 
-- 插件设置中包含 EMA/MA/BOLL/MACD/RSI/ATR/Donchian；
-- 默认图例包含 EMA、MA、ATR、Donchian；
-- 修改 EMA 参数后图例动态更新；
-- 启用 MACD 后出现 DIF/HIST 输出；
+- 浮动列表包含 EMA/MA/BOLL/MACD/RSI/ATR/Donchian，列表由 auto-registry 生成；
+- 点击 EMA 进入详情，修改周期、线型颜色、添加/移除均线；
+- 默认图例包含 EMA5/10/20/60/120/200 和 MACD DIF/DEA/HIST；
+- 启用 MA 后出现 MA5；
+- 关闭 MACD DIF 输出后对应图例消失；
 - 自选大小写、下单板平多/平空不回归。
 
 ## 12. 后续
 
 - 增加 KDJ、CCI、OBV 等插件；
-- 任意条数 EMA/MA 的动态实例；
-- 每线颜色/隐藏开关；
-- 插件参数持久化；
+- 将 EMA/MA 从 8 个槽位扩展为真正无上限的实例（需要动态输出 ABI 或多实例调度）；
+- 输出参数持久化；
 - 插件签名和 hash 校验；
 - 第三方插件隔离与安装流程。

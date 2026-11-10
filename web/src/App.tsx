@@ -45,7 +45,13 @@ import OpsPage from "./pages/OpsPage";
 import type { OHLCV } from "./indicators/indicators";
 import { WasmIndicatorHost } from "./indicators/wasm/host";
 import { DEFAULT_WASM_PLUGINS } from "./indicators/wasm/registry";
-import { seriesFromManifest, type WasmPluginView, type WasmSeries } from "./indicators/wasm/types";
+import {
+  defaultOutputConfig,
+  seriesFromManifest,
+  type WasmOutputConfig,
+  type WasmPluginView,
+  type WasmSeries,
+} from "./indicators/wasm/types";
 import { finite, priceDecimals } from "./lib/format";
 import {
   createWatchlistGroup,
@@ -456,6 +462,26 @@ export default function App() {
     patchWasmPlugin(id, { enabled });
   }
 
+  function updateWasmOutput(
+    id: string,
+    outputId: string,
+    patch: Partial<WasmOutputConfig>,
+  ) {
+    setWasmPlugins((previous) =>
+      previous.map((plugin) =>
+        plugin.id === id
+          ? {
+              ...plugin,
+              outputConfig: {
+                ...plugin.outputConfig,
+                [outputId]: { ...plugin.outputConfig[outputId], ...patch },
+              },
+            }
+          : plugin,
+      ),
+    );
+  }
+
   function scheduleWasm() {
     if (wasmTimer !== undefined) {
       window.clearTimeout(wasmTimer);
@@ -485,7 +511,7 @@ export default function App() {
               : manifest.params.map((param) => param.default);
           try {
             const outputs = await host.compute(latest, values);
-            return seriesFromManifest(manifest, outputs, values).map((item) => ({
+            return seriesFromManifest(manifest, outputs, values, plugin.outputConfig).map((item) => ({
               ...item,
               id: `${manifest.id}:${item.id}`,
             }));
@@ -528,12 +554,14 @@ export default function App() {
         ...previous,
         {
           id: descriptor.id,
-          name: descriptor.id,
-          version: "",
+          name: descriptor.name,
+          version: descriptor.version,
           enabled: descriptor.defaultEnabled,
           status: "loading",
           params: [],
           values: [],
+          outputs: [],
+          outputConfig: {},
         },
       ]);
       void host
@@ -545,6 +573,11 @@ export default function App() {
             status: "ready",
             params: manifest.params,
             values: manifest.params.map((param) => param.default),
+            outputs: manifest.outputs,
+            outputConfig: Object.fromEntries(
+              manifest.outputs.map((output) => [output.id, defaultOutputConfig(output)]),
+            ),
+            dynamicLines: manifest.dynamicLines === true,
           });
         })
         .catch((error) => {
@@ -706,6 +739,7 @@ export default function App() {
               wasmPlugins={wasmPlugins()}
               onWasmParams={updateWasmParams}
               onWasmEnabled={setWasmEnabled}
+              onWasmOutput={updateWasmOutput}
               onPeriod={(next) => {
                 setPeriod(next);
                 setChartMode("kline");

@@ -53,5 +53,7 @@
       "plot": "histogram",
       "color": "#ff7a90"
     }
-  ]
+  ],
+  "defaultEnabled": true,
+  "order": 40
 }

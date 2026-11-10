@@ -39,5 +39,7 @@
       "plot": "line",
       "color": "#f0b90b"
     }
-  ]
+  ],
+  "defaultEnabled": false,
+  "order": 30
 }
