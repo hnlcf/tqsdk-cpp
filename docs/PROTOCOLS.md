@@ -83,10 +83,10 @@ Base URL 默认 `http://127.0.0.1:18081`。
 | GET | `/kline/{symbol}/{duration_ns}` | `{symbol,duration_ns,bars}` |
 | GET | `/kline-cache/status` | KlineStore status |
 | GET | `/account?account=default` | account |
-| GET | `/orders` | `{"orders":{...}}` |
-| GET | `/trades` | `{"trades":{...}}` |
-| GET | `/positions` | `{"positions":{...}}`；REST 隐藏零仓位 |
-| GET | `/trading-snapshot` | account/orders/trades/positions 合并 |
+| GET | `/orders?account=default` | `{"orders":{...}}` |
+| GET | `/trades?account=default` | `{"trades":{...}}` |
+| GET | `/positions?account=default` | `{"positions":{...}}`；REST 隐藏零仓位 |
+| GET | `/trading-snapshot?account=default` | account/orders/trades/positions 合并 |
 | GET | `/ticks/{symbol}` | quote 固化 tick 快照（内存窗口） |
 | GET | `/ticks/{symbol}?source=cache&limit=N` | TickStore 历史 tick |
 | GET | `/tick-cache/status` | TickStore 状态 |
@@ -100,14 +100,14 @@ Base URL 默认 `http://127.0.0.1:18081`。
 |---|---|---|
 | POST | `/order?account=default` | `InsertOrderReq` JSON |
 | DELETE | `/order/{id}` | 撤单 |
-| POST | `/task/target` | TargetPosTask：`symbol,target_volume,mode,max_volume` |
-| DELETE | `/task/target/{id}` | 取消并删除 target task |
-| POST | `/task/order` | InsertOrderTask：`{order: InsertOrderReq}` |
-| DELETE | `/task/order/{id}` | 取消并删除 order task |
-| GET | `/tasks` | 任务状态列表 |
-| POST | `/risk/rules` | 新增风控规则 |
-| DELETE | `/risk/rules` | 清空风控规则 |
-| GET | `/risk/status` | 当前规则数量 |
+| POST | `/task/target?account=default` | TargetPosTask：`symbol,target_volume,mode,max_volume` |
+| DELETE | `/task/target/{id}?account=default` | 取消并删除 target task |
+| POST | `/task/order?account=default` | InsertOrderTask：`{order: InsertOrderReq}` |
+| DELETE | `/task/order/{id}?account=default` | 取消并删除 order task |
+| GET | `/tasks?account=default` | 按账户过滤的任务状态列表 |
+| POST | `/risk/rules?account=default` | 给账户 TqApi 新增独立风控规则 |
+| DELETE | `/risk/rules?account=default` | 清空该账户风控规则 |
+| GET | `/risk/status?account=default` | 该账户当前规则数量 |
 
 `InsertOrderReq` 关键字段：
 
@@ -130,7 +130,13 @@ Base URL 默认 `http://127.0.0.1:18081`。
 `advanced=FAK/FOK` 会由 `apply_advanced_order()` 映射为 `IOC + ANY/ALL`；
 非 LIMIT 价格类型默认 IOC。
 
-## 3. WebSocket `/stream`
+## 3. WebSocket `/stream?account=<id>`
+
+不传 `account` 时使用 node 的默认账户；传未知账户返回 404。每个账户由独立的
+`WebSocketHub` 提供服务，订阅表、快照、diff、限额都相互隔离。Web 前端在账户
+切换时关闭旧连接并重新连接，避免把 A 账户的 trading diff 合并到 B 账户。
+
+### 消息格式
 
 文本 UTF-8 JSON。
 
@@ -155,7 +161,8 @@ Base URL 默认 `http://127.0.0.1:18081`。
 
 - symbols/klines 为增量订阅；
 - **topics 缺省或空数组 -> 只订阅行情，不推送交易实体**；
-- 需要交易数据必须显式列出 `account/orders/trades/positions`；
+- 连接级账户由 query `account` 选择；需要交易数据仍必须显式列出
+  `account/orders/trades/positions`；
 - 显式 topics 整体替换当前交易 topic 集合；
 - 服务端回 `subscribed` + 首帧 `snapshot`。
 

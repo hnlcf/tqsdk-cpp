@@ -1,0 +1,17 @@
+{
+  "name": "tqsdk-ci",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "boost-asio",
+    "boost-beast",
+    "cli11",
+    "fmt",
+    "gtest",
+    "magic-enum",
+    "nlohmann-json",
+    "openssl",
+    "spdlog",
+    "sqlitecpp",
+    "tomlplusplus"
+  ]
+}

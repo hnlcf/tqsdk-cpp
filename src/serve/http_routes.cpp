@@ -48,9 +48,18 @@ struct HttpServer::RouteHandlers {
           tick_store_(server.tick_store_),
           target_tasks_(server.target_tasks_),
           order_tasks_(server.order_tasks_),
+          task_accounts_(server.task_accounts_),
           task_seq_(server.task_seq_) {}
 
     TqApi* account_api(std::string_view account_id) const { return owner.account_api(account_id); }
+
+    /// Resolve an optional `?account=` to the concrete account key. Kept in one
+    /// place so task/risk handlers cannot disagree about the default account.
+    std::string resolved_account(std::string_view requested) const {
+        if (!requested.empty())
+            return std::string(requested);
+        return accounts_ ? accounts_->default_account_id() : std::string{};
+    }
 
     asio::awaitable<json>     healthz();
     asio::awaitable<Response> readyz();
@@ -78,14 +87,14 @@ struct HttpServer::RouteHandlers {
     asio::awaitable<json>     positions(Query<AccountQuery> query);
     asio::awaitable<json>     insert_order(Query<AccountQuery> query, InsertOrderReq request);
     asio::awaitable<json>     cancel_order(std::string order_id, Query<AccountQuery> query);
-    asio::awaitable<json>     target_create(TargetTaskRequest request);
-    asio::awaitable<json>     target_delete(std::string task_id);
-    asio::awaitable<json>     order_task_create(OrderTaskRequest request);
-    asio::awaitable<json>     order_task_delete(std::string task_id);
-    asio::awaitable<json>     tasks();
-    asio::awaitable<json>     risk_status();
-    asio::awaitable<json>     risk_clear();
-    asio::awaitable<json>     risk_add(RiskRuleRequest request);
+    asio::awaitable<json>     target_create(Query<AccountQuery> query, TargetTaskRequest request);
+    asio::awaitable<json>     target_delete(std::string task_id, Query<AccountQuery> query);
+    asio::awaitable<json> order_task_create(Query<AccountQuery> query, OrderTaskRequest request);
+    asio::awaitable<json> order_task_delete(std::string task_id, Query<AccountQuery> query);
+    asio::awaitable<json> tasks(Query<AccountQuery> query);
+    asio::awaitable<json> risk_status(Query<AccountQuery> query);
+    asio::awaitable<json> risk_clear(Query<AccountQuery> query);
+    asio::awaitable<json> risk_add(Query<AccountQuery> query, RiskRuleRequest request);
     asio::awaitable<Response> websocket_upgrade();
 
     HttpServer&                                                        owner;
@@ -95,6 +104,7 @@ struct HttpServer::RouteHandlers {
     TickStore*&                                                        tick_store_;
     std::unordered_map<std::string, std::shared_ptr<TargetPosTask>>&   target_tasks_;
     std::unordered_map<std::string, std::shared_ptr<InsertOrderTask>>& order_tasks_;
+    std::unordered_map<std::string, std::string>&                      task_accounts_;
     std::uint64_t&                                                     task_seq_;
 };
 
@@ -423,11 +433,13 @@ asio::awaitable<json> HttpServer::RouteHandlers::cancel_order(std::string       
     co_return json{{"success", ack.success}, {"order_id", ack.order_id}, {"error", ack.error_msg}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::target_create(TargetTaskRequest request) {
+asio::awaitable<json> HttpServer::RouteHandlers::target_create(Query<AccountQuery> query,
+                                                               TargetTaskRequest   request) {
     if (request.symbol.empty()) {
         throw HttpError{http::status::bad_request, json{{"error", "symbol is required"}}};
     }
-    api_->get_quote(request.symbol);
+    TqApi* selected = account_api(query.value.account);
+    selected->get_quote(request.symbol);
     TargetPosPriceMode mode = TargetPosPriceMode::ACTIVE;
     if (request.mode == "PASSIVE") {
         mode = TargetPosPriceMode::PASSIVE;
@@ -440,69 +452,109 @@ asio::awaitable<json> HttpServer::RouteHandlers::target_create(TargetTaskRequest
     TargetPosOptions options;
     options.max_volume = request.max_volume;
     const auto id      = "target-" + std::to_string(++task_seq_);
-    auto task = std::make_shared<TargetPosTask>(*api_, request.symbol, mode, std::move(options));
+    auto       task =
+        std::make_shared<TargetPosTask>(*selected, request.symbol, mode, std::move(options));
     task->set_target_volume(request.target_volume);
-    target_tasks_[id] = std::move(task);
+    target_tasks_[id]  = std::move(task);
+    task_accounts_[id] = resolved_account(query.value.account);
     co_return json{{"success", true},
                    {"task_id", id},
+                   {"account", task_accounts_[id]},
                    {"symbol", request.symbol},
                    {"target_volume", request.target_volume}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::target_delete(std::string task_id) {
+asio::awaitable<json> HttpServer::RouteHandlers::target_delete(std::string         task_id,
+                                                               Query<AccountQuery> query) {
     auto it = target_tasks_.find(task_id);
     if (it == target_tasks_.end()) {
         throw HttpError{http::status::not_found, json{{"error", "target task not found"}}};
     }
+    const std::string account = resolved_account(query.value.account);
+    auto              owner   = task_accounts_.find(task_id);
+    if (owner != task_accounts_.end() && owner->second != account) {
+        throw HttpError{http::status::not_found,
+                        json{{"error", "target task not found"}, {"account", account}}};
+    }
     it->second->cancel();
     target_tasks_.erase(it);
-    co_return json{{"success", true}, {"task_id", task_id}};
+    task_accounts_.erase(task_id);
+    co_return json{{"success", true}, {"task_id", task_id}, {"account", account}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::order_task_create(OrderTaskRequest request) {
+asio::awaitable<json> HttpServer::RouteHandlers::order_task_create(Query<AccountQuery> query,
+                                                                   OrderTaskRequest    request) {
     if (request.order.instrument_id.empty() || request.order.volume == 0) {
         throw HttpError{http::status::bad_request, json{{"error", "invalid order task"}}};
     }
-    const auto id    = "order-" + std::to_string(++task_seq_);
-    auto       task  = std::make_shared<InsertOrderTask>(*api_, std::move(request.order));
-    order_tasks_[id] = std::move(task);
-    co_return json{{"success", true}, {"task_id", id}};
+    TqApi*     selected = account_api(query.value.account);
+    const auto id       = "order-" + std::to_string(++task_seq_);
+    auto       task     = std::make_shared<InsertOrderTask>(*selected, std::move(request.order));
+    order_tasks_[id]    = std::move(task);
+    task_accounts_[id]  = query.value.account.empty()
+                              ? (accounts_ ? accounts_->default_account_id() : std::string{})
+                              : query.value.account;
+    co_return json{{"success", true}, {"task_id", id}, {"account", task_accounts_[id]}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::order_task_delete(std::string task_id) {
+asio::awaitable<json> HttpServer::RouteHandlers::order_task_delete(std::string         task_id,
+                                                                   Query<AccountQuery> query) {
     auto it = order_tasks_.find(task_id);
     if (it == order_tasks_.end()) {
         throw HttpError{http::status::not_found, json{{"error", "order task not found"}}};
     }
+    const std::string account = resolved_account(query.value.account);
+    auto              owner   = task_accounts_.find(task_id);
+    if (owner != task_accounts_.end() && owner->second != account) {
+        throw HttpError{http::status::not_found,
+                        json{{"error", "order task not found"}, {"account", account}}};
+    }
     it->second->cancel();
     order_tasks_.erase(it);
-    co_return json{{"success", true}, {"task_id", task_id}};
+    task_accounts_.erase(task_id);
+    co_return json{{"success", true}, {"task_id", task_id}, {"account", account}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::tasks() {
-    json targets = json::array();
+asio::awaitable<json> HttpServer::RouteHandlers::tasks(Query<AccountQuery> query) {
+    const std::string account = resolved_account(query.value.account);
+    json              targets = json::array();
     for (const auto& [id, task] : target_tasks_) {
-        targets.push_back(json{
-            {"task_id", id}, {"active", task->active()}, {"target_volume", task->target_volume()}});
+        auto owner = task_accounts_.find(id);
+        if (owner != task_accounts_.end() && owner->second != account)
+            continue;
+        targets.push_back(json{{"task_id", id},
+                               {"account", owner == task_accounts_.end() ? account : owner->second},
+                               {"active", task->active()},
+                               {"target_volume", task->target_volume()}});
     }
     json orders = json::array();
     for (const auto& [id, task] : order_tasks_) {
-        orders.push_back(json{
-            {"task_id", id}, {"active", task->active()}, {"filled_volume", task->filled_volume()}});
+        auto owner = task_accounts_.find(id);
+        if (owner != task_accounts_.end() && owner->second != account)
+            continue;
+        orders.push_back(json{{"task_id", id},
+                              {"account", owner == task_accounts_.end() ? account : owner->second},
+                              {"active", task->active()},
+                              {"filled_volume", task->filled_volume()}});
     }
-    co_return json{{"targets", std::move(targets)}, {"orders", std::move(orders)}};
+    co_return json{
+        {"account", account}, {"targets", std::move(targets)}, {"orders", std::move(orders)}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::risk_status() {
-    co_return json{{"rules", api_->risk_manager().size()}};
+asio::awaitable<json> HttpServer::RouteHandlers::risk_status(Query<AccountQuery> query) {
+    TqApi* selected = account_api(query.value.account);
+    co_return json{{"rules", selected->risk_manager().size()}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::risk_clear() {
-    api_->risk_manager().clear();
+asio::awaitable<json> HttpServer::RouteHandlers::risk_clear(Query<AccountQuery> query) {
+    TqApi* selected = account_api(query.value.account);
+    selected->risk_manager().clear();
     co_return json{{"success", true}, {"rules", 0}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::risk_add(RiskRuleRequest request) {
+asio::awaitable<json> HttpServer::RouteHandlers::risk_add(Query<AccountQuery> query,
+                                                          RiskRuleRequest     request) {
+    TqApi*                    selected = account_api(query.value.account);
     std::shared_ptr<RiskRule> rule;
     if (request.type == "OPEN_COUNT_LIMIT") {
         rule = std::make_shared<OpenCountsLimitRule>(request.limit, request.symbols);
@@ -514,9 +566,9 @@ asio::awaitable<json> HttpServer::RouteHandlers::risk_add(RiskRuleRequest reques
     } else {
         throw HttpError{http::status::bad_request, json{{"error", "unknown risk rule"}}};
     }
-    api_->risk_manager().add(rule);
+    selected->risk_manager().add(rule);
     co_return json{
-        {"success", true}, {"type", request.type}, {"rules", api_->risk_manager().size()}};
+        {"success", true}, {"type", request.type}, {"rules", selected->risk_manager().size()}};
 }
 
 asio::awaitable<Response> HttpServer::RouteHandlers::websocket_upgrade() {
@@ -610,27 +662,39 @@ void HttpServer::setup_routes() {
          make_entry([handlers](std::string order_id, Query<AccountQuery> query) {
              return handlers->cancel_order(std::move(order_id), std::move(query));
          })},
-        {http::verb::post, "/task/target", make_entry([handlers](TargetTaskRequest request) {
-             return handlers->target_create(std::move(request));
+        {http::verb::post,
+         "/task/target",
+         make_entry([handlers](Query<AccountQuery> query, TargetTaskRequest request) {
+             return handlers->target_create(std::move(query), std::move(request));
          })},
-        {http::verb::delete_, "/task/target/{id}", make_entry([handlers](std::string task_id) {
-             return handlers->target_delete(std::move(task_id));
+        {http::verb::delete_,
+         "/task/target/{id}",
+         make_entry([handlers](std::string task_id, Query<AccountQuery> query) {
+             return handlers->target_delete(std::move(task_id), std::move(query));
          })},
-        {http::verb::post, "/task/order", make_entry([handlers](OrderTaskRequest request) {
-             return handlers->order_task_create(std::move(request));
+        {http::verb::post,
+         "/task/order",
+         make_entry([handlers](Query<AccountQuery> query, OrderTaskRequest request) {
+             return handlers->order_task_create(std::move(query), std::move(request));
          })},
-        {http::verb::delete_, "/task/order/{id}", make_entry([handlers](std::string task_id) {
-             return handlers->order_task_delete(std::move(task_id));
+        {http::verb::delete_,
+         "/task/order/{id}",
+         make_entry([handlers](std::string task_id, Query<AccountQuery> query) {
+             return handlers->order_task_delete(std::move(task_id), std::move(query));
          })},
-        {http::verb::get, "/tasks", make_entry([handlers]() { return handlers->tasks(); })},
-        {http::verb::get, "/risk/status", make_entry([handlers]() {
-             return handlers->risk_status();
+        {http::verb::get, "/tasks", make_entry([handlers](Query<AccountQuery> query) {
+             return handlers->tasks(std::move(query));
          })},
-        {http::verb::delete_, "/risk/rules", make_entry([handlers]() {
-             return handlers->risk_clear();
+        {http::verb::get, "/risk/status", make_entry([handlers](Query<AccountQuery> query) {
+             return handlers->risk_status(std::move(query));
          })},
-        {http::verb::post, "/risk/rules", make_entry([handlers](RiskRuleRequest request) {
-             return handlers->risk_add(std::move(request));
+        {http::verb::delete_, "/risk/rules", make_entry([handlers](Query<AccountQuery> query) {
+             return handlers->risk_clear(std::move(query));
+         })},
+        {http::verb::post,
+         "/risk/rules",
+         make_entry([handlers](Query<AccountQuery> query, RiskRuleRequest request) {
+             return handlers->risk_add(std::move(query), std::move(request));
          })},
         {http::verb::get, ws_path, make_entry([handlers]() {
              return handlers->websocket_upgrade();

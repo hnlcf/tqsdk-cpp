@@ -48,6 +48,7 @@ import { DEFAULT_WASM_PLUGINS } from "./indicators/wasm/registry";
 import { applyWasmPreference, readWasmPreferences, saveWasmPreferences } from "./indicators/wasm/preferences";
 import {
   seriesFromManifest,
+  type WasmManifest,
   type WasmOutputConfig,
   type WasmPluginView,
   type WasmSeries,
@@ -153,6 +154,10 @@ export default function App() {
 
   let stream: MarketStream | undefined;
   const wasmHosts = new Map<string, WasmIndicatorHost>();
+  const wasmOutputCache = new Map<
+    string,
+    { key: string; outputs: Float64Array[]; manifest: WasmManifest }
+  >();
   let wasmTimer: number | undefined;
   let loadGeneration = 0;
   let snapshotLoaded = false;
@@ -534,7 +539,10 @@ export default function App() {
     }
     const bars = chartBars();
     const active = wasmPlugins().filter(
-      (plugin) => plugin.enabled && plugin.status === "ready",
+      (plugin) =>
+        plugin.enabled &&
+        plugin.status === "ready" &&
+        plugin.outputs.some((output) => plugin.outputConfig[output.id]?.visible !== false),
     );
     if (bars.length === 0 || active.length === 0) {
       setWasmSeries([]);
@@ -545,6 +553,15 @@ export default function App() {
       wasmTimer = undefined;
       const latest = chartBars();
       if (latest.length === 0) return;
+      const barsKey = [
+        latest.length,
+        latest[0]?.time ?? 0,
+        latest.at(-1)?.time ?? 0,
+        latest.at(-1)?.close ?? 0,
+        latest.at(-1)?.high ?? 0,
+        latest.at(-1)?.low ?? 0,
+        latest.at(-1)?.volume ?? 0,
+      ].join(":");
       void Promise.all(
         snapshot.map(async (plugin) => {
           const host = wasmHosts.get(plugin.id);
@@ -554,13 +571,22 @@ export default function App() {
             plugin.values.length === manifest.params.length
               ? plugin.values
               : manifest.params.map((param) => param.default);
+          const key = `${selected()}|${activeDuration()}|${barsKey}|${values.join(",")}`;
+          const cache = wasmOutputCache.get(plugin.id);
+          let outputs: Float64Array[];
           try {
-            const outputs = await host.compute(latest, values);
+            if (cache?.key === key && cache.manifest === manifest) {
+              outputs = cache.outputs;
+            } else {
+              outputs = await host.compute(latest, values);
+              wasmOutputCache.set(plugin.id, { key, outputs, manifest });
+            }
             return seriesFromManifest(manifest, outputs, values, plugin.outputConfig).map((item) => ({
               ...item,
               id: `${manifest.id}:${item.id}`,
             }));
           } catch {
+            wasmOutputCache.delete(plugin.id);
             return [] as WasmSeries[];
           }
         }),

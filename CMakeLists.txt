@@ -263,6 +263,7 @@ if(TQSDK_BUILD_TESTS)
         tests/ipc/uds_channel_test.cpp
         tests/ipc/tcp_channel_test.cpp
         tests/ipc/protocol_test.cpp
+        tests/ipc/protocol_fuzz_test.cpp
         tests/ipc/protocol_e2e_test.cpp
         tests/ipc/stream_seq_test.cpp
         tests/ipc/ipc_session_test.cpp
@@ -283,6 +284,7 @@ if(TQSDK_BUILD_TESTS)
         tests/gateway/tq_md_protocol_test.cpp
         tests/instrument/instrument_catalog_test.cpp
         tests/serve/ws_protocol_test.cpp
+        tests/serve/ws_fuzz_test.cpp
         tests/serve/ws_stream_test.cpp
         tests/serve/ws_entity_filter_test.cpp
         tests/serve/catalog_http_test.cpp

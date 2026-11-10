@@ -36,7 +36,7 @@ HttpServer::HttpServer(TqApi*                api,
     ws_default_ = ws_;
     if (accounts_ != nullptr) {
         const WsOptions hub_options = ws_->options();
-        const auto     default_id   = accounts_->default_account_id();
+        const auto      default_id  = accounts_->default_account_id();
         for (const auto& id : accounts_->account_ids()) {
             auto account = accounts_->find_account(id);
             if (!account)
@@ -45,8 +45,7 @@ HttpServer::HttpServer(TqApi*                api,
             if (account.get() == api_) {
                 hub = ws_;
             } else {
-                hub = std::make_shared<WebSocketHub>(
-                    account.get(), data_ex_, io_ex_, hub_options);
+                hub = std::make_shared<WebSocketHub>(account.get(), data_ex_, io_ex_, hub_options);
                 hub->set_catalog(catalog_);
             }
             ws_hubs_[id] = hub;
@@ -120,6 +119,7 @@ void HttpServer::stop() noexcept {
     }
     target_tasks_.clear();
     order_tasks_.clear();
+    task_accounts_.clear();
     if (ws_) {
         ws_->stop();
     }
@@ -183,7 +183,7 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
             auto       hub   = ws_default_;
             if (query.contains("account")) {
                 const auto account_id = query["account"].get<std::string>();
-                hub                    = ws_hub_for(account_id);
+                hub                   = ws_hub_for(account_id);
             }
             co_await asio::dispatch(data_ex_, asio::use_awaitable);
 

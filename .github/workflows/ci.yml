@@ -1,0 +1,93 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  cpp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      VCPKG_MANIFEST_DIR: ${{ github.workspace }}/ci
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libssl-dev curl zip unzip tar
+
+      - name: Checkout and bootstrap vcpkg
+        run: |
+          if [ ! -d "$VCPKG_ROOT" ]; then
+            git clone --depth 1 https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          fi
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Cache vcpkg downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg
+            build/vcpkg_installed
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('ci/vcpkg.json') }}
+
+      - name: Configure core tests
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_MANIFEST_DIR="$VCPKG_MANIFEST_DIR" \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DTQSDK_BUILD_TESTS=ON \
+            -DTQSDK_ENABLE_CTP=OFF \
+            -DTQSDK_BUILD_APPS=ON \
+            -DTQSDK_BUILD_EXAMPLES=OFF
+
+      - name: Build
+        run: cmake --build build -j 4
+
+      - name: Run C++ tests
+        run: ctest --test-dir build --output-on-failure -j 2
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-test-logs
+          path: build/Testing/Temporary/
+          if-no-files-found: ignore
+
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.16.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install web dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Web checks
+        working-directory: web
+        run: |
+          pnpm typecheck
+          pnpm test
+          pnpm build
+
+      - name: WASM ABI smoke
+        run: node scripts/check_wasm_plugins.mjs

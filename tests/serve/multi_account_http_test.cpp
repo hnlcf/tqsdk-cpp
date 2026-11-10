@@ -17,9 +17,11 @@ using json      = nlohmann::json;
 
 namespace {
 
-asio::awaitable<std::pair<unsigned, json>>
-request_json(asio::any_io_executor ex, std::uint16_t port, http::verb method, std::string target,
-             json body = nullptr) {
+asio::awaitable<std::pair<unsigned, json>> request_json(asio::any_io_executor ex,
+                                                        std::uint16_t         port,
+                                                        http::verb            method,
+                                                        std::string           target,
+                                                        json                  body = nullptr) {
     tcp::resolver     resolver(ex);
     beast::tcp_stream stream(ex);
     const auto        results =
@@ -69,18 +71,18 @@ TEST(MultiAccountHttp, RoutesTradingAndSnapshotsByAccount) {
     ASSERT_TRUE(manager.add_account("A", a.api));
     ASSERT_TRUE(manager.add_account("B", b.api));
 
-    tqsdk::serve::HttpServer server(a.api.get(), io.get_executor(), {}, io.get_executor(),
-                                    nullptr, &manager);
+    tqsdk::serve::HttpServer server(
+        a.api.get(), io.get_executor(), {}, io.get_executor(), nullptr, &manager);
     server.listen("127.0.0.1", 0);
 
-    unsigned       accounts_status = 0;
-    json           accounts_body;
-    unsigned       order_status = 0;
-    json           order_body;
-    unsigned       b_positions_status = 0;
-    json           b_positions_body;
-    unsigned       a_positions_status = 0;
-    json           a_positions_body;
+    unsigned accounts_status = 0;
+    json     accounts_body;
+    unsigned order_status = 0;
+    json     order_body;
+    unsigned b_positions_status = 0;
+    json     b_positions_body;
+    unsigned a_positions_status = 0;
+    json     a_positions_body;
     asio::co_spawn(
         io,
         [&]() -> asio::awaitable<void> {
@@ -89,14 +91,16 @@ TEST(MultiAccountHttp, RoutesTradingAndSnapshotsByAccount) {
             accounts_status = r1.first;
             accounts_body   = std::move(r1.second);
 
-            auto r2 = co_await request_json(
-                io.get_executor(), server.port(), http::verb::post, "/order?account=B",
-                json{{"instrument_id", "SHFE.rb2701"},
-                     {"direction", "BUY"},
-                     {"offset", "OPEN"},
-                     {"price_type", "ANY"},
-                     {"limit_price", 0},
-                     {"volume", 1}});
+            auto r2      = co_await request_json(io.get_executor(),
+                                                 server.port(),
+                                                 http::verb::post,
+                                                 "/order?account=B",
+                                                 json{{"instrument_id", "SHFE.rb2701"},
+                                                      {"direction", "BUY"},
+                                                      {"offset", "OPEN"},
+                                                      {"price_type", "ANY"},
+                                                      {"limit_price", 0},
+                                                      {"volume", 1}});
             order_status = r2.first;
             order_body   = std::move(r2.second);
 
@@ -112,7 +116,8 @@ TEST(MultiAccountHttp, RoutesTradingAndSnapshotsByAccount) {
             co_return;
         },
         [&](std::exception_ptr ep) {
-            if (ep) std::rethrow_exception(ep);
+            if (ep)
+                std::rethrow_exception(ep);
             io.stop();
         });
     io.run();
@@ -136,14 +141,14 @@ TEST(MultiAccountHttp, RoutesTradingAndSnapshotsByAccount) {
     io.run_for(std::chrono::milliseconds(100));
 }
 
-
 namespace {
 
 namespace beast_ws = boost::beast::websocket;
 
 class WsClient {
 public:
-    explicit WsClient(asio::io_context& ctx) : ws_(ctx) {}
+    explicit WsClient(asio::io_context& ctx)
+        : ws_(ctx) {}
 
     asio::awaitable<void> connect(std::string host, uint16_t port, std::string path) {
         asio::ip::tcp::endpoint ep{asio::ip::make_address(host), port};
@@ -166,9 +171,8 @@ public:
 
     asio::awaitable<void> close() {
         boost::system::error_code ec;
-        co_await ws_.async_close(
-            beast_ws::close_reason(beast_ws::close_code::normal),
-            asio::redirect_error(asio::use_awaitable, ec));
+        co_await ws_.async_close(beast_ws::close_reason(beast_ws::close_code::normal),
+                                 asio::redirect_error(asio::use_awaitable, ec));
     }
 
 private:
@@ -197,8 +201,8 @@ TEST(MultiAccountHttp, WebSocketRoutesByAccount) {
     ASSERT_TRUE(manager.add_account("A", a.api));
     ASSERT_TRUE(manager.add_account("B", b.api));
 
-    tqsdk::serve::HttpServer server(a.api.get(), io.get_executor(), {}, io.get_executor(),
-                                    nullptr, &manager);
+    tqsdk::serve::HttpServer server(
+        a.api.get(), io.get_executor(), {}, io.get_executor(), nullptr, &manager);
     server.listen("127.0.0.1", 0);
 
     json                      b_snapshot;
@@ -207,22 +211,24 @@ TEST(MultiAccountHttp, WebSocketRoutesByAccount) {
     asio::co_spawn(
         io,
         [&]() -> asio::awaitable<void> {
-            order_result = co_await request_json(
-                io.get_executor(), server.port(), http::verb::post, "/order?account=B",
-                json{{"instrument_id", "SHFE.rb2701"},
-                     {"direction", "BUY"},
-                     {"offset", "OPEN"},
-                     {"price_type", "ANY"},
-                     {"limit_price", 0},
-                     {"volume", 1}});
+            order_result = co_await request_json(io.get_executor(),
+                                                 server.port(),
+                                                 http::verb::post,
+                                                 "/order?account=B",
+                                                 json{{"instrument_id", "SHFE.rb2701"},
+                                                      {"direction", "BUY"},
+                                                      {"offset", "OPEN"},
+                                                      {"price_type", "ANY"},
+                                                      {"limit_price", 0},
+                                                      {"volume", 1}});
 
             WsClient b_ws(io);
             co_await b_ws.connect("127.0.0.1", server.port(), "/stream?account=B");
             co_await b_ws.read_json(); // welcome
             co_await b_ws.send_json(json{{"op", "subscribe"},
-                                          {"symbols", json::array()},
-                                          {"klines", json::array()},
-                                          {"topics", {"account", "positions"}}});
+                                         {"symbols", json::array()},
+                                         {"klines", json::array()},
+                                         {"topics", {"account", "positions"}}});
             b_snapshot = co_await read_snapshot(b_ws);
             co_await b_ws.close();
 
@@ -230,15 +236,16 @@ TEST(MultiAccountHttp, WebSocketRoutesByAccount) {
             co_await a_ws.connect("127.0.0.1", server.port(), "/stream?account=A");
             co_await a_ws.read_json(); // welcome
             co_await a_ws.send_json(json{{"op", "subscribe"},
-                                          {"symbols", json::array()},
-                                          {"klines", json::array()},
-                                          {"topics", {"account", "positions"}}});
+                                         {"symbols", json::array()},
+                                         {"klines", json::array()},
+                                         {"topics", {"account", "positions"}}});
             a_snapshot = co_await read_snapshot(a_ws);
             co_await a_ws.close();
             co_return;
         },
         [&](std::exception_ptr ep) {
-            if (ep) std::rethrow_exception(ep);
+            if (ep)
+                std::rethrow_exception(ep);
             io.stop();
         });
     io.run();
@@ -249,6 +256,94 @@ TEST(MultiAccountHttp, WebSocketRoutesByAccount) {
     EXPECT_EQ(b_snapshot["positions"]["SHFE.rb2701"]["volume_long"], 1);
     ASSERT_TRUE(a_snapshot.contains("positions"));
     EXPECT_FALSE(a_snapshot["positions"].contains("SHFE.rb2701"));
+
+    io.restart();
+    server.stop();
+    manager.close();
+    io.run_for(std::chrono::milliseconds(100));
+}
+
+TEST(MultiAccountHttp, TasksAndRiskAreAccountScoped) {
+    asio::io_context io;
+    auto             a = make_account(io, 1'000'000);
+    auto             b = make_account(io, 2'000'000);
+
+    tqsdk::MultiAccountManager manager;
+    ASSERT_TRUE(manager.add_account("A", a.api));
+    ASSERT_TRUE(manager.add_account("B", b.api));
+    tqsdk::serve::HttpServer server(
+        a.api.get(), io.get_executor(), {}, io.get_executor(), nullptr, &manager);
+    server.listen("127.0.0.1", 0);
+
+    unsigned    create_status = 0;
+    json        create_body;
+    unsigned    b_tasks_status = 0;
+    json        b_tasks_body;
+    unsigned    a_tasks_status = 0;
+    json        a_tasks_body;
+    unsigned    b_risk_status = 0;
+    json        b_risk_body;
+    unsigned    a_risk_status = 0;
+    json        a_risk_body;
+    std::string task_id;
+
+    asio::co_spawn(
+        io,
+        [&]() -> asio::awaitable<void> {
+            auto r1 = co_await request_json(
+                io.get_executor(),
+                server.port(),
+                http::verb::post,
+                "/task/target?account=B",
+                json{{"symbol", "SHFE.rb2701"}, {"target_volume", 0}, {"mode", "ACTIVE"}});
+            create_status = r1.first;
+            create_body   = std::move(r1.second);
+            task_id       = create_body.value("task_id", "");
+
+            auto r2 = co_await request_json(
+                io.get_executor(), server.port(), http::verb::get, "/tasks?account=B");
+            b_tasks_status = r2.first;
+            b_tasks_body   = std::move(r2.second);
+
+            auto r3 = co_await request_json(
+                io.get_executor(), server.port(), http::verb::get, "/tasks?account=A");
+            a_tasks_status = r3.first;
+            a_tasks_body   = std::move(r3.second);
+
+            auto r4 = co_await request_json(
+                io.get_executor(),
+                server.port(),
+                http::verb::post,
+                "/risk/rules?account=B",
+                json{{"type", "ORDER_RATE_LIMIT"}, {"limit", 1}, {"window_ms", 1000}});
+            b_risk_status = r4.first;
+            b_risk_body   = std::move(r4.second);
+
+            auto r5 = co_await request_json(
+                io.get_executor(), server.port(), http::verb::get, "/risk/status?account=A");
+            a_risk_status = r5.first;
+            a_risk_body   = std::move(r5.second);
+            co_return;
+        },
+        [&](std::exception_ptr ep) {
+            if (ep)
+                std::rethrow_exception(ep);
+            io.stop();
+        });
+    io.run();
+
+    EXPECT_EQ(create_status, 200u) << create_body.dump();
+    ASSERT_FALSE(task_id.empty());
+    EXPECT_EQ(create_body["account"], "B");
+    EXPECT_EQ(b_tasks_status, 200u) << b_tasks_body.dump();
+    ASSERT_EQ(b_tasks_body["targets"].size(), 1u);
+    EXPECT_EQ(b_tasks_body["targets"][0]["task_id"], task_id);
+    EXPECT_EQ(a_tasks_status, 200u) << a_tasks_body.dump();
+    EXPECT_EQ(a_tasks_body["targets"].size(), 0u);
+    EXPECT_EQ(b_risk_status, 200u) << b_risk_body.dump();
+    EXPECT_EQ(b_risk_body["rules"], 1u);
+    EXPECT_EQ(a_risk_status, 200u) << a_risk_body.dump();
+    EXPECT_EQ(a_risk_body["rules"], 0u);
 
     io.restart();
     server.stop();

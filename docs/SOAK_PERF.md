@@ -376,3 +376,15 @@ CTP session monitor：
   unexpected_gaps=0
   fatal=""
 ```
+
+
+## 2026-11-10 P7.5 基线
+
+- WASM 指标：`node scripts/bench_wasm_plugins.mjs`，5000 根 × 100 次；7 插件
+  合计约 0.48ms/次，详见 [PERFORMANCE_BASELINE.md](PERFORMANCE_BASELINE.md)。
+- HTTP/WS：`python3 scripts/bench_http_ws.py --base ... --requests 30 --ws-seconds 2`；
+  本机 quote p50 0.073ms、kline p50 2.56ms、WS 首帧 snapshot 15.09ms。
+- 新增 5s 两进程回归：HTTP 34,739 / WS 5,406 / order 1 / 0 fatal；
+  24h/72h 通过 `scripts/soak_long_job.sh` 启动，不能把 5s 结果当作长稳结论。
+- 前端优化：全隐藏指标跳过计算；按 chart+bars+参数缓存 WASM 输出，颜色/线型/
+  显隐变化不再重跑数值计算。

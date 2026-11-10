@@ -135,6 +135,8 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/PROTOCOLS.md](docs/PROTOCOLS.md) — IPC/REST/WS 协议
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — 构建、配置、运行、验收、诊断
 - [docs/ROADMAP.md](docs/ROADMAP.md) — 后续计划
+- [docs/PERFORMANCE_BASELINE.md](docs/PERFORMANCE_BASELINE.md) — WASM/HTTP/WS 性能基线
+- [docs/REFACTOR_ASSESSMENT.md](docs/REFACTOR_ASSESSMENT.md) — 前后端重构评估
 
 专题：
 
@@ -164,11 +166,15 @@ docs/             架构、模块、信息流、状态机、运维、专题
 
 ## 当前状态
 
-- `ctest`：338 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
-- Web：`pnpm typecheck`、`pnpm test`、`pnpm build` 通过，连 node 的
-  K 线/分时/指标/盘口/三键下单/合并持仓/委托/成交/权益已完成浏览器验证；
+- `ctest`：344 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
+- Web：`pnpm typecheck`、`pnpm test`（16 项）、`pnpm build`、Playwright E2E 通过；
+  K 线/分时/WASM 指标/盘口/三键下单/合并持仓/委托/成交/权益已完成浏览器验证；
+- 多账户：REST/WS/task/risk 均支持 `?account=`，双 Sim 账户集成测试通过；
+- 指标配置/启用状态/输出样式/动态均线和 panel 尺寸浏览器本地持久化；
 - 合约目录：支持 TqAuth Bearer 下载；本地全量目录加载 29,439 条已验证；
 - SimTd 24h soak：完成，`http_err=0`、`ws_err=0`、`fatal=""`；
+- P7.5 基线：WASM 7 插件约 0.48ms/5000 根，HTTP/WS 数据见
+  [docs/PERFORMANCE_BASELINE.md](docs/PERFORMANCE_BASELINE.md)；
 - SimNow CTP 写验收：15/15 PASS；
 - 平昨自动化：已完成；
 - CTP session monitor：支持结算预期断线；

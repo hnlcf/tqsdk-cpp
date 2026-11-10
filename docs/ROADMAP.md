@@ -20,14 +20,14 @@
 ## 1.1 当前剩余优先级
 
 1. **TqTdGateway**：消费动态 TD URL，实现 TQ 交易网关登录、下单/撤单、成交/持仓 diff、重连对账；需要官方协议/可用测试端点。
-2. **WebSocket 多账户过滤**：当前 Web 账户选择器对非默认账户走 REST，WS 仍只提供默认账户。
-3. **账户级 task/risk**：把 `/task/*`、`/risk/*` 扩展到 `?account=`，并做每账户独立规则。
-4. **真实多账户验收**：启动两个 gw/账户，验证 `/accounts`、下单路由、持仓隔离与故障切换。
+2. ✅ **WebSocket 多账户过滤**：`/stream?account=` 选择每账户独立 hub；Web 账户切换会重连并带账户订阅。
+3. ✅ **账户级 task/risk**：`/task/*`、`/risk/*` 支持 `?account=`，任务按账户过滤，风控使用对应 TqApi。
+4. **真实多账户验收**：启动两个 gw/账户，验证 `/accounts`、下单路由、持仓隔离与故障切换；已有双 Sim 账户 HTTP/WS/task/risk 集成测试，真实 gw 尚未跑。
 5. **前端 E2E/视觉回归**：Playwright 覆盖搜索选合约、切换合约/周期、K 线缩放、账户切换、断线重连。
-6. **UBSan / IPC-WS fuzz / 24h-72h soak / GitHub CI**；已有本地 `ci_local.sh`、ASan、TSan。
+6. ✅ **IPC/WS fuzz 冒烟 + 24h-72h soak 脚本 + GitHub Actions workflow**；远程 runner 尚未实际执行，真实 72h 尚未跑。
 7. **CTP 连续 5 个交易日 soak 与交易日矩阵**；真实交易日不可压缩。
 8. **生产化**：TLS/认证（node 目前 loopback）、systemd/supervisor、日志脱敏、审计。
-9. **性能/协议**：MessagePack/共享内存、WS 二进制行情、前端虚拟列表与指标 Worker。
+9. **性能/协议**：基线见 [PERFORMANCE_BASELINE.md](PERFORMANCE_BASELINE.md)；WS binary/MessagePack/虚拟列表按 profile 决策。
 
 ## 2. P0 执行/风控能力（已实现）
 
@@ -46,7 +46,8 @@
   - [ORDER_TASKS.md](ORDER_TASKS.md)
   - [RISK_CONTROL.md](RISK_CONTROL.md)
 
-**下一轮增强**：TargetPosTask 追价节流/任务统计、交易日历日切、多账户风控。
+**下一轮增强**：TargetPosTask 追价节流/任务统计、交易日历日切。多账户风控已接入
+`/risk/*?account=`；策略任务按账户隔离已接入。
 
 ## 2. 下一优先级（P6）
 
@@ -75,10 +76,10 @@
 
 ### P6.3 长稳与故障
 
-- 60s 短 soak 已验证；待做 24h/72h soak 归档自动化；
-- ✅ ASan/TSan/UBSan 本地全量通过；待做 GitHub CI runner；
-- IPC/WS fuzz：
-  - 半帧/超大长度/非法 JSON/重复 seq/epoch 回绕；
+- ✅ 24h SimTd soak 已归档；✅ 72h 包装脚本 `scripts/soak_long_job.sh` 已就绪，真实 72h 待专用环境执行；
+- ✅ ASan/TSan/UBSan 本地全量通过；✅ GitHub Actions workflow 已添加，远程 runner 待实际触发；
+- ✅ IPC/WS fuzz 冒烟测试已加入 ctest；
+- 待补充：帧长度半包/超大长度网络级 fuzz、重复 seq/epoch 回绕；
 - CTP 查询 watchdog 抖动注入；
 - 内存/FD/线程基线告警。
 
@@ -89,17 +90,19 @@
 - ✅ P1-3：TradingStatus、`/trading-status`、Tq MD 动态 URL、TD URL 解析诊断；
 - ✅ P2：`MultiAccountManager`（每账户独立 TqApi）、独立 bar `BacktestEngine`。
 - ✅ node REST 多账户路由、TickStore 统一行情 SQLite、tick 级回测；
-- 待集成：TqTdGateway、WebSocket 多账户过滤、账户级 task/risk。
+- ✅ WebSocket 多账户过滤、账户级 task/risk 已接入；
+- 待集成：TqTdGateway。
 
 ## 3. UI 与可观测性
 
 - TQSDK Board：多自选模糊搜索/K 线/分时/盘口/快捷下单/合并持仓/委托/成交/权益已落地；
-- 指标参数/颜色设置（MA/BOLL/MACD/RSI）已落地；
+- 指标参数/颜色设置、动态均线、输出样式和启用状态本地持久化已落地；
 - ✅ WASM 指标插件：自动扫描注册、浮动选择器、逐输出颜色/线型/显隐、EMA/MA 动态均线；MA/BOLL/MACD/RSI/ATR/Donchian；
 - ✅ 前端 Playwright E2E（搜索/大小写/WASM/下单板按钮）；
 - TqAuth 快期认证与目录 Bearer header 已接入；
 - ✅ 顶栏账户选择器、运维页、持仓固定列宽、K 线切换缩放/本地时间；
-- 图表画线 primitive/overlay、指标增量计算/多插件并行；
+- ✅ 指标 Worker 并行、全隐藏跳过、输出缓存、自选/侧栏/持仓表尺寸持久化；
+- 图表画线 primitive/overlay、指标增量计算（按 profile）；
 - 前端 Playwright 端到端扩展（登录/订阅/真实下单/重连/视觉回归）；
 - 虚拟列表、列宽/排序持久化；
 - 期权希腊字母、波动率与更完整期权分析；

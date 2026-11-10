@@ -218,15 +218,16 @@ private:
     std::uint64_t                                                     task_seq_ = 0;
     std::unordered_map<std::string, std::shared_ptr<TargetPosTask>>   target_tasks_;
     std::unordered_map<std::string, std::shared_ptr<InsertOrderTask>> order_tasks_;
+    std::unordered_map<std::string, std::string>                      task_accounts_;
 
-    asio::any_io_executor         io_ex_;
-    asio::any_io_executor         data_ex_;
-    tcp::acceptor                 acceptor_;
-    uint16_t                      port_{0};
-    std::atomic<bool>             stopped_{false};
-    Router                        router_;
-    std::shared_ptr<WebSocketHub> ws_;
-    std::shared_ptr<WebSocketHub> ws_default_;
+    asio::any_io_executor                                          io_ex_;
+    asio::any_io_executor                                          data_ex_;
+    tcp::acceptor                                                  acceptor_;
+    uint16_t                                                       port_{0};
+    std::atomic<bool>                                              stopped_{false};
+    Router                                                         router_;
+    std::shared_ptr<WebSocketHub>                                  ws_;
+    std::shared_ptr<WebSocketHub>                                  ws_default_;
     std::unordered_map<std::string, std::shared_ptr<WebSocketHub>> ws_hubs_;
 
     static constexpr std::size_t kMaxBody = constants::kMaxHttpBodyBytes;

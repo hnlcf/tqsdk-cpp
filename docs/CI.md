@@ -36,8 +36,20 @@ artifacts/p6_campaign_20261109/p63_asan_build.log
 artifacts/tsan/tsan.log
 ```
 
-2026-11-09 当前结果：ASan 338/338、TSan 338/338、UBSan 338/338（2 项 TqMdNetwork 网络测试按环境跳过；
-新增 Tick UI 与 WASM ABI 测试后 Web 为 16 项，另有 WASM 插件 ABI 脚本）。
+2026-11-10 当前结果：ASan 344/344、TSan 344/344、UBSan 344/344；新增多账户 WS、
+账户级 task/risk、IPC/WS fuzz 后普通 CTest 为 344 项通过（2 项 TqMdNetwork
+网络测试按环境跳过）；Web Vitest 16 项，Playwright E2E 1 项，另有 WASM 插件 ABI 脚本。
+
+### GitHub Actions
+
+`.github/workflows/ci.yml` 提供两条独立流水线：
+
+- `cpp`：Ubuntu + vcpkg（`ci/vcpkg.json` 只装核心依赖，不拉 Qt）构建并跑 CTest；
+- `web`：pnpm/typecheck/test/build + WASM ABI 脚本。
+
+`ci/vcpkg.json` 是 CI 专用 manifest，避免 CI 为了核心测试安装完整 Qt/UI 依赖；
+UI/桌面构建仍在本地/发布环境执行。GitHub 流水线尚未在本机实际触发，不能把“workflow
+文件已存在”写成“远程 CI 已通过”。
 
 ## 3. 短 soak
 
@@ -55,7 +67,22 @@ python3 scripts/soak_two_process.py \
 短 soak 会覆盖并发 REST、WS、SimTd 下单/撤单和 gw 重启重连；24h soak 使用默认
 `--duration 86400`。CI 只跑短版本，长稳在专用环境执行。
 
-## 4. 说明
+## 4. Fuzz 与长稳
+
+- `tests/ipc/protocol_fuzz_test.cpp`：确定性随机 IPC body/JSON/MessagePack 输入；
+- `tests/serve/ws_fuzz_test.cpp`：随机 WS 客户端/服务端文本和深嵌套输入；
+- 两者在普通 ctest 和 sanitizer 构建中都会执行；
+- 24h/72h 两进程长稳：
+
+```bash
+./scripts/soak_long_job.sh --duration 86400
+./scripts/soak_long_job.sh --duration 259200
+```
+
+输出包含 `soak_*.json`、CSV 和进程日志；真实 24h/72h 必须在专用环境执行并归档，
+短 soak 不能替代。
+
+## 5. 说明
 
 - sanitizer 构建独立目录，不污染 `build-ui`；
 - CI 脚本不包含凭据；真实 SimNow/CTP 测试另行使用 `run/live` 配置；
