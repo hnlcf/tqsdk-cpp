@@ -100,16 +100,13 @@ handler 自己处理空账户、错误 404 和 task owner map。这样后续动�
 级指标/限流不会重复写。当前 `account_scope` 已完成；task map 仍是 server 级全局
 map + account owner，下一步可随动态账户一起收敛。
 
-### 4.2 WebSocket hub 映射是启动期静态的
+### 4.2 WebSocket hub 生命周期（2026-11-10 已改为懒创建）
 
-现在 `HttpServer` 构造时按 `MultiAccountManager::account_ids()` 建 hub；node 当前
-在构造前完成账户加载，所以可用。若未来运行中增删账户，需要：
+`HttpServer` 不再在构造时预先创建所有账户 hub；收到 `/stream?account=` 时在
+`data_ex_` 上解析账户并按需创建 hub，避免启动期静态枚举。
 
-- `AccountRouter` 提供 `add/remove_account` 回调；
-- hub 生命周期跟随账户，而不是 HttpServer 构造；
-- 关闭连接时按账户引用计数释放订阅。
-
-这是**小规模重构**，不需要改协议。
+仍需补：运行中新增账户的完整验收，以及账户被 `MultiAccountManager::remove_account()`
+后主动关闭对应 hub/客户端；当前 hub 会保留到 HttpServer 停止。
 
 ### 4.3 路由文件仍可继续切分
 

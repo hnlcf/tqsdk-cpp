@@ -204,9 +204,9 @@ private:
     AccountScope account_scope(std::string_view account_id) const;
     TqApi*       account_api(std::string_view account_id) const;
 
-    /// Select the WebSocket hub for `?account=...`; no query uses the default
-    /// account. Returns nullptr for an unknown account.
-    std::shared_ptr<WebSocketHub> ws_hub_for(std::string_view account_id) const;
+    /// Lazily create/select the hub for a resolved account. Hubs are created on
+    /// data_ex_ so the map is serialized with client/subscription mutations.
+    std::shared_ptr<WebSocketHub> ensure_ws_hub(const AccountScope& scope);
 
     /// 路由 handler 集合；把大 lambda 从 setup_routes 中移出。
     struct RouteHandlers;
@@ -230,7 +230,6 @@ private:
     std::atomic<bool>                                              stopped_{false};
     Router                                                         router_;
     std::shared_ptr<WebSocketHub>                                  ws_;
-    std::shared_ptr<WebSocketHub>                                  ws_default_;
     std::unordered_map<std::string, std::shared_ptr<WebSocketHub>> ws_hubs_;
 
     static constexpr std::size_t kMaxBody = constants::kMaxHttpBodyBytes;
