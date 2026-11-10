@@ -222,3 +222,46 @@ export function readIndicators(fallback: IndicatorConfig): IndicatorConfig {
 export function saveIndicators(config: IndicatorConfig): void {
   writeJson(KEY_INDICATORS, config);
 }
+
+
+export interface WorkspaceLayout {
+  watchlistWidth: number;
+  rightRailWidth: number;
+  tableHeight: number;
+}
+
+const KEY_WORKSPACE_LAYOUT = "tqsdk.workspace.layout.v1";
+export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayout = {
+  watchlistWidth: 236,
+  rightRailWidth: 294,
+  tableHeight: 260,
+};
+
+function clamp(value: unknown, min: number, max: number, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(max, Math.max(min, Math.round(value)))
+    : fallback;
+}
+
+export function readWorkspaceLayout(): WorkspaceLayout {
+  const raw = readJson<Partial<WorkspaceLayout>>(KEY_WORKSPACE_LAYOUT, {});
+  return {
+    watchlistWidth: clamp(
+      raw.watchlistWidth,
+      180,
+      420,
+      DEFAULT_WORKSPACE_LAYOUT.watchlistWidth,
+    ),
+    rightRailWidth: clamp(
+      raw.rightRailWidth,
+      220,
+      520,
+      DEFAULT_WORKSPACE_LAYOUT.rightRailWidth,
+    ),
+    tableHeight: clamp(raw.tableHeight, 120, 520, DEFAULT_WORKSPACE_LAYOUT.tableHeight),
+  };
+}
+
+export function saveWorkspaceLayout(layout: WorkspaceLayout): void {
+  writeJson(KEY_WORKSPACE_LAYOUT, layout);
+}

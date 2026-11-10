@@ -180,10 +180,44 @@ button {
 
 .workspace {
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr) 294px;
-  gap: 12px;
+  grid-template-columns:
+    var(--watchlist-width, 236px) 5px minmax(0, 1fr) 5px
+    var(--right-rail-width, 294px);
+  gap: 8px;
   min-height: 540px;
   flex: 1;
+}
+
+.panel-resizer {
+  align-self: stretch;
+  border-radius: 4px;
+  background: transparent;
+  touch-action: none;
+  transition: background 120ms ease;
+}
+
+.panel-resizer:hover,
+.panel-resizer:active {
+  background: color-mix(in srgb, var(--blue) 55%, transparent);
+}
+
+.panel-resizer.vertical {
+  width: 5px;
+  cursor: col-resize;
+}
+
+.panel-resizer.horizontal {
+  height: 6px;
+  flex: 0 0 6px;
+  cursor: row-resize;
+}
+
+.trading-area {
+  min-height: 0;
+}
+
+.trading-area .trading-tables .table-scroll {
+  max-height: var(--table-max-height, 260px);
 }
 
 .panel {
@@ -802,6 +836,10 @@ tbody tr:hover {
 @media (max-width: 1180px) {
   .workspace {
     grid-template-columns: 190px minmax(0, 1fr) 260px;
+  }
+
+  .workspace > .panel-resizer.vertical {
+    display: none;
   }
 
   .quote-stats > div:nth-child(n + 3) {

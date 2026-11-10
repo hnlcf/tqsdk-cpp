@@ -391,20 +391,39 @@ pnpm e2e
 node scripts/check_wasm_plugins.mjs
   PASS atr / boll / donchian / ema6(8ch) / ma(8ch) / macd / rsi
 
-Vitest: 14/14
+Vitest: 16/16
 Playwright: 1/1
 ```
 
 Playwright 覆盖：
 
 - 浮动列表包含 EMA/MA/BOLL/MACD/RSI/ATR/Donchian，列表由 auto-registry 生成；
+- 指标启用/参数/输出样式/动态均线增删刷新后恢复；
 - 点击 EMA 进入详情，修改周期、线型颜色、添加/移除均线；
 - 默认图例包含 EMA5/10/20/60/120/200 和 MACD DIF/DEA/HIST；
 - 启用 MA 后出现 MA5；
 - 关闭 MACD DIF 输出后对应图例消失；
 - 自选大小写、下单板平多/平空不回归。
 
-## 12. 后续
+## 12. 本地持久化
+
+指标配置保存在浏览器 `localStorage`：
+
+```text
+key: tqsdk.wasm.indicators.v1
+```
+
+保存内容：
+
+- 每个插件是否启用；
+- 参数值；
+- 每个输出的显隐/颜色/线型/线宽；
+- 动态均线的隐藏/显示状态。
+
+坐标系恢复时会按 manifest 的 min/max 重新校验，非法颜色/线型/宽度会回退到默认值。
+这不是 cookie，也不会自动同步到其他浏览器或服务器。
+
+## 13. 后续
 
 - 增加 KDJ、CCI、OBV 等插件；
 - 将 EMA/MA 从 8 个槽位扩展为真正无上限的实例（需要动态输出 ABI 或多实例调度）；

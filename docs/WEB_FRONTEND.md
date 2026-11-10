@@ -42,6 +42,8 @@ env VITE_PROXY_TARGET=http://127.0.0.1:18082 pnpm dev
 - 支持 line/histogram/area/band/markers 和副图；
 - 默认启用 EMA 多均线（默认 6 条）和 MACD；其他插件在浮动列表中启用；
 - 指标设置中可修改 manifest 参数，并显示插件版本；
+- 指标启用状态、参数、输出颜色/线型/显隐、动态均线增删自动保存在浏览器 localStorage；
+- 自选列表宽度、右侧栏宽度和持仓表高度可拖动，并保存到 localStorage；
 - 详细方案见 [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md)。
 
 ### 交易终端
@@ -124,6 +126,20 @@ node WS /stream snapshot/diff
 - 配置写入 `localStorage`，并保留旧 v1 配置迁移；
 - WASM 自定义指标路线见 [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md)；旧参数化配置兼容说明见 [WEB_INDICATORS.md](WEB_INDICATORS.md)。
 
+### 本地持久化
+
+WebUI 使用 `localStorage`，不是 cookie，也不会把指标配置发往后端：
+
+```text
+tqsdk.wasm.indicators.v1   指标启用/参数/输出样式/动态均线
+tqsdk.workspace.layout.v1  左侧宽度/右侧宽度/持仓表高度
+tqsdk.theme                主题
+tqsdk.watchlists.v2        自选列表
+```
+
+这些数据按浏览器 + origin 隔离；清理浏览器站点数据会恢复默认。指标参数不包含
+账户、密码或 token。
+
 ## 5. K 线与 TradingView
 
 当前使用 **Lightweight Charts**：
@@ -162,14 +178,16 @@ pnpm typecheck
 pnpm build
 ```
 
-当前 Vitest 覆盖（14 项）；Playwright E2E：
+当前 Vitest 覆盖（16 项）；Playwright E2E：
 
 - 自选搜索 `SHFE.ao2701` 后大小写不变；
 - 账户选择器可见；
 - 指标设置是浮动列表，点击插件进入详情；输出可单独配置显示、颜色、线型和线宽；
 - EMA/MA 支持最多 8 个周期槽位的添加/移除。
 - 默认输出图例包含 EMA5/10/20/60/120/200 和 MACD DIF/DEA/HIST；
-- 启用 MA 后出现 MA5；关闭 MACD DIF 后对应输出消失。
+- 启用 MA 后出现 MA5；关闭 MACD DIF 后对应输出消失；
+- 刷新后指标参数/输出配置/启用状态保留；
+- 拖动左侧 panel 后刷新，宽度保持。
 
 Vitest 覆盖：
 

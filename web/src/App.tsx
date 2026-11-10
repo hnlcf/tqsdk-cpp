@@ -45,8 +45,8 @@ import OpsPage from "./pages/OpsPage";
 import type { OHLCV } from "./indicators/indicators";
 import { WasmIndicatorHost } from "./indicators/wasm/host";
 import { DEFAULT_WASM_PLUGINS } from "./indicators/wasm/registry";
+import { applyWasmPreference, readWasmPreferences, saveWasmPreferences } from "./indicators/wasm/preferences";
 import {
-  defaultOutputConfig,
   seriesFromManifest,
   type WasmOutputConfig,
   type WasmPluginView,
@@ -60,12 +60,15 @@ import {
   readSelected,
   readTheme,
   readWatchlists,
+  readWorkspaceLayout,
   saveChartMode,
   savePeriod,
   saveSelected,
   saveTheme,
   saveWatchlists,
+  saveWorkspaceLayout,
   type Theme,
+  type WorkspaceLayout,
   type View,
   type WatchlistGroup,
 } from "./lib/storage";
@@ -120,6 +123,7 @@ export default function App() {
   const initialWatchlists = readWatchlists();
   const [view, setView] = createSignal<View>(initialView());
   const [theme, setTheme] = createSignal<Theme>(readTheme());
+  const [layout, setLayout] = createSignal<WorkspaceLayout>(readWorkspaceLayout());
   const [watchlistGroups, setWatchlistGroups] = createSignal<WatchlistGroup[]>(
     initialWatchlists.groups,
   );
@@ -157,6 +161,47 @@ export default function App() {
   let priceSymbol = "";
   const lastVolume = new Map<string, number>();
   const lastPrice = new Map<string, number>();
+
+  type ResizeKind = "watchlist" | "rightRail" | "table";
+  let resize: {
+    kind: ResizeKind;
+    startX: number;
+    startY: number;
+    startLayout: WorkspaceLayout;
+  } | null = null;
+
+  function resizeMove(event: PointerEvent) {
+    if (!resize) return;
+    const dx = event.clientX - resize.startX;
+    const dy = event.clientY - resize.startY;
+    const start = resize.startLayout;
+    if (resize.kind === "watchlist") {
+      setLayout({ ...start, watchlistWidth: Math.min(420, Math.max(180, start.watchlistWidth + dx)) });
+    } else if (resize.kind === "rightRail") {
+      setLayout({ ...start, rightRailWidth: Math.min(520, Math.max(220, start.rightRailWidth - dx)) });
+    } else {
+      setLayout({ ...start, tableHeight: Math.min(520, Math.max(120, start.tableHeight + dy)) });
+    }
+  }
+
+  function stopResize() {
+    resize = null;
+    window.removeEventListener("pointermove", resizeMove);
+    window.removeEventListener("pointerup", stopResize);
+    saveWorkspaceLayout(layout());
+  }
+
+  function startResize(kind: ResizeKind, event: PointerEvent) {
+    event.preventDefault();
+    resize = {
+      kind,
+      startX: event.clientX,
+      startY: event.clientY,
+      startLayout: layout(),
+    };
+    window.addEventListener("pointermove", resizeMove);
+    window.addEventListener("pointerup", stopResize, { once: true });
+  }
 
   const activeGroup = createMemo(
     () => watchlistGroups().find((group) => group.id === activeListId()) ?? watchlistGroups()[0],
@@ -547,6 +592,7 @@ export default function App() {
       },
     });
     setStreamReady(true);
+    const preferences = readWasmPreferences();
     for (const descriptor of DEFAULT_WASM_PLUGINS) {
       const host = new WasmIndicatorHost();
       wasmHosts.set(descriptor.id, host);
@@ -567,17 +613,21 @@ export default function App() {
       void host
         .load(descriptor.manifestUrl)
         .then((manifest) => {
+          const applied = applyWasmPreference(
+            manifest,
+            descriptor.defaultEnabled,
+            preferences.plugins[descriptor.id],
+          );
           patchWasmPlugin(descriptor.id, {
             name: manifest.name,
             version: manifest.version,
             status: "ready",
             params: manifest.params,
-            values: manifest.params.map((param) => param.default),
+            values: applied.values,
             outputs: manifest.outputs,
-            outputConfig: Object.fromEntries(
-              manifest.outputs.map((output) => [output.id, defaultOutputConfig(output)]),
-            ),
+            outputConfig: applied.outputConfig,
             dynamicLines: manifest.dynamicLines === true,
+            enabled: applied.enabled,
           });
         })
         .catch((error) => {
@@ -652,6 +702,11 @@ export default function App() {
   });
 
   createEffect(() => {
+    const ready = wasmPlugins().filter((plugin) => plugin.status === "ready");
+    if (ready.length > 0) saveWasmPreferences(ready);
+  });
+
+  createEffect(() => {
     const symbol = selected();
     const quote = quotes()[symbol];
     if (priceSymbol !== symbol) {
@@ -684,6 +739,10 @@ export default function App() {
   });
 
   createEffect(() => {
+    saveWorkspaceLayout(layout());
+  });
+
+  createEffect(() => {
     const url = new URL(window.location.href);
     if (view() === "terminal") url.searchParams.delete("view");
     else url.searchParams.set("view", view());
@@ -709,7 +768,10 @@ export default function App() {
 
       <Switch>
         <Match when={view() === "terminal"}>
-          <main class="workspace">
+          <main
+            class="workspace"
+            style={`--watchlist-width:${layout().watchlistWidth}px;--right-rail-width:${layout().rightRailWidth}px`}
+          >
             <WatchlistPanel
               groups={watchlistGroups()}
               activeId={activeListId()}
@@ -725,6 +787,11 @@ export default function App() {
               onRemove={removeSymbol}
               onMove={moveSymbol}
               onSearch={searchInstruments}
+            />
+            <div
+              class="panel-resizer vertical"
+              title="拖动调整自选列表宽度"
+              onPointerDown={(event) => startResize("watchlist", event)}
             />
             <ChartPanel
               symbol={selected()}
@@ -745,6 +812,11 @@ export default function App() {
                 setChartMode("kline");
               }}
               onMode={setChartMode}
+            />
+            <div
+              class="panel-resizer vertical"
+              title="拖动调整右侧栏宽度"
+              onPointerDown={(event) => startResize("rightRail", event)}
             />
             <div class="right-rail">
               <OrderTicketPanel
@@ -767,17 +839,27 @@ export default function App() {
             </div>
           </main>
 
-          <TradingTables
-            account={displayAccount()}
-            positions={positions()}
-            quotes={quotes()}
-            orders={orders()}
-            trades={trades()}
-            selected={selected()}
-            ready={tradingReady()}
-            onCancel={cancelLiveOrder}
-            onSelect={selectSymbol}
+          <div
+            class="panel-resizer horizontal"
+            title="拖动调整持仓表高度"
+            onPointerDown={(event) => startResize("table", event)}
           />
+          <div
+            class="trading-area"
+            style={`--table-max-height:${layout().tableHeight}px`}
+          >
+            <TradingTables
+              account={displayAccount()}
+              positions={positions()}
+              quotes={quotes()}
+              orders={orders()}
+              trades={trades()}
+              selected={selected()}
+              ready={tradingReady()}
+              onCancel={cancelLiveOrder}
+              onSelect={selectSymbol}
+            />
+          </div>
         </Match>
         <Match when={view() === "futures"}>
           <FuturesPage onSelect={addSymbol} />

@@ -9,6 +9,18 @@ test("indicator picker, multi-EMA editing, output visibility and symbol casing",
   await page.goto("/?theme=dark");
   await expect(page.locator(".symbol-title h1")).toHaveText("SHFE.rb2701");
   await expect(page.locator(".account-select select")).toBeVisible();
+  const watchlist = page.locator(".watchlist");
+  const beforeResize = await watchlist.boundingBox();
+  const leftSplitter = page.locator(".panel-resizer.vertical").first();
+  const splitterBox = await leftSplitter.boundingBox();
+  if (!beforeResize || !splitterBox) throw new Error("layout boxes missing");
+  await page.mouse.move(splitterBox.x + 2, splitterBox.y + 60);
+  await page.mouse.down();
+  await page.mouse.move(splitterBox.x + 62, splitterBox.y + 60, { steps: 5 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => Math.round((await watchlist.boundingBox())?.width ?? 0))
+    .toBeGreaterThan(Math.round(beforeResize.width) + 30);
   await expect(page.locator(".chart-wasm")).toHaveText([
     "EMA5",
     "EMA10",
@@ -73,6 +85,22 @@ test("indicator picker, multi-EMA editing, output visibility and symbol casing",
   await popover2.locator('.indicator-popover-head .icon-button[title="关闭"]').click();
   await expect(page.locator(".chart-wasm", { hasText: "MACD DIF" })).toHaveCount(0);
   await expect(page.locator(".chart-wasm", { hasText: "MACD HIST" })).toBeVisible();
+
+  await page.reload();
+  await expect
+    .poll(async () => Math.round((await page.locator(".watchlist").boundingBox())?.width ?? 0))
+    .toBeGreaterThan(Math.round(beforeResize.width) + 30);
+  await expect(page.locator(".chart-wasm").first()).toHaveText("EMA8");
+  await expect(page.locator(".chart-wasm", { hasText: "MA5" })).toBeVisible();
+  await expect(page.locator(".chart-wasm", { hasText: "MACD DIF" })).toHaveCount(0);
+
+  await page.locator(".indicator-settings-trigger").click();
+  const restored = page.locator(".indicator-popover");
+  await restored.locator(".indicator-picker-row", { hasText: /^EMA 多均线/ }).first().locator(".indicator-picker-open").click();
+  await expect(
+    restored.locator(".indicator-line-config .indicator-param-row input[type=number]").first(),
+  ).toHaveValue("8");
+  await expect(restored.locator(".indicator-line-config select").first()).toHaveValue("dashed");
 
   expect(pageErrors).toEqual([]);
 });

@@ -68,6 +68,9 @@ Each manifest can set `defaultEnabled` and `order`. The generated file is
 `web/src/indicators/wasm/registry.generated.ts`; do not edit it by hand.
 `predev`, `prebuild` and `pretypecheck` regenerate it automatically.
 
+The WebUI persists enabled state, parameters and output style in browser
+`localStorage` (`tqsdk.wasm.indicators.v1`).
+
 ## Plugin contract
 
 A plugin exports:
