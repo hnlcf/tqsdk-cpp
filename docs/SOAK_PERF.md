@@ -388,3 +388,24 @@ CTP session monitor：
   24h/72h 通过 `scripts/soak_long_job.sh` 启动，不能把 5s 结果当作长稳结论。
 - 前端优化：全隐藏指标跳过计算；按 chart+bars+参数缓存 WASM 输出，颜色/线型/
   显隐变化不再重跑数值计算。
+
+
+## 2026-11-10 重构后 60s 回归
+
+使用 `./scripts/soak_long_job.sh --duration 60 --reconnect-interval 10`：
+
+```text
+http_ok:        399,475
+http_err:       0
+ws_messages:    59,528
+ws_err:         0
+order_ok:       10
+order_err:      1（网关重启窗口内预期失败）
+reconnects:     5
+node_max_rss:   34,580KB
+gw_max_rss:     26,232KB
+fatal:          ""
+```
+
+本次同时验证了 `MultiAccountManager` 在关闭/移除账户后不会提前析构仍有排队回调的
+`TqApi`；双 Sim gw 进程级验收和 ASan 版本验收均通过。60s 仍不是 24h/72h 长稳结论。

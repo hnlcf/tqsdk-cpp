@@ -13,13 +13,19 @@ bool MultiAccountManager::add_account(AccountId account_id, std::shared_ptr<TqAp
 }
 
 bool MultiAccountManager::remove_account(const AccountId& account_id) {
-    std::lock_guard lock(mutex_);
-    auto            it = accounts_.find(account_id);
-    if (it == accounts_.end())
-        return false;
-    // Retain until io_context drain; see close().
-    retired_apis_.push_back(std::move(it->second));
-    accounts_.erase(it);
+    std::shared_ptr<TqApi> retiring;
+    {
+        std::lock_guard lock(mutex_);
+        auto            it = accounts_.find(account_id);
+        if (it == accounts_.end())
+            return false;
+        retiring = std::move(it->second);
+        accounts_.erase(it);
+        // Retain until io_context drain; see close().
+        retired_apis_.push_back(retiring);
+    }
+    if (retiring)
+        retiring->close();
     return true;
 }
 
