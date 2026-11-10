@@ -19,7 +19,7 @@ WASM 指标：主路径
 内置参数指标：兼容旧 localStorage / WASM 不可用时的 fallback
 ```
 
-如果 WASM 插件加载或计算失败，图表会显示 `EMA 多均线 (fallback)` 到 `EMA60 (fallback)`，不会静默失去均线。
+如果 WASM 插件加载或计算失败，图表会显示 `EMA6 (fallback)`、`EMA12 (fallback)`、`EMA24 (fallback)`、`EMA60 (fallback)`，不会静默失去均线。
 
 ## 2. 架构
 
@@ -311,7 +311,7 @@ pnpm dev
 如果看到：
 
 ```text
-EMA 多均线 (fallback)
+EMA6 (fallback) / EMA12 (fallback) / EMA24 (fallback) / EMA60 (fallback)
 ```
 
 说明 WASM 未加载或计算失败，需要检查：
