@@ -40,7 +40,7 @@ env VITE_PROXY_TARGET=http://127.0.0.1:18082 pnpm dev
 - 自定义指标主路径为 WASM 插件 + Worker + Manifest；
 - Wasm 只读历史 OHLCV，不提供 host imports/网络/DOM；
 - 支持 line/histogram/area/band/markers 和副图；
-- 默认 EMA6 为 WASM 样例插件，原生 EMA6 仅作为 fallback；
+- 默认 EMA6/12/24/60 多均线为同一个 WASM 插件，原生多 EMA 仅作为 fallback；
 - 指标设置中可修改 manifest 参数，并显示插件版本；
 - 详细方案见 [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md)。
 
@@ -166,8 +166,8 @@ pnpm build
 
 - 自选搜索 `SHFE.ao2701` 后大小写不变；
 - 账户选择器可见；
-- 指标设置中 WASM 插件/EMA6 和参数可见；
-- WASM 输出图例为 `EMA6`，不是 fallback。
+- 指标设置中 WASM 插件/多 EMA 和四个周期参数可见；
+- WASM 输出图例为 `EMA6`/`EMA12`/`EMA24`/`EMA60`，不是 fallback。
 
 Vitest 覆盖：
 

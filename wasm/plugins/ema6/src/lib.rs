@@ -1,4 +1,4 @@
-//! Example TQSDK WASM indicator: exponential moving average.
+//! Example TQSDK WASM indicator: multiple exponential moving averages.
 //!
 //! Build:
 //!   cargo build --manifest-path wasm/plugins/ema6/Cargo.toml \
@@ -6,24 +6,35 @@
 
 use tqsdk_indicator_sdk::{Context, FIELD_COUNT, HEADER_BYTES};
 
+fn ema(close: &[f64], period: usize) -> Vec<f64> {
+    let mut values = vec![f64::NAN; close.len()];
+    if close.is_empty() {
+        return values;
+    }
+    let alpha = 2.0 / (period as f64 + 1.0);
+    let mut current = close[0];
+    values[0] = current;
+    for index in 1..close.len() {
+        current = alpha * close[index] + (1.0 - alpha) * current;
+        values[index] = current;
+    }
+    values
+}
+
 fn indicator(ctx: &mut Context<'_>) -> i32 {
-    let period = ctx.param_usize(0, 6).clamp(1, 500);
+    let periods = [
+        ctx.param_usize(0, 6).clamp(1, 500),
+        ctx.param_usize(1, 12).clamp(1, 500),
+        ctx.param_usize(2, 24).clamp(1, 500),
+        ctx.param_usize(3, 60).clamp(1, 500),
+    ];
     let close = ctx.close();
-    let mut values = vec![f64::NAN; ctx.bar_count()];
-    if !close.is_empty() {
-        let alpha = 2.0 / (period as f64 + 1.0);
-        let mut current = close[0];
-        values[0] = current;
-        for index in 1..close.len() {
-            current = alpha * close[index] + (1.0 - alpha) * current;
-            values[index] = current;
+    for (output, period) in periods.into_iter().enumerate() {
+        if !ctx.write_output(output, &ema(close, period)) {
+            return -1;
         }
     }
-    if ctx.write_output(0, &values) {
-        0
-    } else {
-        -1
-    }
+    0
 }
 
 #[no_mangle]

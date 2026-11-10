@@ -6,7 +6,7 @@ import {
   WASM_HEADER_BYTES,
   WASM_INPUT_MAGIC,
 } from "./input";
-import { outputChannelCount, parseManifest } from "./types";
+import { outputChannelCount, parseManifest, resolveOutputTitle } from "./types";
 
 function bar(time: number, close: number): OHLCV {
   return { time, open: close, high: close + 1, low: close - 1, close, volume: 10 };
@@ -50,6 +50,11 @@ describe("WASM indicator ABI", () => {
       outputs: [{ ...manifest.outputs[0], plot: "band", channels: undefined }],
     });
     expect(outputChannelCount(band)).toBe(2);
+    const titled = parseManifest({
+      ...manifest,
+      outputs: [{ ...manifest.outputs[0], title: "EMA{period}" }],
+    });
+    expect(resolveOutputTitle(titled.outputs[0].title, titled, [8])).toBe("EMA8");
     expect(() =>
       parseManifest({
         ...manifest,

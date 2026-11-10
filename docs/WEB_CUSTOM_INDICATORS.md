@@ -4,7 +4,7 @@
 
 Web 自定义指标采用 **WebAssembly 插件 + Worker 沙箱 + Manifest 声明式绘图**。
 
-内置的 EMA6 已经由 WASM 插件提供：
+内置的 EMA 多均线（默认 6/12/24/60）已经由 WASM 插件提供：
 
 ```text
 web/public/plugins/ema6/manifest.json
@@ -12,14 +12,14 @@ web/public/plugins/ema6/ema6.wasm
 ```
 
 旧的“EMA/SMA 参数化”入口仍保留在指标设置中，作为兼容/降级能力；默认不再自动添加，
-因此正常加载时不会和 WASM EMA6 重复。
+因此正常加载时不会和 WASM 多均线重复。
 
 ```text
 WASM 指标：主路径
 内置参数指标：兼容旧 localStorage / WASM 不可用时的 fallback
 ```
 
-如果 WASM 插件加载或计算失败，图表会显示 `EMA6 (fallback)`，不会静默失去均线。
+如果 WASM 插件加载或计算失败，图表会显示 `EMA 多均线 (fallback)` 到 `EMA60 (fallback)`，不会静默失去均线。
 
 ## 2. 架构
 
@@ -72,28 +72,27 @@ web/public/plugins/ema6/manifest.json
   "schema": 1,
   "abi": 1,
   "id": "ema6",
-  "name": "EMA6",
-  "version": "0.1.0",
+  "name": "EMA 多均线",
+  "version": "0.2.0",
   "wasm": "ema6.wasm",
   "params": [
-    {
-      "id": "period",
-      "label": "周期",
-      "type": "int",
-      "default": 6,
-      "min": 1,
-      "max": 500
-    }
+    {"id": "period1", "label": "EMA1 周期", "type": "int", "default": 6, "min": 1, "max": 500},
+    {"id": "period2", "label": "EMA2 周期", "type": "int", "default": 12, "min": 1, "max": 500},
+    {"id": "period3", "label": "EMA3 周期", "type": "int", "default": 24, "min": 1, "max": 500},
+    {"id": "period4", "label": "EMA4 周期", "type": "int", "default": 60, "min": 1, "max": 500}
   ],
   "outputs": [
     {
-      "id": "ema",
-      "title": "EMA6",
+      "id": "ema1",
+      "title": "EMA{period1}",
       "pane": "main",
       "plot": "line",
       "color": "#f0b90b",
       "lineWidth": 1
-    }
+    },
+    {"id": "ema2", "title": "EMA{period2}", "pane": "main", "plot": "line", "color": "#53b7ff"},
+    {"id": "ema3", "title": "EMA{period3}", "pane": "main", "plot": "line", "color": "#ff7a90"},
+    {"id": "ema4", "title": "EMA{period4}", "pane": "main", "plot": "line", "color": "#a78bfa"}
   ]
 }
 ```
@@ -107,6 +106,8 @@ area        面积图
 band        上下轨，channels=2
 markers     信号标记
 ```
+
+标题中的 `{period1}` 这类占位符会按当前参数值解析，因此修改周期后图例标题会同步更新为 `EMA8` 等。
 
 `pane`：
 
@@ -237,7 +238,7 @@ SDK 不依赖任何外部 crate；插件编译为 `wasm32-unknown-unknown`，不
 - wasm 路径禁止 `..` 和绝对 URL；
 - 输出长度由 Host 严格校验；
 - 每次计算 5 秒超时，超时直接终止 Worker；
-- 计算失败时回退到原生 EMA6 fallback；
+- 计算失败时回退到原生多 EMA fallback；
 - 主线程不执行插件代码。
 
 ### 6.2 仍需加强
@@ -302,15 +303,15 @@ pnpm dev
 
 1. 打开 K 线；
 2. 点击「指标设置」；
-3. 顶部看到「WASM 插件 / EMA6 v0.1.0」；
-4. 修改周期，例如 12；
+3. 顶部看到「WASM 插件 / EMA 多均线 v0.2.0」；
+4. 修改四个周期，例如 8/20/40/60；
 5. 完成设置；
-6. 图表图例显示 `EMA6`，副图/标记插件会按 manifest 自动出现。
+6. 图表图例显示 `EMA8`、`EMA20`、`EMA40`、`EMA60`，副图/标记插件会按 manifest 自动出现。
 
 如果看到：
 
 ```text
-EMA6 (fallback)
+EMA 多均线 (fallback)
 ```
 
 说明 WASM 未加载或计算失败，需要检查：
@@ -337,8 +338,8 @@ pnpm e2e
 - Manifest schema、路径穿越、非法输出类型；
 - TQW1 编码/解码；
 - 默认 WASM 插件加载；
-- 图表出现 `EMA6`，而不是 fallback；
-- WASM 参数 UI 默认值为 6；
+- 图表出现 `EMA6`、`EMA12`、`EMA24`、`EMA60`，而不是 fallback；
+- WASM 参数 UI 默认值依次为 6/12/24/60；
 - 原有自选大小写、下单板平多/平空和图表切换不回归。
 
 当前测试：

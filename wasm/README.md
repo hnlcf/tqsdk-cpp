@@ -8,7 +8,7 @@ custom-indicator runtime.
 ```text
 wasm/
   indicator-sdk/       ABI helpers, allocator, input parser
-  plugins/ema6/        EMA6 example plugin and manifest
+  plugins/ema6/        multi EMA example plugin and manifest
 ```
 
 The generated public assets live in:
@@ -51,6 +51,8 @@ Input format `TQW1` and output layout are documented in
 [docs/WEB_CUSTOM_INDICATORS.md](../docs/WEB_CUSTOM_INDICATORS.md).
 
 ## Writing a plugin
+
+The bundled example exports four EMA outputs with periods 6/12/24/60.
 
 The plugin only computes numbers:
 

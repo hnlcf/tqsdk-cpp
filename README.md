@@ -9,7 +9,7 @@ C++20 期货数据与交易基础设施，目标是把 TqSdk 的“异步数据�
 - `web/` SolidJS + TypeScript + pnpm 独立 Web 终端；
 - TradingView Lightweight Charts K 线/分时/指标；
 - 多自选列表、代码/名称模糊搜索、快捷下单（买开/卖开/平多/平空）、合并持仓、账户权益联动；
-- WASM 自定义指标（Manifest + Worker + ABI），默认 EMA6，支持主图/副图/柱状/标记；
+- WASM 自定义指标（Manifest + Worker + ABI），默认 EMA6/12/24/60 多均线，支持主图/副图/柱状/标记；
 - 高级报单 FAK/FOK、市价/对价/五档价、TargetPosTask/InsertOrderTask、RiskManager 风控；
 - Tick/DataSeries/DataDownloader、期权 ATM+Greeks、TradingStatus/动态 URL、多账户与回测；
 - 合约目录、节假日日历、统一市场 SQLite 缓存（K 线 + tick）；

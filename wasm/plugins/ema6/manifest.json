@@ -2,26 +2,74 @@
   "schema": 1,
   "abi": 1,
   "id": "ema6",
-  "name": "EMA6",
-  "version": "0.1.0",
+  "name": "EMA 多均线",
+  "version": "0.2.0",
   "wasm": "ema6.wasm",
   "params": [
     {
-      "id": "period",
-      "label": "周期",
+      "id": "period1",
+      "label": "EMA1 周期",
       "type": "int",
       "default": 6,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period2",
+      "label": "EMA2 周期",
+      "type": "int",
+      "default": 12,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period3",
+      "label": "EMA3 周期",
+      "type": "int",
+      "default": 24,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "period4",
+      "label": "EMA4 周期",
+      "type": "int",
+      "default": 60,
       "min": 1,
       "max": 500
     }
   ],
   "outputs": [
     {
-      "id": "ema",
-      "title": "EMA6",
+      "id": "ema1",
+      "title": "EMA{period1}",
       "pane": "main",
       "plot": "line",
       "color": "#f0b90b",
+      "lineWidth": 1
+    },
+    {
+      "id": "ema2",
+      "title": "EMA{period2}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#53b7ff",
+      "lineWidth": 1
+    },
+    {
+      "id": "ema3",
+      "title": "EMA{period3}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#ff7a90",
+      "lineWidth": 1
+    },
+    {
+      "id": "ema4",
+      "title": "EMA{period4}",
+      "pane": "main",
+      "plot": "line",
+      "color": "#a78bfa",
       "lineWidth": 1
     }
   ]

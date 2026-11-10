@@ -454,21 +454,25 @@ export default function App() {
     }
   }
 
-  function nativeEma6Fallback(bars: OHLCV[]): WasmSeries {
-    const byTime = new Map(ema(bars, 6).map((point) => [point.time, point.value]));
-    const values = new Float64Array(bars.length);
-    for (let index = 0; index < bars.length; index++) {
-      values[index] = byTime.get(bars[index].time) ?? Number.NaN;
-    }
-    return {
-      id: "fallback:ema6",
-      title: "EMA6 (fallback)",
-      pane: "main",
-      plot: "line",
-      color: "#f0b90b",
-      lineWidth: 1,
-      values,
-    };
+  function nativeEmaFallback(bars: OHLCV[]): WasmSeries[] {
+    const periods = [6, 12, 24, 60];
+    const colors = ["#f0b90b", "#53b7ff", "#ff7a90", "#a78bfa"];
+    return periods.map((period, index) => {
+      const byTime = new Map(ema(bars, period).map((point) => [point.time, point.value]));
+      const values = new Float64Array(bars.length);
+      for (let barIndex = 0; barIndex < bars.length; barIndex++) {
+        values[barIndex] = byTime.get(bars[barIndex].time) ?? Number.NaN;
+      }
+      return {
+        id: `fallback:ema${period}`,
+        title: `EMA${period} (fallback)`,
+        pane: "main",
+        plot: "line",
+        color: colors[index],
+        lineWidth: 1,
+        values,
+      };
+    });
   }
 
   function scheduleWasm() {
@@ -481,30 +485,29 @@ export default function App() {
     const bars = chartBars();
     const params = wasmParams();
     if (!host || !manifest || bars.length === 0) {
-      setWasmSeries(bars.length > 0 ? [nativeEma6Fallback(bars)] : []);
+      setWasmSeries(bars.length > 0 ? nativeEmaFallback(bars) : []);
       return;
     }
     wasmTimer = window.setTimeout(() => {
       wasmTimer = undefined;
       const latest = chartBars();
       if (latest.length === 0) return;
+      const values =
+        params.length === manifest.params.length
+          ? params
+          : manifest.params.map((param) => param.default);
       void host
-        .compute(
-          latest,
-          params.length === manifest.params.length
-            ? params
-            : manifest.params.map((param) => param.default),
-        )
+        .compute(latest, values)
         .then((outputs) => {
           setWasmSeries(
-            seriesFromManifest(manifest, outputs).map((item) => ({
+            seriesFromManifest(manifest, outputs, values).map((item) => ({
               ...item,
               id: `${manifest.id}:${item.id}`,
             })),
           );
         })
         .catch(() => {
-          setWasmSeries([nativeEma6Fallback(latest)]);
+          setWasmSeries(nativeEmaFallback(latest));
         });
     }, 120);
   }

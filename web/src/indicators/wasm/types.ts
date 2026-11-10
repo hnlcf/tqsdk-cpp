@@ -46,6 +46,7 @@ export interface WasmSeries {
 const ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
 const PLOTS = new Set<WasmPlotKind>(["line", "histogram", "area", "band", "markers"]);
+const TITLE_PARAM_RE = /\{([a-z0-9._-]+)\}/gi;
 
 function fail(message: string): never {
   throw new Error(`invalid WASM indicator manifest: ${message}`);
@@ -138,6 +139,12 @@ export function parseManifest(value: unknown): WasmManifest {
   const params = row.params.map(parseParam);
   const outputs = row.outputs.map(parseOutput);
   if (new Set(params.map((item) => item.id)).size !== params.length) fail("duplicate param id");
+  const paramIds = new Set(params.map((item) => item.id));
+  for (const output of outputs) {
+    for (const match of output.title.matchAll(TITLE_PARAM_RE)) {
+      if (!paramIds.has(match[1])) fail(`unknown title parameter ${match[1]}`);
+    }
+  }
   if (new Set(outputs.map((item) => item.id)).size !== outputs.length) fail("duplicate output id");
   if (outputs.reduce((sum, output) => sum + (output.channels ?? 1), 0) > 16) {
     fail("too many output channels");
@@ -149,7 +156,28 @@ export function outputChannelCount(manifest: WasmManifest): number {
   return manifest.outputs.reduce((sum, output) => sum + (output.channels ?? 1), 0);
 }
 
-export function seriesFromManifest(manifest: WasmManifest, arrays: Float64Array[]): WasmSeries[] {
+function formatParam(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return String(Number(value.toFixed(4)));
+}
+
+export function resolveOutputTitle(
+  title: string,
+  manifest: WasmManifest,
+  values: number[],
+): string {
+  return title.replace(TITLE_PARAM_RE, (_, id: string) => {
+    const index = manifest.params.findIndex((param) => param.id === id);
+    if (index < 0) return `{${id}}`;
+    return formatParam(values[index] ?? manifest.params[index].default);
+  });
+}
+
+export function seriesFromManifest(
+  manifest: WasmManifest,
+  arrays: Float64Array[],
+  params: number[] = manifest.params.map((param) => param.default),
+): WasmSeries[] {
   const expected = outputChannelCount(manifest);
   if (arrays.length !== expected) {
     throw new Error(`plugin returned ${arrays.length} channels, expected ${expected}`);
@@ -160,7 +188,7 @@ export function seriesFromManifest(manifest: WasmManifest, arrays: Float64Array[
     const lower = (output.channels ?? 1) > 1 ? arrays[cursor++] : undefined;
     return {
       id: output.id,
-      title: output.title,
+      title: resolveOutputTitle(output.title, manifest, params),
       pane: output.pane,
       plot: output.plot,
       color: output.color,
