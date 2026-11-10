@@ -107,22 +107,16 @@ handler 通过 `scope.tasks` 直接访问本账户任务，task id 在账户内�
 `HttpServer` 不再在构造时预先创建所有账户 hub；收到 `/stream?account=` 时在
 `data_ex_` 上解析账户并按需创建 hub，避免启动期静态枚举。
 
-仍需补：运行中新增账户的完整验收，以及账户被 `MultiAccountManager::remove_account()`
-后主动关闭对应 hub/客户端；当前 hub 会保留到 HttpServer 停止。
+已提供 `HttpServer::drop_account_hub()`，可在控制线程停止并移除额外账户 hub；
+仍需补：`MultiAccountManager::remove_account()` 自动通知 HttpServer 的集成验收，
+以及运行中新增账户的完整端到端验收。
 
-### 4.3 路由文件仍可继续切分
+### 4.3 路由文件已按资源拆分（2026-11-10）
 
-`http_routes.cpp` 已经从 `http_server.cpp` 拆出，但 709 行内仍包含 catalog/
-market/trading/option/task/risk 全部 handler。建议按资源拆成：
-
-```text
-src/serve/routes/catalog_routes.cpp
-src/serve/routes/market_routes.cpp
-src/serve/routes/trading_routes.cpp
-src/serve/routes/task_risk_routes.cpp
-```
-
-`HttpServer::setup_routes()` 仍是声明表，handler 实现分文件；测试和编译边界更清楚。
+`http_routes.cpp` 只保留 health/ready/metrics/accounts/holiday/trading-status/
+websocket 与路由表；catalog/option、market、trading、task/risk 分别拆到独立文件。
+公共 `RouteHandlers` 声明在 `src/serve/http_route_handlers.h`，query helper 在
+`src/serve/http_route_helpers.h`。
 
 ### 4.4 CTP/数据面不建议现在重写
 
