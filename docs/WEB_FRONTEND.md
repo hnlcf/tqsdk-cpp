@@ -37,8 +37,11 @@ env VITE_PROXY_TARGET=http://127.0.0.1:18082 pnpm dev
 
 ### 自定义指标
 
-- 安全声明式 EMA/SMA，不执行任意 JavaScript；
-- 默认包含 EMA6；指标设置中可增删、改周期/颜色、启停；
+- 自定义指标主路径为 WASM 插件 + Worker + Manifest；
+- Wasm 只读历史 OHLCV，不提供 host imports/网络/DOM；
+- 支持 line/histogram/area/band/markers 和副图；
+- 默认 EMA6 为 WASM 样例插件，原生 EMA6 仅作为 fallback；
+- 指标设置中可修改 manifest 参数，并显示插件版本；
 - 详细方案见 [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md)。
 
 ### 交易终端
@@ -119,7 +122,7 @@ node WS /stream snapshot/diff
 - 指标设置弹层支持 MA 周期/颜色、BOLL 周期/倍数/颜色、
   MACD 快慢信号/颜色、RSI 周期/颜色；
 - 配置写入 `localStorage`，并保留旧 v1 配置迁移；
-- 详细的自定义指标/插件化路线见 [WEB_INDICATORS.md](WEB_INDICATORS.md)。
+- WASM 自定义指标路线见 [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md)；旧参数化配置兼容说明见 [WEB_INDICATORS.md](WEB_INDICATORS.md)。
 
 ## 5. K 线与 TradingView
 
@@ -159,11 +162,12 @@ pnpm typecheck
 pnpm build
 ```
 
-当前 Vitest 覆盖（12 项）；Playwright E2E：
+当前 Vitest 覆盖（14 项）；Playwright E2E：
 
 - 自选搜索 `SHFE.ao2701` 后大小写不变；
 - 账户选择器可见；
-- 指标设置中自定义指标/EMA6 可见。
+- 指标设置中 WASM 插件/EMA6 和参数可见；
+- WASM 输出图例为 `EMA6`，不是 fallback。
 
 Vitest 覆盖：
 

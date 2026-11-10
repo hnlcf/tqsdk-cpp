@@ -55,3 +55,6 @@ web/.vite/
 web/coverage/
 web/test-results/
 web/playwright-report/
+
+# WASM plugin build output
+wasm/**/target/

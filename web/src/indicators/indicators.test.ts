@@ -52,15 +52,8 @@ describe("indicators", () => {
     expect(result[0].value).toBe(100);
   });
 
-  it("ships EMA6 as a safe custom indicator and validates custom specs", () => {
-    expect(DEFAULT_INDICATORS.customIndicators).toContainEqual({
-      id: "ema-6",
-      kind: "EMA",
-      period: 6,
-      color: "#f0b90b",
-      enabled: true,
-    });
-    const spec = DEFAULT_INDICATORS.customIndicators[0];
+  it("supports safe EMA custom specs and validates them", () => {
+    const spec = { id: "ema-6", kind: "EMA" as const, period: 6, color: "#f0b90b", enabled: true };
     expect(customIndicator(bars, spec)).toEqual(ema(bars, 6));
     expect(
       normalizeIndicatorConfig({

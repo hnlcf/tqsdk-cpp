@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "abi": 1,
+  "id": "ema6",
+  "name": "EMA6",
+  "version": "0.1.0",
+  "wasm": "ema6.wasm",
+  "params": [
+    {
+      "id": "period",
+      "label": "周期",
+      "type": "int",
+      "default": 6,
+      "min": 1,
+      "max": 500
+    }
+  ],
+  "outputs": [
+    {
+      "id": "ema",
+      "title": "EMA6",
+      "pane": "main",
+      "plot": "line",
+      "color": "#f0b90b",
+      "lineWidth": 1
+    }
+  ]
+}

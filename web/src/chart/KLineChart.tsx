@@ -1,14 +1,17 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import {
+  AreaSeries,
   CandlestickSeries,
   ColorType,
   CrosshairMode,
   HistogramSeries,
   LineSeries,
   createChart,
+  createSeriesMarkers,
   type CandlestickData,
   type IChartApi,
   type IPriceLine,
+  type ISeriesMarkersPluginApi,
   type ISeriesApi,
   type SeriesType,
   type Time,
@@ -25,6 +28,7 @@ import {
   type OHLCV,
 } from "../indicators/indicators";
 import { chartColors, type Theme } from "./theme";
+import type { WasmSeries } from "../indicators/wasm/types";
 import { chinaDateTime, chinaTickMark } from "./time";
 
 interface Props {
@@ -36,6 +40,7 @@ interface Props {
   theme: Theme;
   priceDecimals?: number;
   indicators?: IndicatorConfig;
+  wasmSeries?: WasmSeries[];
 }
 
 type AnySeries = ISeriesApi<SeriesType>;
@@ -64,6 +69,7 @@ export default function KLineChart(props: Props) {
   let appliedResetKey = "";
   let fitPending = true;
   const indicatorSeries = new Map<string, AnySeries>();
+  const wasmMarkers = new Map<string, ISeriesMarkersPluginApi<Time>>();
   const [ready, setReady] = createSignal(false);
   const [hover, setHover] = createSignal<OHLCV | undefined>();
 
@@ -93,6 +99,8 @@ export default function KLineChart(props: Props) {
       }
     }
     indicatorSeries.clear();
+    for (const markers of wasmMarkers.values()) markers.detach();
+    wasmMarkers.clear();
     removeExtraPanes();
   }
 
@@ -116,6 +124,7 @@ export default function KLineChart(props: Props) {
       return;
     }
     const theme = colors();
+    const wasmPanes = new Map<string, number>();
     for (let index = 0; index < config.maPeriods.length; index++) {
       const period = config.maPeriods[index];
       addLine(`ma-${period}`, {
@@ -234,13 +243,136 @@ export default function KLineChart(props: Props) {
         title: `${custom.kind}${custom.period}`,
       });
     }
+    for (const item of props.wasmSeries ?? []) {
+      let pane = 0;
+      if (item.pane !== "main") {
+        const existing = wasmPanes.get(item.pane);
+        if (existing !== undefined) {
+          pane = existing;
+        } else {
+          pane = Math.max(1, chart.panes().length);
+          ensurePane(pane);
+          wasmPanes.set(item.pane, pane);
+        }
+      }
+      const key = `wasm-${item.id}`;
+      const lineWidth = Math.min(4, Math.max(1, Math.round(item.lineWidth))) as 1 | 2 | 3 | 4;
+      const common = {
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+        title: item.title,
+      };
+      if (item.plot === "markers") {
+        wasmMarkers.set(
+          key,
+          createSeriesMarkers(candle, [], {}),
+        );
+      } else if (item.plot === "band") {
+        addLine(`${key}:upper`, {
+          ...common,
+          color: item.color,
+          lineWidth,
+          lineStyle: 2,
+        }, pane);
+        addLine(`${key}:lower`, {
+          ...common,
+          color: item.color,
+          lineWidth,
+          lineStyle: 2,
+        }, pane);
+      } else if (item.plot === "histogram") {
+        indicatorSeries.set(
+          key,
+          chart.addSeries(HistogramSeries, { ...common, color: item.color }, pane) as AnySeries,
+        );
+      } else if (item.plot === "area") {
+        indicatorSeries.set(
+          key,
+          chart.addSeries(
+            AreaSeries,
+            {
+              ...common,
+              lineColor: item.color,
+              topColor: `${item.color}40`,
+              bottomColor: `${item.color}00`,
+              lineWidth,
+            },
+            pane,
+          ) as AnySeries,
+        );
+      } else {
+        addLine(
+          key,
+          {
+            ...common,
+            color: item.color,
+            lineWidth,
+          },
+          pane,
+        );
+      }
+    }
     updateIndicators(props.bars);
+  }
+
+  function updateWasmIndicators(bars: OHLCV[]) {
+    for (const item of props.wasmSeries ?? []) {
+      const key = `wasm-${item.id}`;
+      if (item.plot === "band") {
+        for (const [suffix, values] of [
+          ["upper", item.values],
+          ["lower", item.lower ?? new Float64Array()],
+        ] as const) {
+          const series = indicatorSeries.get(`${key}:${suffix}`);
+          if (!series) continue;
+          const data: Array<{ time: UTCTimestamp; value: number }> = [];
+          for (let index = 0; index < bars.length && index < values.length; index++) {
+            const value = values[index];
+            if (Number.isFinite(value)) data.push({ time: bars[index].time as UTCTimestamp, value });
+          }
+          series.setData(data);
+        }
+        continue;
+      }
+      if (item.plot === "markers") {
+        const markers = wasmMarkers.get(key);
+        if (!markers) continue;
+        markers.setMarkers(
+          bars.flatMap((bar, index) => {
+            const value = item.values[index];
+            if (!Number.isFinite(value)) return [];
+            return [{
+              time: bar.time as UTCTimestamp,
+              position: value >= 0 ? "aboveBar" as const : "belowBar" as const,
+              color: item.color,
+              shape: "circle" as const,
+              text: item.title,
+            }];
+          }),
+        );
+        continue;
+      }
+      const series = indicatorSeries.get(key);
+      if (!series) continue;
+      const data: Array<{ time: UTCTimestamp; value: number }> = [];
+      for (let index = 0; index < bars.length && index < item.values.length; index++) {
+        const value = item.values[index];
+        if (Number.isFinite(value)) {
+          data.push({ time: bars[index].time as UTCTimestamp, value });
+        }
+      }
+      series.setData(data);
+    }
   }
 
   function updateIndicators(bars: OHLCV[]) {
     if (!chart || !candle) return;
     const config = props.indicators;
-    if (!config) return;
+    if (!config) {
+      updateWasmIndicators(bars);
+      return;
+    }
     const theme = colors();
     for (const period of config.maPeriods) {
       indicatorSeries.get(`ma-${period}`)?.setData(
@@ -296,6 +428,7 @@ export default function KLineChart(props: Props) {
         })),
       );
     }
+    updateWasmIndicators(bars);
   }
 
   function updateSeriesData(forceFit: boolean) {
@@ -505,6 +638,7 @@ export default function KLineChart(props: Props) {
     props.symbol;
     props.resetKey;
     JSON.stringify(props.indicators ?? {});
+    props.wasmSeries;
     colors();
     rebuildIndicators();
   });
@@ -530,6 +664,13 @@ export default function KLineChart(props: Props) {
           {formatLegendPrice(legendBar()?.close, decimals())}
         </span>
         <span>VOL {legendBar()?.volume?.toLocaleString("zh-CN") ?? "—"}</span>
+        <For each={props.wasmSeries ?? []}>
+          {(item) => (
+            <span class="chart-wasm" title="WASM indicator" style={{ color: item.color }}>
+              {item.title}
+            </span>
+          )}
+        </For>
         <span class="chart-credit">TradingView Lightweight Charts</span>
       </div>
       <div ref={container} class="chart-canvas" aria-label={`${props.symbol} K线图`} />

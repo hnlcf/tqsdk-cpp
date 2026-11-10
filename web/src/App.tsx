@@ -44,9 +44,13 @@ import OptionsPage from "./pages/OptionsPage";
 import OpsPage from "./pages/OpsPage";
 import {
   DEFAULT_INDICATORS,
+  ema,
   type IndicatorConfig,
   type OHLCV,
 } from "./indicators/indicators";
+import { WasmIndicatorHost } from "./indicators/wasm/host";
+import { DEFAULT_WASM_PLUGINS } from "./indicators/wasm/registry";
+import { seriesFromManifest, type WasmManifest, type WasmSeries } from "./indicators/wasm/types";
 import { finite, priceDecimals } from "./lib/format";
 import {
   createWatchlistGroup,
@@ -127,6 +131,10 @@ export default function App() {
   const [indicators, setIndicators] = createSignal<IndicatorConfig>(
     readIndicators(DEFAULT_INDICATORS),
   );
+  const [wasmSeries, setWasmSeries] = createSignal<WasmSeries[]>([]);
+  const [wasmManifest, setWasmManifest] = createSignal<WasmManifest>();
+  const [wasmParams, setWasmParams] = createSignal<number[]>([]);
+  const [wasmReady, setWasmReady] = createSignal(false);
 
   const [quotes, setQuotes] = createSignal<Record<string, Quote>>({});
   const [history, setHistory] = createSignal<OHLCV[]>([]);
@@ -146,6 +154,8 @@ export default function App() {
   const [toast, setToast] = createSignal("");
 
   let stream: MarketStream | undefined;
+  let wasmHost: WasmIndicatorHost | undefined;
+  let wasmTimer: number | undefined;
   let loadGeneration = 0;
   let snapshotLoaded = false;
   let tradingRefreshInFlight = false;
@@ -444,6 +454,61 @@ export default function App() {
     }
   }
 
+  function nativeEma6Fallback(bars: OHLCV[]): WasmSeries {
+    const byTime = new Map(ema(bars, 6).map((point) => [point.time, point.value]));
+    const values = new Float64Array(bars.length);
+    for (let index = 0; index < bars.length; index++) {
+      values[index] = byTime.get(bars[index].time) ?? Number.NaN;
+    }
+    return {
+      id: "fallback:ema6",
+      title: "EMA6 (fallback)",
+      pane: "main",
+      plot: "line",
+      color: "#f0b90b",
+      lineWidth: 1,
+      values,
+    };
+  }
+
+  function scheduleWasm() {
+    if (wasmTimer !== undefined) {
+      window.clearTimeout(wasmTimer);
+      wasmTimer = undefined;
+    }
+    const host = wasmHost;
+    const manifest = host?.manifest;
+    const bars = chartBars();
+    const params = wasmParams();
+    if (!host || !manifest || bars.length === 0) {
+      setWasmSeries(bars.length > 0 ? [nativeEma6Fallback(bars)] : []);
+      return;
+    }
+    wasmTimer = window.setTimeout(() => {
+      wasmTimer = undefined;
+      const latest = chartBars();
+      if (latest.length === 0) return;
+      void host
+        .compute(
+          latest,
+          params.length === manifest.params.length
+            ? params
+            : manifest.params.map((param) => param.default),
+        )
+        .then((outputs) => {
+          setWasmSeries(
+            seriesFromManifest(manifest, outputs).map((item) => ({
+              ...item,
+              id: `${manifest.id}:${item.id}`,
+            })),
+          );
+        })
+        .catch(() => {
+          setWasmSeries([nativeEma6Fallback(latest)]);
+        });
+    }, 120);
+  }
+
   onMount(() => {
     stream = createMarketStream({
       onStatus: (status) => setStreamStatus(status),
@@ -468,6 +533,20 @@ export default function App() {
       },
     });
     setStreamReady(true);
+    const plugin = DEFAULT_WASM_PLUGINS[0];
+    if (plugin) {
+      wasmHost = new WasmIndicatorHost();
+      void wasmHost
+        .load(plugin.manifestUrl)
+        .then((manifest) => {
+          setWasmManifest(manifest);
+          setWasmParams(manifest.params.map((param) => param.default));
+          setWasmReady(true);
+        })
+        .catch(() => {
+          setWasmReady(false);
+        });
+    }
     void refreshReady();
     void loadAccounts();
     void loadTradingSnapshot();
@@ -482,6 +561,12 @@ export default function App() {
     onCleanup(() => {
       window.clearInterval(timer);
       window.clearInterval(tradingTimer);
+      if (wasmTimer !== undefined) {
+        window.clearTimeout(wasmTimer);
+        wasmTimer = undefined;
+      }
+      wasmHost?.close();
+      wasmHost = undefined;
       stream?.close();
       stream = undefined;
     });
@@ -518,6 +603,13 @@ export default function App() {
       lastPrice.clear();
       void loadChart(symbol, duration);
     });
+  });
+
+  createEffect(() => {
+    chartBars();
+    wasmReady();
+    wasmParams();
+    untrack(scheduleWasm);
   });
 
   createEffect(() => {
@@ -609,6 +701,10 @@ export default function App() {
               theme={theme()}
               decimals={decimals()}
               indicators={indicators()}
+              wasmSeries={wasmSeries()}
+              wasmManifest={wasmManifest()}
+              wasmParams={wasmParams()}
+              onWasmParams={setWasmParams}
               onPeriod={(next) => {
                 setPeriod(next);
                 setChartMode("kline");

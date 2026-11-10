@@ -9,6 +9,7 @@ test("symbol search preserves SHFE contract casing and shows safe custom indicat
   await page.goto("/?theme=dark");
   await expect(page.locator(".symbol-title h1")).toHaveText("SHFE.rb2701");
   await expect(page.locator(".account-select select")).toBeVisible();
+  await expect(page.locator(".chart-wasm").first()).toHaveText("EMA6");
 
   await page.getByTitle("添加合约").click();
   const search = page.locator('.watch-add input[placeholder^="代码/名称"]');
@@ -27,10 +28,15 @@ test("symbol search preserves SHFE contract casing and shows safe custom indicat
   await page.locator(".indicator-settings-trigger").click();
   const settings = page.locator(".indicator-settings");
   await expect(settings).toBeVisible();
-  await expect(settings.getByText("自定义指标")).toBeVisible();
-  await expect(settings.getByText("安全 DSL：只支持 EMA/SMA 白名单计算，不执行任意 JavaScript。")).toBeVisible();
-  const customPeriod = settings.locator(".custom-indicator-row input[type=number]").first();
-  await expect(customPeriod).toHaveValue("6");
+  await expect(settings.getByText("WASM 插件", { exact: true })).toBeVisible();
+  await expect(settings.getByText("EMA6 v0.1.0")).toBeVisible();
+  const wasmPeriod = settings.locator(".wasm-indicator-block input[type=number]").first();
+  await expect(wasmPeriod).toHaveValue("6");
+  await wasmPeriod.fill("12");
+  await wasmPeriod.blur();
+  await expect(page.locator(".chart-wasm").first()).toHaveText("EMA6");
+  await expect(settings.getByText("内置参数指标", { exact: true })).toBeVisible();
+  await expect(settings.getByText("兼容旧配置：仅 EMA/SMA 参数化计算；WASM 插件见上方。")).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });

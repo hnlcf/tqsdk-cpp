@@ -6,11 +6,15 @@ import {
   type IndicatorColors,
 } from "../indicators/indicators";
 import { chartColors, type Theme } from "../chart/theme";
+import type { WasmManifest } from "../indicators/wasm/types";
 
 interface Props {
   config: IndicatorConfig;
   theme: Theme;
   onChange: (next: IndicatorConfig) => void;
+  wasmManifest?: WasmManifest;
+  wasmParams?: number[];
+  onWasmParams?: (values: number[]) => void;
   onClose: () => void;
 }
 
@@ -86,6 +90,50 @@ export default function IndicatorSettings(props: Props) {
         </div>
 
         <div class="indicator-settings-body">
+          <Show when={props.wasmManifest}>
+            <div class="indicator-block wasm-indicator-block">
+              <div class="indicator-block-title">
+                <strong>WASM 插件</strong>
+                <span class="wasm-badge">
+                  {props.wasmManifest?.name} v{props.wasmManifest?.version}
+                </span>
+              </div>
+              <small class="indicator-hint">
+                Worker + WebAssembly 沙箱 · 无 host imports · 只读历史 bars
+              </small>
+              <For each={props.wasmManifest?.params ?? []}>
+                {(param, index) => (
+                  <div class="indicator-param-row">
+                    <label>
+                      {param.label}
+                      <input
+                        type="number"
+                        min={param.min}
+                        max={param.max}
+                        step={param.type === "int" ? 1 : 0.1}
+                        value={props.wasmParams?.[index()] ?? param.default}
+                        onChange={(event) => {
+                          const raw = Number(event.currentTarget.value);
+                          if (!Number.isFinite(raw)) return;
+                          const value = Math.min(
+                            param.max ?? Number.POSITIVE_INFINITY,
+                            Math.max(param.min ?? Number.NEGATIVE_INFINITY, raw),
+                          );
+                          const next = [
+                            ...(props.wasmParams ??
+                              props.wasmManifest!.params.map((item) => item.default)),
+                          ];
+                          next[index()] = param.type === "int" ? Math.round(value) : value;
+                          props.onWasmParams?.(next);
+                        }}
+                      />
+                    </label>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
+
           <div class="indicator-block">
             <div class="indicator-block-title">
               <strong>MA</strong>
@@ -313,16 +361,16 @@ export default function IndicatorSettings(props: Props) {
 
           <div class="indicator-block">
             <div class="indicator-block-title">
-              <strong>自定义指标</strong>
+              <strong>内置参数指标</strong>
               <button type="button" class="table-action" onClick={addCustom}>
                 + 加一条
               </button>
             </div>
             <small class="indicator-hint">
-              安全 DSL：只支持 EMA/SMA 白名单计算，不执行任意 JavaScript。
+              兼容旧配置：仅 EMA/SMA 参数化计算；WASM 插件见上方。
             </small>
             <Show when={props.config.customIndicators.length === 0}>
-              <small class="indicator-hint">当前没有自定义指标。</small>
+              <small class="indicator-hint">当前没有内置参数指标。</small>
             </Show>
             <For each={props.config.customIndicators}>
               {(item, index) => (

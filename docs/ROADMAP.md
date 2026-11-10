@@ -93,12 +93,14 @@
 
 ## 3. UI 与可观测性
 
-- TQSDK Board：多自选模糊搜索/K 线/分时/盘口/三键下单/合并持仓/委托/成交/权益已落地；
-- 指标参数/颜色设置（MA/BOLL/MACD/RSI）已落地，插件化设计见 WEB_INDICATORS；
+- TQSDK Board：多自选模糊搜索/K 线/分时/盘口/快捷下单/合并持仓/委托/成交/权益已落地；
+- 指标参数/颜色设置（MA/BOLL/MACD/RSI）已落地；
+- ✅ WASM 自定义指标：Manifest + Rust SDK + Worker 沙箱 + EMA6，支持 line/histogram/area/band/markers；
+- ✅ 前端 Playwright E2E（搜索/大小写/WASM/下单板按钮）；
 - TqAuth 快期认证与目录 Bearer header 已接入；
 - ✅ 顶栏账户选择器、运维页、持仓固定列宽、K 线切换缩放/本地时间；
-- 图表画线 primitive/overlay 与指标 Worker；
-- 前端 Playwright 端到端（登录/订阅/下单/重连）；
+- 图表画线 primitive/overlay、指标增量计算/多插件并行；
+- 前端 Playwright 端到端扩展（登录/订阅/真实下单/重连/视觉回归）；
 - 虚拟列表、列宽/排序持久化；
 - 期权希腊字母、波动率与更完整期权分析；
 

@@ -2766,3 +2766,17 @@ html[data-theme="light"] .indicator-param-row select {
   background: #f7f9fc;
   color: var(--text);
 }
+
+/* ---- WASM indicator settings ---- */
+.wasm-badge {
+  color: var(--muted);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
+.wasm-indicator-block {
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+}

@@ -3,6 +3,7 @@ import type { Quote } from "../api/client";
 import { formatPrice, formatVolume, quoteChange } from "../lib/format";
 import { instrumentName } from "../lib/instruments";
 import type { OHLCV, IndicatorConfig } from "../indicators/indicators";
+import type { WasmManifest, WasmSeries } from "../indicators/wasm/types";
 import KLineChart from "../chart/KLineChart";
 import IntradayChart from "../chart/IntradayChart";
 import IndicatorSettings from "./IndicatorSettings";
@@ -24,6 +25,10 @@ interface Props {
   theme: Theme;
   decimals: number;
   indicators: IndicatorConfig;
+  wasmSeries?: WasmSeries[];
+  wasmManifest?: WasmManifest;
+  wasmParams?: number[];
+  onWasmParams?: (values: number[]) => void;
   onPeriod: (period: string) => void;
   onMode: (mode: "kline" | "time") => void;
   onIndicators: (next: IndicatorConfig) => void;
@@ -163,6 +168,7 @@ export default function ChartPanel(props: Props) {
             theme={props.theme}
             priceDecimals={props.decimals}
             indicators={props.indicators}
+            wasmSeries={props.wasmSeries}
           />
         </Show>
       </div>
@@ -180,6 +186,9 @@ export default function ChartPanel(props: Props) {
           config={props.indicators}
           theme={props.theme}
           onChange={props.onIndicators}
+          wasmManifest={props.wasmManifest}
+          wasmParams={props.wasmParams}
+          onWasmParams={props.onWasmParams}
           onClose={() => setSettingsOpen(false)}
         />
       </Show>

@@ -80,15 +80,7 @@ export const DEFAULT_INDICATORS: IndicatorConfig = {
   macdSignal: 9,
   rsi: false,
   rsiPeriod: 14,
-  customIndicators: [
-    {
-      id: "ema-6",
-      kind: "EMA",
-      period: 6,
-      color: "#f0b90b",
-      enabled: true,
-    },
-  ],
+  customIndicators: [],
 };
 
 function positiveInt(value: unknown, fallback: number): number {
