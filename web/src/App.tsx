@@ -568,29 +568,37 @@ export default function App() {
     }, 120);
   }
 
+  function openMarketStream(account: string): MarketStream {
+    return createMarketStream(
+      {
+        onStatus: (status) => {
+          if (account === selectedAccount()) setStreamStatus(status);
+        },
+        onQuote: (next) => {
+          setQuotes((previous) => ({ ...previous, ...next }));
+          for (const [symbol, quote] of Object.entries(next)) recordTape(symbol, quote);
+        },
+        onTradeData: (data, snapshot) => {
+          if (account !== selectedAccount()) return;
+          applyTradeData(data, snapshot);
+        },
+        onKline: (symbol, duration, payload) => {
+          if (symbol !== selected() || Number(duration) !== activeDuration()) return;
+          const update = payload as { reset?: boolean; bars?: KlineBar[] };
+          const incoming = toOHLCV(update.bars ?? []);
+          if (incoming.length === 0) return;
+          if (update.reset) {
+            setLiveBars(incoming);
+          } else {
+            setLiveBars((previous) => mergeBars(previous, incoming));
+          }
+        },
+      },
+      account === "default" ? undefined : account,
+    );
+  }
+
   onMount(() => {
-    stream = createMarketStream({
-      onStatus: (status) => setStreamStatus(status),
-      onQuote: (next) => {
-        setQuotes((previous) => ({ ...previous, ...next }));
-        for (const [symbol, quote] of Object.entries(next)) recordTape(symbol, quote);
-      },
-      onTradeData: (data, snapshot) => {
-        if (!isDefaultAccount()) return;
-        applyTradeData(data, snapshot);
-      },
-      onKline: (symbol, duration, payload) => {
-        if (symbol !== selected() || Number(duration) !== activeDuration()) return;
-        const update = payload as { reset?: boolean; bars?: KlineBar[] };
-        const incoming = toOHLCV(update.bars ?? []);
-        if (incoming.length === 0) return;
-        if (update.reset) {
-          setLiveBars(incoming);
-        } else {
-          setLiveBars((previous) => mergeBars(previous, incoming));
-        }
-      },
-    });
     setStreamReady(true);
     const preferences = readWasmPreferences();
     for (const descriptor of DEFAULT_WASM_PLUGINS) {
@@ -663,12 +671,22 @@ export default function App() {
   });
 
   createEffect(() => {
+    if (!streamReady()) return;
+    const account = selectedAccount();
+    untrack(() => {
+      stream?.close();
+      stream = openMarketStream(account);
+    });
+  });
+
+  createEffect(() => {
     if (!streamReady() || !stream) return;
+    selectedAccount();
     const symbols = [...new Set([...watchlist(), selected(), ...Object.keys(positions())])];
     stream.setSubscription(
       symbols,
       [{ symbol: selected(), duration_ns: activeDuration(), view_width: 600 }],
-      isDefaultAccount() ? TRADING_TOPICS : [],
+      TRADING_TOPICS,
     );
   });
 

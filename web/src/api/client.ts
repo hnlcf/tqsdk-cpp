@@ -273,12 +273,15 @@ export interface MarketHandlers {
 const RAW_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 export const API_BASE = RAW_BASE.replace(/\/$/, "");
 
-function wsUrl(): string {
+function wsUrl(account?: string): string {
+  let url: string;
   if (API_BASE.startsWith("http://") || API_BASE.startsWith("https://")) {
-    return API_BASE.replace(/^http/, "ws") + "/stream";
+    url = API_BASE.replace(/^http/, "ws") + "/stream";
+  } else {
+    const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+    url = `${scheme}//${window.location.host}${API_BASE}/stream`;
   }
-  const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${scheme}//${window.location.host}${API_BASE}/stream`;
+  return account ? `${url}?account=${encodeURIComponent(account)}` : url;
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -505,7 +508,7 @@ export interface MarketStream {
  * This client always sends the four trading topics explicitly for the trading
  * terminal; callers that only need quotes can pass a smaller list.
  */
-export function createMarketStream(handlers: MarketHandlers): MarketStream {
+export function createMarketStream(handlers: MarketHandlers, account?: string): MarketStream {
   let socket: WebSocket | undefined;
   let retry = 0;
   let closed = false;
@@ -534,7 +537,7 @@ export function createMarketStream(handlers: MarketHandlers): MarketStream {
   const connect = () => {
     if (closed) return;
     handlers.onStatus?.("connecting");
-    socket = new WebSocket(wsUrl());
+    socket = new WebSocket(wsUrl(account));
     socket.onmessage = (event) => {
       let message: Record<string, unknown>;
       try {

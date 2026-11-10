@@ -33,7 +33,37 @@ HttpServer::HttpServer(TqApi*                api,
       acceptor_(io_ex_),
       ws_(std::make_shared<WebSocketHub>(api_, data_ex_, io_ex_, std::move(ws_options))) {
     ws_->set_catalog(catalog_);
+    ws_default_ = ws_;
+    if (accounts_ != nullptr) {
+        const WsOptions hub_options = ws_->options();
+        const auto     default_id   = accounts_->default_account_id();
+        for (const auto& id : accounts_->account_ids()) {
+            auto account = accounts_->find_account(id);
+            if (!account)
+                continue;
+            std::shared_ptr<WebSocketHub> hub;
+            if (account.get() == api_) {
+                hub = ws_;
+            } else {
+                hub = std::make_shared<WebSocketHub>(
+                    account.get(), data_ex_, io_ex_, hub_options);
+                hub->set_catalog(catalog_);
+            }
+            ws_hubs_[id] = hub;
+            if (id == default_id)
+                ws_default_ = hub;
+        }
+    } else {
+        ws_hubs_.emplace("", ws_);
+    }
     setup_routes();
+}
+
+std::shared_ptr<WebSocketHub> HttpServer::ws_hub_for(std::string_view account_id) const {
+    if (account_id.empty())
+        return ws_default_;
+    auto it = ws_hubs_.find(std::string(account_id));
+    return it == ws_hubs_.end() ? nullptr : it->second;
 }
 
 TqApi* HttpServer::account_api(std::string_view account_id) const {
@@ -73,7 +103,15 @@ void HttpServer::listen(const std::string& address, uint16_t port) {
     co_spawn_logged(
         io_ex_, [this]() -> asio::awaitable<void> { co_await accept_loop(); }, "Http.accept");
     ws_->start();
-    SPDLOG_INFO("[HttpServer] listening on {}:{} (ws: {})", address, port_, ws_->options().path);
+    for (const auto& [_, hub] : ws_hubs_) {
+        if (hub && hub != ws_)
+            hub->start();
+    }
+    SPDLOG_INFO("[HttpServer] listening on {}:{} (ws: {}, accounts: {})",
+                address,
+                port_,
+                ws_->options().path,
+                ws_hubs_.size());
 }
 
 void HttpServer::stop() noexcept {
@@ -84,6 +122,10 @@ void HttpServer::stop() noexcept {
     order_tasks_.clear();
     if (ws_) {
         ws_->stop();
+    }
+    for (const auto& [_, hub] : ws_hubs_) {
+        if (hub && hub != ws_)
+            hub->stop();
     }
     boost::system::error_code ec;
     auto                      _ = acceptor_.close(ec);
@@ -137,19 +179,30 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
             }
 
             // Hub 的 clients_/订阅表都在 data_ex_ 上；检查与接管都必须切过去。
+            const auto query = detail::parse_query(req.target());
+            auto       hub   = ws_default_;
+            if (query.contains("account")) {
+                const auto account_id = query["account"].get<std::string>();
+                hub                    = ws_hub_for(account_id);
+            }
             co_await asio::dispatch(data_ex_, asio::use_awaitable);
 
             http::response<http::string_body> res;
             if (target != ws_->options().path) {
                 res = make_json_response(
                     http::status::not_found, json{{"error", "not found"}}, req.version());
-            } else if (ws_->full()) {
+            } else if (!hub) {
+                res = make_json_response(http::status::not_found,
+                                         json{{"error", "account not found"},
+                                              {"account", query.value("account", std::string{})}},
+                                         req.version());
+            } else if (hub->full()) {
                 res = make_json_response(http::status::service_unavailable,
                                          json{{"error", "too many websocket clients"}},
                                          req.version());
             } else {
-                // 交给 WebSocketHub 完成握手并接管 socket；本 session 结束。
-                co_await ws_->accept(std::move(sock), std::move(req));
+                // 交给对应账户的 WebSocketHub 完成握手并接管 socket。
+                co_await hub->accept(std::move(sock), std::move(req));
                 co_return;
             }
             res.keep_alive(false);

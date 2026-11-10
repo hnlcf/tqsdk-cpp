@@ -6,6 +6,7 @@
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
+#include <boost/beast/websocket.hpp>
 #include <gtest/gtest.h>
 
 namespace asio  = boost::asio;
@@ -128,6 +129,126 @@ TEST(MultiAccountHttp, RoutesTradingAndSnapshotsByAccount) {
     EXPECT_EQ(b_positions_body["positions"]["SHFE.rb2701"]["volume_long"], 1);
     EXPECT_EQ(a_positions_status, 200u);
     EXPECT_FALSE(a_positions_body["positions"].contains("SHFE.rb2701"));
+
+    io.restart();
+    server.stop();
+    manager.close();
+    io.run_for(std::chrono::milliseconds(100));
+}
+
+
+namespace {
+
+namespace beast_ws = boost::beast::websocket;
+
+class WsClient {
+public:
+    explicit WsClient(asio::io_context& ctx) : ws_(ctx) {}
+
+    asio::awaitable<void> connect(std::string host, uint16_t port, std::string path) {
+        asio::ip::tcp::endpoint ep{asio::ip::make_address(host), port};
+        co_await ws_.next_layer().async_connect(ep, asio::use_awaitable);
+        co_await ws_.async_handshake(host, path, asio::use_awaitable);
+    }
+
+    asio::awaitable<json> read_json() {
+        buffer_.clear();
+        co_await ws_.async_read(buffer_, asio::use_awaitable);
+        std::string text = beast::buffers_to_string(buffer_.data());
+        buffer_.consume(buffer_.size());
+        co_return json::parse(text);
+    }
+
+    asio::awaitable<void> send_json(json value) {
+        std::string text = value.dump();
+        co_await ws_.async_write(asio::buffer(text), asio::use_awaitable);
+    }
+
+    asio::awaitable<void> close() {
+        boost::system::error_code ec;
+        co_await ws_.async_close(
+            beast_ws::close_reason(beast_ws::close_code::normal),
+            asio::redirect_error(asio::use_awaitable, ec));
+    }
+
+private:
+    beast_ws::stream<asio::ip::tcp::socket> ws_;
+    beast::flat_buffer                      buffer_;
+};
+
+asio::awaitable<json> read_snapshot(WsClient& client) {
+    for (int i = 0; i < 8; ++i) {
+        auto message = co_await client.read_json();
+        if (message.value("type", "") == "snapshot") {
+            co_return message["data"];
+        }
+    }
+    co_return json::object();
+}
+
+} // namespace
+
+TEST(MultiAccountHttp, WebSocketRoutesByAccount) {
+    asio::io_context io;
+    auto             a = make_account(io, 1'000'000);
+    auto             b = make_account(io, 2'000'000);
+
+    tqsdk::MultiAccountManager manager;
+    ASSERT_TRUE(manager.add_account("A", a.api));
+    ASSERT_TRUE(manager.add_account("B", b.api));
+
+    tqsdk::serve::HttpServer server(a.api.get(), io.get_executor(), {}, io.get_executor(),
+                                    nullptr, &manager);
+    server.listen("127.0.0.1", 0);
+
+    json                      b_snapshot;
+    json                      a_snapshot;
+    std::pair<unsigned, json> order_result;
+    asio::co_spawn(
+        io,
+        [&]() -> asio::awaitable<void> {
+            order_result = co_await request_json(
+                io.get_executor(), server.port(), http::verb::post, "/order?account=B",
+                json{{"instrument_id", "SHFE.rb2701"},
+                     {"direction", "BUY"},
+                     {"offset", "OPEN"},
+                     {"price_type", "ANY"},
+                     {"limit_price", 0},
+                     {"volume", 1}});
+
+            WsClient b_ws(io);
+            co_await b_ws.connect("127.0.0.1", server.port(), "/stream?account=B");
+            co_await b_ws.read_json(); // welcome
+            co_await b_ws.send_json(json{{"op", "subscribe"},
+                                          {"symbols", json::array()},
+                                          {"klines", json::array()},
+                                          {"topics", {"account", "positions"}}});
+            b_snapshot = co_await read_snapshot(b_ws);
+            co_await b_ws.close();
+
+            WsClient a_ws(io);
+            co_await a_ws.connect("127.0.0.1", server.port(), "/stream?account=A");
+            co_await a_ws.read_json(); // welcome
+            co_await a_ws.send_json(json{{"op", "subscribe"},
+                                          {"symbols", json::array()},
+                                          {"klines", json::array()},
+                                          {"topics", {"account", "positions"}}});
+            a_snapshot = co_await read_snapshot(a_ws);
+            co_await a_ws.close();
+            co_return;
+        },
+        [&](std::exception_ptr ep) {
+            if (ep) std::rethrow_exception(ep);
+            io.stop();
+        });
+    io.run();
+
+    EXPECT_EQ(order_result.first, 200u) << order_result.second.dump();
+    ASSERT_TRUE(b_snapshot.contains("positions"));
+    ASSERT_TRUE(b_snapshot["positions"].contains("SHFE.rb2701"));
+    EXPECT_EQ(b_snapshot["positions"]["SHFE.rb2701"]["volume_long"], 1);
+    ASSERT_TRUE(a_snapshot.contains("positions"));
+    EXPECT_FALSE(a_snapshot["positions"].contains("SHFE.rb2701"));
 
     io.restart();
     server.stop();
