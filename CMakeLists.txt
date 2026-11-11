@@ -129,6 +129,30 @@ target_link_libraries(tqsdk_core PUBLIC
 # SQLiteCpp 只服务于 node 的 K 线缓存实现，不进入公共头文件/安装依赖。
 target_link_libraries(tqsdk_core PRIVATE SQLiteCpp)
 
+# ---------- Python ctypes binding (C ABI) ----------
+# Keep the C++ BacktestEngine as the implementation and expose a small stable
+# C ABI. Python loads this library with ctypes, so no pybind11/CPython headers
+# are required at build time.
+option(TQSDK_BUILD_PYTHON_BINDING "Build C ABI shared library for Python ctypes" ON)
+if(TQSDK_BUILD_PYTHON_BINDING)
+    add_library(tqsdk_backtest SHARED src/backtest/backtest_c_api.cpp)
+    target_include_directories(tqsdk_backtest PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>)
+    target_link_libraries(tqsdk_backtest PRIVATE tqsdk_core)
+    set_target_properties(tqsdk_backtest PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+        VERSION ${PROJECT_VERSION}
+        SOVERSION 0)
+    install(TARGETS tqsdk_backtest
+            ARCHIVE DESTINATION lib
+            LIBRARY DESTINATION lib
+            RUNTIME DESTINATION bin)
+    install(FILES python/tqsdk_backtest.py
+            DESTINATION share/tqsdk/python)
+endif()
+
 # ---------- CTP 网关 (可选，仅当找到 CTP SDK 时编译) ----------
 # 将 CTP 的 .so/.dll 和头文件放在 third_party/ctp/ 下：
 #   third_party/ctp/include/   (ThostFtdc*.h)
@@ -328,6 +352,18 @@ if(TQSDK_BUILD_TESTS)
 
     include(GoogleTest)
     gtest_discover_tests(tqsdk_tests)
+
+    # ctypes binding test: the C++ target is built by the normal build, then
+    # Python loads it from the build tree.
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND AND TARGET tqsdk_backtest)
+        add_test(
+            NAME PythonBacktestBinding
+            COMMAND ${Python3_EXECUTABLE} -m unittest discover
+                    -s ${CMAKE_CURRENT_SOURCE_DIR}/python/tests -v)
+        set_tests_properties(PythonBacktestBinding PROPERTIES
+            ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/python;TQSDK_BACKTEST_LIB=$<TARGET_FILE:tqsdk_backtest>")
+    endif()
 endif()
 
 # ==========================================================
@@ -403,7 +439,7 @@ install(FILES config/gw.toml config/node.toml config/p0_simnode.toml
 install(FILES README.md docs/README.md docs/ARCHITECTURE.md docs/MODULES.md
               docs/FLOWS.md docs/STATE_MACHINES.md docs/PROTOCOLS.md docs/OPERATIONS.md
               docs/CTP.md docs/SOAK_PERF.md docs/WEB_FRONTEND.md docs/WEB_INDICATORS.md docs/TQ_AUTH.md docs/INSTRUMENTS.md
-              docs/KLINE_CACHE.md docs/SIMNOW_ACCEPTANCE.md docs/P0_SIMNOW_TEST_PLAN.md docs/ORDER_TASKS.md docs/RISK_CONTROL.md docs/TICK_DATA.md docs/OPTION_ANALYTICS.md docs/TRADING_STATUS.md docs/MULTI_ACCOUNT_BACKTEST.md docs/ROADMAP.md
+              docs/KLINE_CACHE.md docs/SIMNOW_ACCEPTANCE.md docs/P0_SIMNOW_TEST_PLAN.md docs/ORDER_TASKS.md docs/RISK_CONTROL.md docs/TICK_DATA.md docs/OPTION_ANALYTICS.md docs/TRADING_STATUS.md docs/MULTI_ACCOUNT_BACKTEST.md docs/PYTHON_BACKTEST.md docs/ROADMAP.md
         DESTINATION share/doc/tqsdk)
 
 # ==========================================================

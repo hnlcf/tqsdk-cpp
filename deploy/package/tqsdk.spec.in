@@ -54,6 +54,7 @@ echo "tqsdk: edit /etc/tqsdk/gw.toml and node.toml, set TQSDK_SERVE_TOKEN in tqs
 /usr/bin/tqsdk-gw
 /usr/bin/tqsdk-node
 /usr/lib/libtqsdk_core.so*
+/usr/lib/libtqsdk_backtest.so*
 /usr/lib/libthost*.so*
 /usr/lib/systemd/system/tqsdk-gw.service
 /usr/lib/systemd/system/tqsdk-node.service

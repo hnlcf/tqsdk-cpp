@@ -26,6 +26,7 @@
 | [STRATEGY_SCAN_20261111.md](STRATEGY_SCAN_20261111.md) | 2026-11-11 54 品种扫描记录 |
 | [DAILY_STRATEGY_BACKTEST.md](DAILY_STRATEGY_BACKTEST.md) | 2016-2026 十年日线策略正式回测报告 |
 | [DAILY_BACKTEST_DATA.md](DAILY_BACKTEST_DATA.md) | 十年指数日线数据源、过滤、方法 |
+| [PYTHON_BACKTEST.md](PYTHON_BACKTEST.md) | C++ BacktestEngine 的 Python ctypes 绑定 |
 | [CTP_SINGLE_ACCOUNT_STRATEGY.md](CTP_SINGLE_ACCOUNT_STRATEGY.md) | 单 SimNow 账户 CTP 量化测试步骤 |
 | [CI.md](CI.md) | 本地 CI、ASan/TSan、短 soak 和回归门禁 |
 | [SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md) | SimNow 真实 CTP 验收流程和报告 |
