@@ -1,6 +1,6 @@
 # 日线 EMA60 + Donchian22 + ATR 策略回测报告
 
-- 生成时间：2026-11-11 19:40:02
+- 生成时间：2026-11-11 19:40:46
 - 数据源：Tq 官方 Backtest MD `KQ.i@<product>` 日线指数连续
 - 原始数据区间：2016-01-05 至 2026-11-11（各品种上市日不同）
 - 可交易信号区间：2016-04-08 至 2026-11-11
@@ -341,6 +341,8 @@ artifacts/daily_backtest/results.csv
 artifacts/daily_backtest/results.json
 artifacts/daily_backtest/trades.csv
 artifacts/daily_backtest/yearly_returns.csv
+artifacts/daily_backtest/equity_curves.csv
+artifacts/daily_backtest/portfolio_equity.csv
 ```
 
 ## 8. 复现

@@ -991,6 +991,8 @@ def write_report(
         "artifacts/daily_backtest/results.json",
         "artifacts/daily_backtest/trades.csv",
         "artifacts/daily_backtest/yearly_returns.csv",
+        "artifacts/daily_backtest/equity_curves.csv",
+        "artifacts/daily_backtest/portfolio_equity.csv",
         "```",
         "",
         "## 8. 复现",
@@ -1267,6 +1269,17 @@ def main() -> int:
         writer.writerow(["symbol"] + [str(year) for year in years])
         for result in sorted_results:
             writer.writerow([result.symbol] + [result.yearly.get(year, "") for year in years])
+    with (output / "equity_curves.csv").open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["symbol", "date", "equity", "drawdown_pct"])
+        for result in sorted_results:
+            for date_text, value, dd in zip(result.equity_dates, result.equity, result.drawdowns):
+                writer.writerow([result.symbol, date_text, value, dd])
+    with (output / "portfolio_equity.csv").open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["date", "equity", "drawdown_pct"])
+        for date_text, value, dd in zip(portfolio["equity_dates"], portfolio["equity"], daily_drawdowns(portfolio["equity"])):
+            writer.writerow([date_text, value, dd])
     (output / "results.json").write_text(
         json.dumps(
             {

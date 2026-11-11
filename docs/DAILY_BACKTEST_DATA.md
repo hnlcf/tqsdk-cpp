@@ -118,6 +118,8 @@ artifacts/daily_backtest/results.csv
 artifacts/daily_backtest/results.json
 artifacts/daily_backtest/trades.csv
 artifacts/daily_backtest/yearly_returns.csv
+artifacts/daily_backtest/equity_curves.csv
+artifacts/daily_backtest/portfolio_equity.csv
 ```
 
 ## 7. 复现
