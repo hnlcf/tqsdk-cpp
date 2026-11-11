@@ -1,18 +1,32 @@
-# TLS termination for TQSDK node.
-# The node itself binds 127.0.0.1 and stays private; Caddy owns :443 and
-# forwards both normal HTTP and WebSocket upgrades.
+# TLS termination + static web terminal for TQSDK.
+# Install web assets at /usr/share/tqsdk/web (the DEB/RPM does this) and keep
+# node on 127.0.0.1:18081.
 {
 	email {$TQSDK_ACME_EMAIL}
 }
 
 {$TQSDK_DOMAIN} {
 	encode zstd gzip
+	root * /usr/share/tqsdk/web
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		-Server
 	}
 
-	# Probes can stay unauthenticated only if node [serve.auth].exempt_healthz=true.
-	reverse_proxy 127.0.0.1:18081
+	# Frontend API_BASE=/api; strip it before node, preserving WS upgrades.
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:18081
+	}
+
+	# Direct probes for systemd/load balancers.
+	handle /healthz {
+		reverse_proxy 127.0.0.1:18081
+	}
+
+	# SPA assets and static plugin manifests.
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
 }

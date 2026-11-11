@@ -1,0 +1,63 @@
+%define _stage @STAGE@
+%define _pkg_version @VERSION@
+
+Name:           tqsdk
+Version:        %{_pkg_version}
+Release:        1
+Summary:        TQSDK gateway, node and web terminal
+License:        Proprietary
+URL:            https://github.com/
+BuildArch:      @ARCH@
+AutoReqProv:    no
+Requires:       glibc, libstdc++
+Requires(pre):  shadow-utils
+
+%description
+TQSDK C++ data/trading gateway, node API and SolidJS web terminal.
+This package contains the gateway and node binaries, bundled CTP runtime
+libraries, systemd units, configuration templates, web assets and docs.
+
+%pre
+if ! getent group tqsdk >/dev/null 2>&1; then
+    groupadd --system tqsdk
+fi
+if ! getent passwd tqsdk >/dev/null 2>&1; then
+    NOLOGIN=/sbin/nologin
+    [ -x /usr/sbin/nologin ] && NOLOGIN=/usr/sbin/nologin
+    useradd --system --gid tqsdk --home-dir /var/lib/tqsdk --shell "$NOLOGIN" tqsdk
+fi
+
+%install
+rm -rf %{buildroot}
+mkdir -p %{buildroot}
+cp -a %{_stage}/. %{buildroot}/
+
+%post
+install -d -o tqsdk -g tqsdk -m 0750 /var/lib/tqsdk /var/log/tqsdk
+install -d -o root -g tqsdk -m 0750 /etc/tqsdk
+for name in gw node; do
+    if [ -f "/etc/tqsdk/${name}.toml.example" ] && [ ! -e "/etc/tqsdk/${name}.toml" ]; then
+        cp "/etc/tqsdk/${name}.toml.example" "/etc/tqsdk/${name}.toml"
+        chown root:tqsdk "/etc/tqsdk/${name}.toml"
+        chmod 0640 "/etc/tqsdk/${name}.toml"
+    fi
+done
+if [ -f /etc/tqsdk/tqsdk.env.example ] && [ ! -e /etc/tqsdk/tqsdk.env ]; then
+    cp /etc/tqsdk/tqsdk.env.example /etc/tqsdk/tqsdk.env
+    chmod 0600 /etc/tqsdk/tqsdk.env
+fi
+systemctl daemon-reload >/dev/null 2>&1 || true
+echo "tqsdk: edit /etc/tqsdk/gw.toml and node.toml, set TQSDK_SERVE_TOKEN in tqsdk.env, then systemctl enable --now tqsdk.target"
+
+%files
+%defattr(-,root,root,-)
+/usr/bin/tqsdk-gw
+/usr/bin/tqsdk-node
+/usr/lib/libtqsdk_core.so*
+/usr/lib/libthost*.so*
+/usr/lib/systemd/system/tqsdk-gw.service
+/usr/lib/systemd/system/tqsdk-node.service
+/usr/lib/systemd/system/tqsdk.target
+/usr/share/tqsdk
+/usr/share/doc/tqsdk
+%attr(0640,root,tqsdk) /etc/tqsdk/*.example

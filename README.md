@@ -164,6 +164,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/MULTI_ACCOUNT_BACKTEST.md](docs/MULTI_ACCOUNT_BACKTEST.md)
 - [docs/SOAK_PERF.md](docs/SOAK_PERF.md)
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- [docs/PACKAGING.md](docs/PACKAGING.md)
 - [docs/CTP_TRADE_MATRIX.md](docs/CTP_TRADE_MATRIX.md)
 - [docs/CTP_WEEKLY_TEST_PLAN.md](docs/CTP_WEEKLY_TEST_PLAN.md)
 - [docs/P6_AUTOMATION.md](docs/P6_AUTOMATION.md)
@@ -173,6 +174,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 
 ## 当前状态
 
+- `./scripts/package_release.sh`：生成 DEB/RPM/TGZ；详见 docs/PACKAGING.md；
 - `ctest`：355 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
 - Web：`pnpm typecheck`、`pnpm test`（26 项）、`pnpm build`、Playwright E2E 通过；
   K 线/分时/WASM 指标/盘口/三键下单/合并持仓/委托/成交/权益已完成浏览器验证；

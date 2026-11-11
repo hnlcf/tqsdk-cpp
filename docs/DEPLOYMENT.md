@@ -91,7 +91,8 @@ VITE_API_TOKEN=<token> pnpm build
 
 ### 3.1 设计
 
-TLS 在反向代理层终止，node 只监听 `127.0.0.1:18081`。这样：
+TLS 在反向代理层终止，node 只监听 `127.0.0.1:18081`。DEB/RPM 会把 Web 静态资源
+安装到 `/usr/share/tqsdk/web`；反向代理同时负责静态站点和 `/api`。这样：
 
 - HTTP 与 WebSocket 共用普通上游连接；
 - 证书/ACME 与 C++ 进程解耦；

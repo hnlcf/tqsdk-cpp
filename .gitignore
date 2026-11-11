@@ -58,3 +58,6 @@ web/playwright-report/
 
 # WASM plugin build output
 wasm/**/target/
+
+# release package output
+dist/

@@ -19,6 +19,7 @@
 |---|---|
 | [OPERATIONS.md](OPERATIONS.md) | 依赖、构建、配置、启动、测试、长稳、诊断 |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | TLS、token 认证、systemd、日志脱敏与审计 |
+| [PACKAGING.md](PACKAGING.md) | C++/Web 一键 DEB/RPM/TGZ 打包与发布 |
 | [CI.md](CI.md) | 本地 CI、ASan/TSan、短 soak 和回归门禁 |
 | [SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md) | SimNow 真实 CTP 验收流程和报告 |
 | [P0_SIMNOW_TEST_PLAN.md](P0_SIMNOW_TEST_PLAN.md) | P0 高级报单/执行任务/风控 SimNow 验收清单 |
