@@ -23,6 +23,7 @@
 | [CONTAINERS.md](CONTAINERS.md) | Docker/Podman 部署镜像、Sim/实时行情示例 |
 | [CONTINUOUS_CONTRACTS.md](CONTINUOUS_CONTRACTS.md) | KQ 主连/指数、continuous_table 与 1d 前后复权 |
 | [STRATEGY_EMA60_DONCHIAN.md](STRATEGY_EMA60_DONCHIAN.md) | EMA60 + Donchian22 + ATR 策略扫描 |
+| [STRATEGY_SCAN_20261111.md](STRATEGY_SCAN_20261111.md) | 2026-11-11 54 品种扫描记录 |
 | [CI.md](CI.md) | 本地 CI、ASan/TSan、短 soak 和回归门禁 |
 | [SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md) | SimNow 真实 CTP 验收流程和报告 |
 | [P0_SIMNOW_TEST_PLAN.md](P0_SIMNOW_TEST_PLAN.md) | P0 高级报单/执行任务/风控 SimNow 验收清单 |

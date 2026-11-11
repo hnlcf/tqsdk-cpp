@@ -170,6 +170,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/CONTAINERS.md](docs/CONTAINERS.md)
 - [docs/CONTINUOUS_CONTRACTS.md](docs/CONTINUOUS_CONTRACTS.md)
 - [docs/STRATEGY_EMA60_DONCHIAN.md](docs/STRATEGY_EMA60_DONCHIAN.md)
+- [docs/STRATEGY_SCAN_20261111.md](docs/STRATEGY_SCAN_20261111.md)
 - [docs/CTP_TRADE_MATRIX.md](docs/CTP_TRADE_MATRIX.md)
 - [docs/CTP_WEEKLY_TEST_PLAN.md](docs/CTP_WEEKLY_TEST_PLAN.md)
 - [docs/P6_AUTOMATION.md](docs/P6_AUTOMATION.md)
