@@ -3,10 +3,14 @@
 #include "tqsdk/gateway/sim/sim_td_gateway.h"
 #include "tqsdk/multiaccount/multi_account_manager.h"
 #include "tqsdk/serve/http_server.h"
+#include "tqsdk/util/audit.h"
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/websocket.hpp>
+#include <filesystem>
+#include <fstream>
+
 #include <gtest/gtest.h>
 
 namespace asio  = boost::asio;
@@ -21,7 +25,9 @@ asio::awaitable<std::pair<unsigned, json>> request_json(asio::any_io_executor ex
                                                         std::uint16_t         port,
                                                         http::verb            method,
                                                         std::string           target,
-                                                        json                  body = nullptr) {
+                                                        json                  body = nullptr,
+                                                        std::string           authorization = {},
+                                                        std::string           api_key       = {}) {
     tcp::resolver     resolver(ex);
     beast::tcp_stream stream(ex);
     const auto        results =
@@ -30,6 +36,10 @@ asio::awaitable<std::pair<unsigned, json>> request_json(asio::any_io_executor ex
 
     http::request<http::string_body> req{method, target, 11};
     req.set(http::field::host, "127.0.0.1");
+    if (!authorization.empty())
+        req.set(http::field::authorization, authorization);
+    if (!api_key.empty())
+        req.set("X-API-Key", api_key);
     if (!body.is_null()) {
         req.set(http::field::content_type, "application/json");
         req.body() = body.dump();
@@ -488,4 +498,119 @@ TEST(MultiAccountHttp, RemovedAccountDropsHubAndRejectsStream) {
     manager.close();
     c.reset();
     io.run_for(std::chrono::milliseconds(200));
+}
+
+TEST(MultiAccountHttp, AuthProtectsRestAndWebSocket) {
+    asio::io_context           io;
+    auto                       a = make_account(io, 1'000'000);
+    tqsdk::MultiAccountManager manager;
+    ASSERT_TRUE(manager.add_account("A", a.api));
+
+    const auto      audit_path = std::filesystem::temp_directory_path() /
+                                 ("tqsdk_auth_audit_" + std::to_string(::getpid()) + ".log");
+    std::error_code cleanup_ec;
+    std::filesystem::remove(audit_path, cleanup_ec);
+    tqsdk::audit::Options audit_options;
+    audit_options.enabled = true;
+    audit_options.file    = audit_path.string();
+    auto audit            = std::make_shared<tqsdk::audit::Log>(audit_options);
+
+    tqsdk::serve::AuthOptions auth;
+    auth.enabled = true;
+    auth.token   = "test-secret";
+    tqsdk::serve::HttpServer server(a.api.get(),
+                                    io.get_executor(),
+                                    {},
+                                    io.get_executor(),
+                                    nullptr,
+                                    &manager,
+                                    nullptr,
+                                    auth,
+                                    audit);
+    server.listen("127.0.0.1", 0);
+
+    unsigned health_status  = 0;
+    unsigned no_auth_status = 0;
+    unsigned bearer_status  = 0;
+    unsigned api_key_status = 0;
+    unsigned query_status   = 0;
+    bool     ws_rejected    = false;
+    bool     ws_accepted    = false;
+
+    asio::co_spawn(
+        io,
+        [&]() -> asio::awaitable<void> {
+            auto health = co_await request_json(
+                io.get_executor(), server.port(), http::verb::get, "/healthz");
+            health_status = health.first;
+
+            auto denied = co_await request_json(
+                io.get_executor(), server.port(), http::verb::get, "/quote/SHFE.rb2701");
+            no_auth_status = denied.first;
+
+            auto bearer   = co_await request_json(io.get_executor(),
+                                                  server.port(),
+                                                  http::verb::get,
+                                                  "/quote/SHFE.rb2701",
+                                                  nullptr,
+                                                  "Bearer test-secret");
+            bearer_status = bearer.first;
+
+            auto key       = co_await request_json(io.get_executor(),
+                                                   server.port(),
+                                                   http::verb::get,
+                                                   "/quote/SHFE.rb2701",
+                                                   nullptr,
+                                                   {},
+                                                   "test-secret");
+            api_key_status = key.first;
+
+            auto query   = co_await request_json(io.get_executor(),
+                                                 server.port(),
+                                                 http::verb::get,
+                                                 "/quote/SHFE.rb2701?token=test-secret");
+            query_status = query.first;
+
+            try {
+                WsClient denied_ws(io);
+                co_await denied_ws.connect("127.0.0.1", server.port(), "/stream?account=A");
+            } catch (const std::exception&) {
+                ws_rejected = true;
+            }
+
+            WsClient accepted_ws(io);
+            co_await accepted_ws.connect(
+                "127.0.0.1", server.port(), "/stream?account=A&token=test-secret");
+            const auto welcome = co_await accepted_ws.read_json();
+            ws_accepted        = welcome.value("type", "") == "welcome";
+            co_await accepted_ws.close();
+            co_return;
+        },
+        [&](std::exception_ptr ep) {
+            if (ep)
+                std::rethrow_exception(ep);
+            io.stop();
+        });
+    io.run();
+
+    EXPECT_EQ(health_status, 200u);
+    EXPECT_EQ(no_auth_status, 401u);
+    EXPECT_EQ(bearer_status, 200u);
+    EXPECT_EQ(api_key_status, 200u);
+    EXPECT_EQ(query_status, 200u);
+    EXPECT_TRUE(ws_rejected);
+    EXPECT_TRUE(ws_accepted);
+    std::ifstream audit_input(audit_path);
+    ASSERT_TRUE(audit_input.good());
+    std::string audit_text((std::istreambuf_iterator<char>(audit_input)),
+                           std::istreambuf_iterator<char>());
+    EXPECT_NE(audit_text.find("\"event\":\"http\""), std::string::npos);
+    EXPECT_NE(audit_text.find("\"event\":\"ws.upgrade\""), std::string::npos);
+    EXPECT_EQ(audit_text.find("test-secret"), std::string::npos);
+    std::filesystem::remove(audit_path, cleanup_ec);
+
+    io.restart();
+    server.stop();
+    manager.close();
+    io.run_for(std::chrono::milliseconds(100));
 }

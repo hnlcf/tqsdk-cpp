@@ -10,6 +10,7 @@
 #include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/ipc/protocol.h"
 #include "tqsdk/tqapi.h"
+#include "tqsdk/util/audit.h"
 #include "tqsdk/util/runtime.h"
 
 namespace tqsdk {
@@ -195,6 +196,17 @@ struct NodeConfig {
     TqApiConfig upstream;               ///< 默认账户到 gw 的连接（md/td.kind = Remote）
     std::string account_id = "default"; ///< 默认账户 ID
 
+    /// [serve.auth]：REST/WS token 认证。token 优先取 TOML，通常建议只配
+    /// token_env 并从 systemd EnvironmentFile/环境变量注入。
+    struct ServeAuth {
+        bool        enabled = false;
+        std::string token;
+        std::string token_env         = "TQSDK_SERVE_TOKEN";
+        bool        allow_query_token = true;
+        bool        exempt_healthz    = true;
+    };
+    ServeAuth auth;
+
     /// 额外账户：每个账户独立连接一个 gw 端点，形成独立 TqApi/DataManager。
     struct AccountEndpoint {
         std::string id;
@@ -212,6 +224,7 @@ struct NodeConfig {
     TqAuth::Config            tq_auth;     ///< [tq_auth] 快期账户认证
     KlineStore::Config        kline_cache; ///< [kline_cache] 本地 K 线历史缓存
     TickStore::Config         tick_cache;  ///< [tick_cache] 本地 tick 快照缓存
+    audit::Options            audit;       ///< [audit] 变更请求审计日志
 
     /// [serve.ws]：同一 HTTP 端口上的 WebSocket 实时推送。
     struct Ws {

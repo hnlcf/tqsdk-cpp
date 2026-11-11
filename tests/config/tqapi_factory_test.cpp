@@ -414,6 +414,40 @@ commission_per_lot = 2.5
     EXPECT_DOUBLE_EQ(cfg.td.last_prices.at("SHFE.rb2701"), 3037.0);
 }
 
+TEST(TqApiFactoryConfig, ParsesServeAuthSection) {
+    const char* toml = R"(
+[md]
+kind = "none"
+[td]
+kind = "none"
+[serve.auth]
+enabled = true
+token_env = "MY_TQ_TOKEN"
+allow_query_token = false
+exempt_healthz = false
+)";
+    auto        cfg  = parse_node_config(toml);
+    EXPECT_TRUE(cfg.auth.enabled);
+    EXPECT_EQ(cfg.auth.token_env, "MY_TQ_TOKEN");
+    EXPECT_FALSE(cfg.auth.allow_query_token);
+    EXPECT_FALSE(cfg.auth.exempt_healthz);
+}
+
+TEST(TqApiFactoryConfig, ParsesAuditSection) {
+    const char* toml = R"(
+[audit]
+enabled = true
+file = "/tmp/audit.log"
+max_bytes = 2048
+max_files = 2
+)";
+    auto        cfg  = parse_node_config(toml);
+    EXPECT_TRUE(cfg.audit.enabled);
+    EXPECT_EQ(cfg.audit.file, "/tmp/audit.log");
+    EXPECT_EQ(cfg.audit.max_bytes, 2048u);
+    EXPECT_EQ(cfg.audit.max_files, 2u);
+}
+
 TEST(TqApiFactoryConfig, ParsesCtpSection) {
     const char* toml = R"(
 [md]

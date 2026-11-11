@@ -272,6 +272,11 @@ export interface MarketHandlers {
 
 const RAW_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 export const API_BASE = RAW_BASE.replace(/\/$/, "");
+const API_TOKEN = (import.meta.env.VITE_API_TOKEN as string | undefined) ?? "";
+
+function authHeaders(): Record<string, string> {
+  return API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {};
+}
 
 function wsUrl(account?: string): string {
   let url: string;
@@ -281,7 +286,11 @@ function wsUrl(account?: string): string {
     const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
     url = `${scheme}//${window.location.host}${API_BASE}/stream`;
   }
-  return account ? `${url}?account=${encodeURIComponent(account)}` : url;
+  const query = new URLSearchParams();
+  if (account) query.set("account", account);
+  if (API_TOKEN) query.set("token", API_TOKEN);
+  const suffix = query.toString();
+  return suffix ? `${url}?${suffix}` : url;
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -289,6 +298,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       Accept: "application/json",
+      ...authHeaders(),
       ...(init?.headers ?? {}),
     },
   });
@@ -314,7 +324,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 export async function getReadyz(signal?: AbortSignal): Promise<ReadyState> {
   const response = await fetch(`${API_BASE}/readyz`, {
     signal,
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...authHeaders() },
   });
   const text = await response.text();
   if (text) {

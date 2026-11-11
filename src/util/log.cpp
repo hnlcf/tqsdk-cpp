@@ -5,8 +5,48 @@
 #include <spdlog/sinks/stdout_sinks.h>
 
 #include <cstdlib>
+#include <regex>
+
+#include <spdlog/pattern_formatter.h>
 
 namespace tqsdk {
+
+namespace {
+
+class RedactingFormatter final : public spdlog::formatter {
+public:
+    explicit RedactingFormatter(std::unique_ptr<spdlog::formatter> inner)
+        : inner_(std::move(inner)) {}
+
+    void format(const spdlog::details::log_msg& msg, spdlog::memory_buf_t& dest) override {
+        spdlog::memory_buf_t tmp;
+        inner_->format(msg, tmp);
+        std::string text(tmp.data(), tmp.size());
+        text = redact_secrets(text);
+        dest.append(text.data(), text.data() + text.size());
+    }
+
+    std::unique_ptr<spdlog::formatter> clone() const override {
+        return std::make_unique<RedactingFormatter>(inner_->clone());
+    }
+
+private:
+    std::unique_ptr<spdlog::formatter> inner_;
+};
+
+} // namespace
+
+std::string redact_secrets(std::string_view text) {
+    std::string             out(text);
+    static const std::regex key_value(
+        R"REGEX(("?(?:password|passwd|token|access_token|refresh_token|client_secret|authorization)"?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;}]+))REGEX",
+        std::regex::icase);
+    static const std::regex bearer(R"REGEX((Bearer\s+)[A-Za-z0-9._~+/=-]+)REGEX",
+                                   std::regex::icase);
+    out = std::regex_replace(out, bearer, "$1***");
+    out = std::regex_replace(out, key_value, "$1\"***\"");
+    return out;
+}
 
 std::optional<spdlog::level::level_enum> parse_log_level(std::string_view name) noexcept {
     // spdlog::level::from_str 对未知返回 off，无法区分；这里自己查表。
@@ -50,6 +90,10 @@ void setup_logging(const LogOptions& options) {
         console_sink = std::make_shared<spdlog::sinks::stdout_sink_mt>();
     }
     console_sink->set_pattern(options.pattern);
+    if (options.redact) {
+        console_sink->set_formatter(std::make_unique<RedactingFormatter>(
+            std::make_unique<spdlog::pattern_formatter>(options.pattern)));
+    }
 
     std::vector<spdlog::sink_ptr> sinks{console_sink};
 
@@ -60,6 +104,10 @@ void setup_logging(const LogOptions& options) {
         auto                  file_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
             options.file, kMaxBytes, kMaxFiles);
         file_sink->set_pattern(options.pattern);
+        if (options.redact) {
+            file_sink->set_formatter(std::make_unique<RedactingFormatter>(
+                std::make_unique<spdlog::pattern_formatter>(options.pattern)));
+        }
         sinks.push_back(file_sink);
     }
 

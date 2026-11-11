@@ -1,0 +1,33 @@
+[Unit]
+Description=TQSDK node (data plane + REST/WS API)
+Documentation=file:/opt/tqsdk/docs/OPERATIONS.md
+After=network-online.target tqsdk-gw.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tqsdk
+Group=tqsdk
+WorkingDirectory=/var/lib/tqsdk
+EnvironmentFile=-/etc/tqsdk/tqsdk.env
+ExecStart=/opt/tqsdk/bin/tqsdk-node -c /etc/tqsdk/node.toml
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+KillSignal=SIGTERM
+
+RuntimeDirectory=tqsdk
+StateDirectory=tqsdk
+LogsDirectory=tqsdk
+LimitNOFILE=65536
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tqsdk /var/log/tqsdk
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=tqsdk.target

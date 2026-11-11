@@ -522,6 +522,15 @@ NodeConfig build_node_from_toml(const toml::table& root) {
                 }
             }
         }
+        if (auto* auth_tv = s.get("auth"); auth_tv && auth_tv->is_table()) {
+            const auto& a      = *auth_tv->as_table();
+            cfg.auth.enabled   = get_bool(a, "enabled", cfg.auth.enabled);
+            cfg.auth.token     = get_str(a, "token", cfg.auth.token);
+            cfg.auth.token_env = get_str(a, "token_env", cfg.auth.token_env);
+            cfg.auth.allow_query_token =
+                get_bool(a, "allow_query_token", cfg.auth.allow_query_token);
+            cfg.auth.exempt_healthz = get_bool(a, "exempt_healthz", cfg.auth.exempt_healthz);
+        }
         if (auto* ws_tv = s.get("ws"); ws_tv && ws_tv->is_table()) {
             const auto& w             = *ws_tv->as_table();
             cfg.ws.path               = get_str(w, "path", cfg.ws.path);
@@ -581,6 +590,14 @@ NodeConfig build_node_from_toml(const toml::table& root) {
         cfg.kline_cache.file = cfg.market_cache_file;
     if (!tick_file_set)
         cfg.tick_cache.file = cfg.market_cache_file;
+    if (const auto& a = require_table(root, "audit"); !a.empty()) {
+        cfg.audit.enabled   = get_bool(a, "enabled", cfg.audit.enabled);
+        cfg.audit.file      = get_str(a, "file", cfg.audit.file);
+        cfg.audit.max_bytes = static_cast<std::size_t>(
+            std::max<int64_t>(1024, get_int(a, "max_bytes", cfg.audit.max_bytes)));
+        cfg.audit.max_files = static_cast<std::size_t>(
+            std::max<int64_t>(1, get_int(a, "max_files", cfg.audit.max_files)));
+    }
     cfg.tq_auth = parse_tq_auth(root);
     cfg.runtime = parse_runtime(root);
     return cfg;

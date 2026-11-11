@@ -12,6 +12,7 @@
 #include "tqsdk/serve/ws_stream.h"
 #include "tqsdk/tqapi.h"
 #include "tqsdk/trading/order_tasks.h"
+#include "tqsdk/util/audit.h"
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -124,6 +125,14 @@ inline void from_json(const json& j, QuoteBatchQuery& q) {
     q.symbols = j.value("symbols", std::string{});
 }
 
+/// 对外 HTTP/WS 认证。token 从环境变量读取后由调用方填入，避免把密钥写进 TOML。
+struct AuthOptions {
+    bool        enabled = false;
+    std::string token;
+    bool        allow_query_token = true; ///< 浏览器 WebSocket 无法设置 Authorization
+    bool        exempt_healthz    = true; ///< 仅放行 /healthz
+};
+
 /// HttpServer —— 对外暴露的只读 + 下单 REST 接口（node 进程 serve 层）。
 ///
 /// 这是"两进程架构"里 node 进程对外的服务边界：策略/前端通过 HTTP 拉取
@@ -160,24 +169,28 @@ public:
     /// api 与 executor 均由调用方持有，生命周期需覆盖本对象。
     /// ws_options 控制同一端口上的 WebSocket `/stream` 升级路由。
     /// 兼容构造：I/O 与数据处理使用同一 executor（单线程/测试）。
-    HttpServer(TqApi*                api,
-               asio::any_io_executor ex,
-               WsOptions             ws_options = {},
-               InstrumentCatalog*    catalog    = nullptr,
-               MultiAccountManager*  accounts   = nullptr,
-               TickStore*            tick_store = nullptr);
+    HttpServer(TqApi*                      api,
+               asio::any_io_executor       ex,
+               WsOptions                   ws_options = {},
+               InstrumentCatalog*          catalog    = nullptr,
+               MultiAccountManager*        accounts   = nullptr,
+               TickStore*                  tick_store = nullptr,
+               AuthOptions                 auth       = {},
+               std::shared_ptr<audit::Log> audit      = nullptr);
 
     /// 双 executor 构造：
     ///   - io_ex      ：accept / socket 读写（可跨多线程、每连接一条 strand）
     ///   - data_ex    ：路由 handler / DataManager 访问（node 中传 core strand）
     /// 所有跨 executor 切换在 session() 内显式 dispatch，保证数据面串行。
-    HttpServer(TqApi*                api,
-               asio::any_io_executor io_ex,
-               WsOptions             ws_options,
-               asio::any_io_executor data_ex,
-               InstrumentCatalog*    catalog    = nullptr,
-               MultiAccountManager*  accounts   = nullptr,
-               TickStore*            tick_store = nullptr);
+    HttpServer(TqApi*                      api,
+               asio::any_io_executor       io_ex,
+               WsOptions                   ws_options,
+               asio::any_io_executor       data_ex,
+               InstrumentCatalog*          catalog    = nullptr,
+               MultiAccountManager*        accounts   = nullptr,
+               TickStore*                  tick_store = nullptr,
+               AuthOptions                 auth       = {},
+               std::shared_ptr<audit::Log> audit      = nullptr);
 
     /// 绑定并监听 addr:port；开始 accept 循环（后台协程）。失败抛 system_error。
     /// 需在 io_context.run() 之前调用。
@@ -203,6 +216,8 @@ private:
     /// 处理单个已解析请求，返回响应。内部委托给 router_ 做路由分发。
     asio::awaitable<http::response<http::string_body>> handle(http::request<http::string_body> req);
 
+    bool authorized(const http::request<http::string_body>& req) const;
+
     /// 便捷：构造 JSON 响应。
     http::response<http::string_body>
     make_json_response(http::status code, const nlohmann::json& body, unsigned version);
@@ -220,11 +235,13 @@ private:
     struct RouteHandlers;
     std::shared_ptr<RouteHandlers> route_handlers_;
 
-    TqApi*               api_;
-    MultiAccountManager* accounts_   = nullptr;
-    TickStore*           tick_store_ = nullptr;
-    InstrumentCatalog*   catalog_    = nullptr;
-    AccountRouter        account_router_;
+    TqApi*                      api_;
+    MultiAccountManager*        accounts_   = nullptr;
+    TickStore*                  tick_store_ = nullptr;
+    InstrumentCatalog*          catalog_    = nullptr;
+    AccountRouter               account_router_;
+    AuthOptions                 auth_;
+    std::shared_ptr<audit::Log> audit_;
 
     std::unordered_map<std::string, TaskRegistry> task_registries_;
 

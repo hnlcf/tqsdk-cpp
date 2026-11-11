@@ -1,0 +1,8 @@
+[Unit]
+Description=TQSDK gateway and node
+Documentation=file:/opt/tqsdk/docs/DEPLOYMENT.md
+Wants=tqsdk-gw.service tqsdk-node.service
+After=tqsdk-gw.service tqsdk-node.service
+
+[Install]
+WantedBy=multi-user.target

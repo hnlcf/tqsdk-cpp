@@ -48,6 +48,13 @@ port = 8080
 symbols = []
 
 # 同一端口上的 WebSocket 实时推送（ws://host:port/stream）
+# 认证：token 建议只从环境变量/EnvironmentFile 注入，不要写进仓库。
+# [serve.auth]
+# enabled = false
+# token_env = "TQSDK_SERVE_TOKEN"
+# allow_query_token = true
+# exempt_healthz = true
+
 [serve.ws]
 path = "/stream"
 heartbeat_interval_ms = 30000
@@ -101,5 +108,12 @@ max_pending_ticks = 50000
 # ---- 运行时线程 ----
 # io_context worker 数。数据面（TqApi/DataManager/网关）绑定 core strand 串行；
 # HTTP 每连接独立 strand，可在多个 worker 上并行处理 socket 读写。
+# 变更请求审计：只记录 method/target/status/remote，不记录请求 body 或 token。
+[audit]
+enabled = false
+file = "logs/audit.log"
+max_bytes = 10485760
+max_files = 5
+
 [runtime]
 threads = 4

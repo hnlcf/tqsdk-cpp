@@ -387,3 +387,5 @@ node/gw logs      IPC/CTP/查询错误
 - 真实部分成交依赖 SimNow/交易所撮合窗口；
 - Qt UI 已删除，Web 是唯一前端；
 - 交易所品种级夜盘/完整官方交易日历仍需扩展。
+
+生产 TLS/认证/systemd/审计见 [DEPLOYMENT.md](DEPLOYMENT.md)。

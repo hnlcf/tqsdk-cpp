@@ -26,7 +26,7 @@
 5. **前端 E2E/视觉回归**：已覆盖搜索选合约、切换合约/周期、K 线缩放、基础画线；账户切换、断线重连和视觉基线仍待补。
 6. ✅ **IPC/WS fuzz 冒烟 + 24h-72h soak 脚本 + GitHub Actions workflow**；远程 runner 尚未实际执行，真实 72h 尚未跑。
 7. **CTP 连续 5 个交易日 soak 与交易日矩阵**；真实交易日不可压缩。
-8. **生产化**：TLS/认证（node 目前 loopback）、systemd/supervisor、日志脱敏、审计。
+8. ✅ **生产化代码入口**：token 认证、日志脱敏、JSONL 审计、systemd 单元、Caddy/nginx TLS 反向代理模板；真实证书/主机部署仍待执行。
 9. **性能/协议**：基线见 [PERFORMANCE_BASELINE.md](PERFORMANCE_BASELINE.md)；WS binary/MessagePack/虚拟列表按 profile 决策。
 
 ## 2. P0 执行/风控能力（已实现）

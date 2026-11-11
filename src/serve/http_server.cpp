@@ -9,26 +9,40 @@
 namespace tqsdk {
 namespace serve {
 
-HttpServer::HttpServer(TqApi*                api,
-                       asio::any_io_executor ex,
-                       WsOptions             ws_options,
-                       InstrumentCatalog*    catalog,
-                       MultiAccountManager*  accounts,
-                       TickStore*            tick_store)
-    : HttpServer(api, ex, std::move(ws_options), ex, catalog, accounts, tick_store) {}
+HttpServer::HttpServer(TqApi*                      api,
+                       asio::any_io_executor       ex,
+                       WsOptions                   ws_options,
+                       InstrumentCatalog*          catalog,
+                       MultiAccountManager*        accounts,
+                       TickStore*                  tick_store,
+                       AuthOptions                 auth,
+                       std::shared_ptr<audit::Log> audit)
+    : HttpServer(api,
+                 ex,
+                 std::move(ws_options),
+                 ex,
+                 catalog,
+                 accounts,
+                 tick_store,
+                 std::move(auth),
+                 std::move(audit)) {}
 
-HttpServer::HttpServer(TqApi*                api,
-                       asio::any_io_executor io_ex,
-                       WsOptions             ws_options,
-                       asio::any_io_executor data_ex,
-                       InstrumentCatalog*    catalog,
-                       MultiAccountManager*  accounts,
-                       TickStore*            tick_store)
+HttpServer::HttpServer(TqApi*                      api,
+                       asio::any_io_executor       io_ex,
+                       WsOptions                   ws_options,
+                       asio::any_io_executor       data_ex,
+                       InstrumentCatalog*          catalog,
+                       MultiAccountManager*        accounts,
+                       TickStore*                  tick_store,
+                       AuthOptions                 auth,
+                       std::shared_ptr<audit::Log> audit)
     : api_(api),
       accounts_(accounts),
       tick_store_(tick_store),
       catalog_(catalog),
       account_router_(api_, accounts_),
+      auth_(std::move(auth)),
+      audit_(std::move(audit)),
       io_ex_(std::move(io_ex)),
       data_ex_(data_ex ? std::move(data_ex) : io_ex_),
       acceptor_(io_ex_),
@@ -91,6 +105,75 @@ AccountScope HttpServer::account_scope(std::string_view account_id) {
 
 TqApi* HttpServer::account_api(std::string_view account_id) {
     return account_scope(account_id).api;
+}
+
+namespace {
+
+std::string_view request_path(std::string_view target) {
+    const auto pos = target.find('?');
+    return pos == std::string_view::npos ? target : target.substr(0, pos);
+}
+
+bool secure_equal(std::string_view lhs, std::string_view rhs) {
+    if (lhs.size() != rhs.size())
+        return false;
+    unsigned char diff = 0;
+    for (std::size_t i = 0; i < lhs.size(); ++i)
+        diff |= static_cast<unsigned char>(lhs[i] ^ rhs[i]);
+    return diff == 0;
+}
+
+std::string method_name(http::verb method) {
+    switch (method) {
+    case http::verb::get:
+        return "GET";
+    case http::verb::post:
+        return "POST";
+    case http::verb::put:
+        return "PUT";
+    case http::verb::delete_:
+        return "DELETE";
+    case http::verb::patch:
+        return "PATCH";
+    default:
+        return "OTHER";
+    }
+}
+
+std::string peer_string(tcp::socket& socket) {
+    boost::system::error_code ec;
+    const auto                endpoint = socket.remote_endpoint(ec);
+    return ec ? std::string{}
+              : endpoint.address().to_string() + ":" + std::to_string(endpoint.port());
+}
+
+bool has_bearer_token(std::string_view header, std::string_view token) {
+    constexpr std::string_view prefix = "Bearer ";
+    return header.size() == prefix.size() + token.size() && header.starts_with(prefix) &&
+           secure_equal(header.substr(prefix.size()), token);
+}
+
+} // namespace
+
+bool HttpServer::authorized(const http::request<http::string_body>& req) const {
+    if (!auth_.enabled)
+        return true;
+    const auto path = request_path(req.target());
+    if (auth_.exempt_healthz && path == "/healthz")
+        return true;
+    if (auth_.token.empty())
+        return false;
+
+    if (has_bearer_token(req[http::field::authorization], auth_.token))
+        return true;
+    if (secure_equal(req["X-API-Key"], auth_.token))
+        return true;
+    if (auth_.allow_query_token) {
+        const auto query = detail::parse_query(req.target());
+        if (secure_equal(query.value("token", std::string{}), auth_.token))
+            return true;
+    }
+    return false;
 }
 
 void HttpServer::listen(const std::string& address, uint16_t port) {
@@ -200,6 +283,19 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
                 target = target.substr(0, qpos);
             }
 
+            if (!authorized(req)) {
+                if (audit_)
+                    audit_->record("ws.auth", "GET", req.target(), 401, peer_string(sock));
+                auto res = make_json_response(
+                    http::status::unauthorized, json{{"error", "unauthorized"}}, req.version());
+                res.set(http::field::www_authenticate, "Bearer");
+                res.keep_alive(false);
+                co_await asio::dispatch(sock.get_executor(), asio::use_awaitable);
+                co_await http::async_write(
+                    sock, res, asio::redirect_error(asio::use_awaitable, ec));
+                co_return;
+            }
+
             // Hub 的 clients_/订阅表都在 data_ex_ 上；账户解析、懒创建与接管
             // 全部切到 data_ex_，避免与连接/订阅表并发修改。
             const auto query = detail::parse_query(req.target());
@@ -221,6 +317,8 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
                                          json{{"error", "too many websocket clients"}},
                                          req.version());
             } else {
+                if (audit_)
+                    audit_->record("ws.upgrade", "GET", req.target(), 101, peer_string(sock));
                 // 交给对应账户的 WebSocketHub 完成握手并接管 socket。
                 co_await hub->accept(std::move(sock), std::move(req));
                 co_return;
@@ -237,6 +335,9 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
         // handler 读 DataManager / 调 TqApi，统一在 data_ex_ 上执行。
         co_await asio::dispatch(data_ex_, asio::use_awaitable);
 
+        const auto                        method = req.method();
+        const auto                        target = std::string(req.target());
+        const auto                        remote = peer_string(sock);
         http::response<http::string_body> res;
         try {
             res = co_await handle(std::move(req));
@@ -244,6 +345,8 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
             res = make_json_response(
                 http::status::internal_server_error, json{{"error", e.what()}}, 11);
         }
+        if (audit_ && (method != http::verb::get || res.result() == http::status::unauthorized))
+            audit_->record("http", method_name(method), target, res.result_int(), remote);
 
         if (close_conn) {
             res.keep_alive(false);
@@ -276,6 +379,12 @@ HttpServer::make_json_response(http::status code, const nlohmann::json& body, un
 asio::awaitable<http::response<http::string_body>>
 HttpServer::handle(http::request<http::string_body> req) {
     const unsigned version = req.version();
+    if (!authorized(req)) {
+        auto res = make_json_response(
+            http::status::unauthorized, json{{"error", "unauthorized"}}, version);
+        res.set(http::field::www_authenticate, "Bearer");
+        co_return res;
+    }
     // 路由分发：Router 命中路由，按 handler 形参类型自动提取路径参数 / body，
     // 并把 handler 返回值（json / Response）与 HttpError 转成统一 Response。
     Response                          r   = co_await router_.dispatch(req);

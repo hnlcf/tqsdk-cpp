@@ -4,6 +4,9 @@
 
 #include <spdlog/sinks/ostream_sink.h>
 
+#include <filesystem>
+#include <fstream>
+
 using namespace tqsdk;
 
 // parse_log_level：已知名称映射正确，未知回退 info 且返回 false。
@@ -22,6 +25,37 @@ TEST(LogUtil, ParseUnknownFallsBackToInfo) {
 }
 
 // setup_logging 应把默认 logger 级别设成请求的级别。
+TEST(LogUtil, RedactsSecrets) {
+    const auto redacted = redact_secrets(
+        "password=supersecret token: abc client_secret=\"shh\" Authorization: Bearer xyz");
+    EXPECT_EQ(redacted.find("supersecret"), std::string::npos);
+    EXPECT_EQ(redacted.find("abc"), std::string::npos);
+    EXPECT_EQ(redacted.find("shh"), std::string::npos);
+    EXPECT_EQ(redacted.find("xyz"), std::string::npos);
+    EXPECT_NE(redacted.find("***"), std::string::npos);
+}
+
+TEST(LogUtil, SetupRedactsFileSink) {
+    const auto      path = std::filesystem::temp_directory_path() /
+                           ("tqsdk_log_redact_" + std::to_string(::getpid()) + ".log");
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+    LogOptions opts;
+    opts.file = path.string();
+    setup_logging(opts);
+    spdlog::info("password=topsecret token=abc Authorization: Bearer xyz");
+    spdlog::default_logger()->flush();
+    std::ifstream input(path);
+    ASSERT_TRUE(input.good());
+    const std::string text((std::istreambuf_iterator<char>(input)),
+                           std::istreambuf_iterator<char>());
+    EXPECT_EQ(text.find("topsecret"), std::string::npos);
+    EXPECT_EQ(text.find("abc"), std::string::npos);
+    EXPECT_EQ(text.find("xyz"), std::string::npos);
+    setup_logging(LogOptions{});
+    std::filesystem::remove(path, ec);
+}
+
 TEST(LogUtil, SetupSetsDefaultLevel) {
     LogOptions opts;
     opts.level = "trace";

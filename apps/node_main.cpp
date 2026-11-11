@@ -42,6 +42,7 @@ struct NodeRuntime {
     std::shared_ptr<InstrumentCatalog>   catalog;
     std::shared_ptr<KlineStore>          kline_store;
     std::shared_ptr<TickStore>           tick_store;
+    std::shared_ptr<audit::Log>          audit;
     std::shared_ptr<TqApi>               api;
     std::shared_ptr<MultiAccountManager> accounts;
     std::unique_ptr<serve::HttpServer>   http;
@@ -76,6 +77,18 @@ int main(int argc, char** argv) {
         cfg.runtime.threads = normalize_worker_threads(threads);
     }
 
+    if (cfg.auth.enabled) {
+        if (cfg.auth.token.empty() && !cfg.auth.token_env.empty()) {
+            if (const char* env = std::getenv(cfg.auth.token_env.c_str()); env != nullptr) {
+                cfg.auth.token = env;
+            }
+        }
+        if (cfg.auth.token.empty()) {
+            SPDLOG_CRITICAL("[node] serve auth enabled but no token/token_env is configured");
+            return 1;
+        }
+    }
+
     asio::io_context io;
     auto             io_ex   = io.get_executor();
     auto             core_ex = asio::make_strand(io);
@@ -104,6 +117,14 @@ int main(int argc, char** argv) {
         rt->kline_store = std::make_shared<KlineStore>(cfg.kline_cache);
         if (!rt->kline_store->ready()) {
             SPDLOG_WARN("[node] kline cache unavailable; continuing without history cache");
+        }
+    }
+    if (cfg.audit.enabled) {
+        try {
+            rt->audit = std::make_shared<audit::Log>(cfg.audit);
+        } catch (const std::exception& e) {
+            SPDLOG_CRITICAL("[node] failed to open audit log '{}': {}", cfg.audit.file, e.what());
+            return 1;
         }
     }
     if (cfg.tick_cache.enabled) {
@@ -186,13 +207,19 @@ int main(int argc, char** argv) {
         ws_opts.max_queue          = cfg.ws.max_queue;
         ws_opts.coalesce           = cfg.ws.coalesce;
 
-        rt->http = std::make_unique<serve::HttpServer>(rt->api.get(),
-                                                       io_ex,
-                                                       std::move(ws_opts),
-                                                       core_ex,
-                                                       rt->catalog.get(),
-                                                       rt->accounts.get(),
-                                                       rt->tick_store.get());
+        serve::AuthOptions auth_opts;
+        auth_opts.enabled           = cfg.auth.enabled;
+        auth_opts.token             = cfg.auth.token;
+        auth_opts.allow_query_token = cfg.auth.allow_query_token;
+        auth_opts.exempt_healthz    = cfg.auth.exempt_healthz;
+        rt->http                    = std::make_unique<serve::HttpServer>(rt->api.get(),
+                                                                          io_ex,
+                                                                          std::move(ws_opts),
+                                                                          core_ex,
+                                                                          rt->catalog.get(),
+                                                                          rt->accounts.get(),
+                                                                          rt->tick_store.get(),
+                                                                          std::move(auth_opts));
         try {
             rt->http->listen(cfg.serve_bind, cfg.serve_port);
         } catch (const std::exception& e) {
@@ -200,10 +227,11 @@ int main(int argc, char** argv) {
             io.stop();
             co_return;
         }
-        SPDLOG_INFO("[node] HTTP serve on http://{}:{}/ (ws {})",
+        SPDLOG_INFO("[node] HTTP serve on http://{}:{}/ (ws {}, auth {})",
                     cfg.serve_bind,
                     rt->http->port(),
-                    cfg.ws.path);
+                    cfg.ws.path,
+                    cfg.auth.enabled ? "enabled" : "disabled");
         co_return;
     };
 

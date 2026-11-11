@@ -1,0 +1,18 @@
+# TLS termination for TQSDK node.
+# The node itself binds 127.0.0.1 and stays private; Caddy owns :443 and
+# forwards both normal HTTP and WebSocket upgrades.
+{
+	email {$TQSDK_ACME_EMAIL}
+}
+
+{$TQSDK_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# Probes can stay unauthenticated only if node [serve.auth].exempt_healthz=true.
+	reverse_proxy 127.0.0.1:18081
+}

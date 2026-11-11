@@ -48,6 +48,7 @@ echo "== web =="
     pnpm build
 )
 node "$ROOT/scripts/check_wasm_plugins.mjs"
+"$ROOT/scripts/verify_deploy.sh"
 
 if (( RUN_ASAN )); then
     echo "== ASan =="

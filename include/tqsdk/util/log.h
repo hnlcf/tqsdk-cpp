@@ -20,7 +20,13 @@ struct LogOptions {
 
     /// 可选：同时把日志写入该文件路径（为空则不写文件）。
     std::string file;
+
+    /// 对 password/token/client_secret/Authorization 等字段做脱敏。
+    bool redact = true;
 };
+
+/// 对单行文本做日志脱敏。仅保留键名和分隔符，值替换为 "***"。
+std::string redact_secrets(std::string_view text);
 
 /// 从字符串解析 spdlog 级别；无法识别时回退到 info 并返回 false。
 std::optional<spdlog::level::level_enum> parse_log_level(std::string_view name) noexcept;
