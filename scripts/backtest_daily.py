@@ -779,6 +779,18 @@ def write_report(
     long_trades = [trade for result in results for trade in result.trade_details if trade.side == "long"]
     short_trades = [trade for result in results for trade in result.trade_details if trade.side == "short"]
     years = sorted(portfolio.get("yearly", {}).keys())
+    all_trades_for_stats = [trade for result in results for trade in result.trade_details]
+    gross_profit_all = sum(max(0.0, trade.pnl) for trade in all_trades_for_stats)
+    gross_loss_all = abs(sum(min(0.0, trade.pnl) for trade in all_trades_for_stats))
+    portfolio_pf = gross_profit_all / gross_loss_all if gross_loss_all > 0 else (
+        999.0 if gross_profit_all > 0 else 0.0
+    )
+    avg_trade_all = statistics.fmean([trade.return_pct for trade in all_trades_for_stats]) if all_trades_for_stats else 0.0
+    avg_hold_all = statistics.fmean([trade.holding_days for trade in all_trades_for_stats]) if all_trades_for_stats else 0.0
+    total_fees = sum(result.fees for result in results)
+    positive_years = sum(1 for value in portfolio.get("yearly", {}).values() if value > 0)
+    best_year = max(portfolio.get("yearly", {}).items(), key=lambda item: item[1], default=("", 0.0))
+    worst_year = min(portfolio.get("yearly", {}).items(), key=lambda item: item[1], default=("", 0.0))
 
     lines: list[str] = []
     lines += [
@@ -829,6 +841,13 @@ def write_report(
         f"| 单品种收益中位数 | {median_return:+.2f}% |",
         f"| 单品种平均最大回撤 | {avg_dd:.2f}% |",
         f"| 单品种平均 Sharpe | {avg_sharpe:.3f} |",
+        f"| 全部交易 Profit Factor | {portfolio_pf:.3f} |",
+        f"| 全部交易平均单笔收益 | {avg_trade_all:+.3f}% |",
+        f"| 全部交易平均持仓天 | {avg_hold_all:.1f} |",
+        f"| 累计手续费（69 个独立账户） | {total_fees:,.0f} |",
+        f"| 年度正收益/总年份 | {positive_years}/{len(portfolio.get('yearly', {}))} |",
+        f"| 最好年度 | {best_year[0]} {best_year[1]:+.2f}% |",
+        f"| 最差年度 | {worst_year[0]} {worst_year[1]:+.2f}% |",
         f"| 多头/空头交易数 | {total_long}/{total_short} |",
         f"| 多头/空头胜率 | {100*long_wins/len(long_trades) if long_trades else 0:.1f}% / {100*short_wins/len(short_trades) if short_trades else 0:.1f}% |",
         "",
