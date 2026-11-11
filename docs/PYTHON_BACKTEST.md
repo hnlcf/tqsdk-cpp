@@ -166,7 +166,7 @@ TQSDK_BACKTEST_LIB=build/libtqsdk_backtest.so \
 python3 -m unittest discover -s python/tests -v
 ```
 
-CTest 也会自动注册 `PythonBacktestBinding`（构建 Python 解释器可用时）。
+CTest 也会自动注册 `PythonTests`（构建 Python 解释器可用时）。
 
 覆盖：
 
@@ -177,7 +177,16 @@ CTest 也会自动注册 `PythonBacktestBinding`（构建 Python 解释器可用
 - Python 异常传播；
 - dict bar 输入。
 
-## 7. 和现有 Python 回测脚本的关系
+## 7. 实时策略
+
+实时 node -> CTP 策略适配器见 [PYTHON_LIVE_TRADING.md](PYTHON_LIVE_TRADING.md)：
+
+```text
+python/tqsdk_strategy.py  共享 EMA60/Donchian22/ATR 策略
+python/tqsdk_live.py      node REST + TargetPosTask + CTP
+```
+
+## 8. 和现有 Python 回测脚本的关系
 
 现有 `scripts/backtest_daily.py` 是独立的研究脚本，优势是十年级数据清洗、报告和 SVG 图表；它不依赖 C++ 回测器。
 
