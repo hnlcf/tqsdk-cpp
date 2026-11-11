@@ -85,9 +85,16 @@ artifacts/tq_daily/_failures.json
 - 入场：信号收盘产生，下一交易日开盘成交；
 - 止损：入场价 ∓ 2×ATR；
 - 退出：收盘跌破通道/EMA，下一交易日开盘成交；
-- 仓位：每品种 30% 名义仓位；
-- 手续费：单边 1 bp；
+- 仓位：每品种使用 **30% 权益作为初始保证金**；
+- 合约乘数：`config/daily_backtest_specs.json`，来自 `latest.json` 当前快照；
+- 保证金率：`当前每手保证金 / (最新指数收盘 × 合约乘数)` 估算；
+- 手数：`floor(权益 × 30% / (价格 × 合约乘数 × 保证金率))`，整数手；
+- 杠杆：由保证金率和整数手决定，报告给出单品种平均/最大名义杠杆；
+- 强平：收盘权益低于维持保证金（初始保证金 × 75%）时强制平仓；
+- 手续费：使用当前每手手续费快照；缺失时回退到单边 1 bp；
 - 每品种最多一个方向、无金字塔加仓、不进行同日反手。
+
+同时报告给出 **30% 名义（无杠杆）** 对照，便于量化杠杆对收益和回撤的影响。
 
 ## 6. 报告与产物
 
@@ -109,6 +116,7 @@ docs/backtest_charts/yearly_heatmap.svg
 docs/backtest_charts/top_equity.svg
 docs/backtest_charts/trade_histogram.svg
 docs/backtest_charts/long_short.svg
+docs/backtest_charts/leverage_ranking.svg
 ```
 
 机器可读数据：
@@ -120,6 +128,7 @@ artifacts/daily_backtest/trades.csv
 artifacts/daily_backtest/yearly_returns.csv
 artifacts/daily_backtest/equity_curves.csv
 artifacts/daily_backtest/portfolio_equity.csv
+config/daily_backtest_specs.json
 ```
 
 ## 7. 复现
@@ -138,8 +147,9 @@ python3 scripts/backtest_daily.py \
 
 ## 8. 解释边界
 
-- 组合曲线是 69 个品种各自 30% 名义策略日收益的等权平均，不是单一账户逐笔撮合；
+- 组合曲线是 69 个品种各自 30% 保证金策略日收益的等权平均，不是单一账户逐笔撮合；
+- 每个 sleeve 的保证金率/合约乘数/手续费是当前快照，历史交易所调整未逐日建模；
 - 品种池按当前 `continuous_table` 与当前流动性筛选，存在幸存者偏差；
 - 指数连续没有换月跳空，适合研究信号，不等于可直接交易的主连；
-- 未建模滑点、涨跌停、保证金、合约乘数差异和夜盘细节；
+- 未建模滑点、涨跌停细节、历史保证金变化和夜盘细节；
 - 新上市品种只从上市日开始交易，首年指标是部分年份。

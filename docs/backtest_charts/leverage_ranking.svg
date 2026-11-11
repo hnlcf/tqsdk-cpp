@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="800" viewBox="0 0 1000 800">
+<rect width="1000" height="800" fill="#0d1117"/>
+<text x="180.0" y="24.0" fill="#f0f6fc" font-size="16" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="bold">Average notional leverage by product (margin sizing)</text>
+<line x1="180.0" y1="72.0" x2="920.0" y2="72.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="65.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CFFEX.TS</text>
+<rect x="180.0" y="54.0" width="740.0" height="16.0" fill="#d29922" stroke="none"/>
+<text x="925.0" y="65.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+52.49x</text>
+<line x1="180.0" y1="96.0" x2="920.0" y2="96.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="89.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CFFEX.TF</text>
+<rect x="180.0" y="78.0" width="306.1" height="16.0" fill="#d29922" stroke="none"/>
+<text x="491.1" y="89.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+21.71x</text>
+<line x1="180.0" y1="120.0" x2="920.0" y2="120.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="113.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CFFEX.T</text>
+<rect x="180.0" y="102.0" width="184.8" height="16.0" fill="#d29922" stroke="none"/>
+<text x="369.8" y="113.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+13.11x</text>
+<line x1="180.0" y1="144.0" x2="920.0" y2="144.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="137.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CFFEX.TL</text>
+<rect x="180.0" y="126.0" width="98.6" height="16.0" fill="#d29922" stroke="none"/>
+<text x="283.6" y="137.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+7.00x</text>
+<line x1="180.0" y1="168.0" x2="920.0" y2="168.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="161.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CZCE.CY</text>
+<rect x="180.0" y="150.0" width="69.8" height="16.0" fill="#d29922" stroke="none"/>
+<text x="254.8" y="161.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+4.95x</text>
+<line x1="180.0" y1="192.0" x2="920.0" y2="192.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="185.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">DCE.cs</text>
+<rect x="180.0" y="174.0" width="60.6" height="16.0" fill="#d29922" stroke="none"/>
+<text x="245.6" y="185.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+4.30x</text>
+<line x1="180.0" y1="216.0" x2="920.0" y2="216.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="209.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CZCE.SR</text>
+<rect x="180.0" y="198.0" width="59.1" height="16.0" fill="#d29922" stroke="none"/>
+<text x="244.1" y="209.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+4.19x</text>
+<line x1="180.0" y1="240.0" x2="920.0" y2="240.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="233.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CZCE.PK</text>
+<rect x="180.0" y="222.0" width="52.0" height="16.0" fill="#d29922" stroke="none"/>
+<text x="237.0" y="233.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+3.69x</text>
+<line x1="180.0" y1="264.0" x2="920.0" y2="264.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="257.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">DCE.c</text>
+<rect x="180.0" y="246.0" width="52.0" height="16.0" fill="#d29922" stroke="none"/>
+<text x="237.0" y="257.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+3.69x</text>
+<line x1="180.0" y1="288.0" x2="920.0" y2="288.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="281.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">DCE.a</text>
+<rect x="180.0" y="270.0" width="51.6" height="16.0" fill="#d29922" stroke="none"/>
+<text x="236.6" y="281.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+3.66x</text>
+<line x1="180.0" y1="312.0" x2="920.0" y2="312.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="305.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">SHFE.ss</text>
+<rect x="180.0" y="294.0" width="51.3" height="16.0" fill="#d29922" stroke="none"/>
+<text x="236.3" y="305.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+3.64x</text>
+<line x1="180.0" y1="336.0" x2="920.0" y2="336.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="329.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">SHFE.rb</text>
+<rect x="180.0" y="318.0" width="51.0" height="16.0" fill="#d29922" stroke="none"/>
+<text x="236.0" y="329.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+3.62x</text>
+<line x1="180.0" y1="360.0" x2="920.0" y2="360.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="353.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">SHFE.sp</text>
+<rect x="180.0" y="342.0" width="50.7" height="16.0" fill="#d29922" stroke="none"/>
+<text x="235.7" y="353.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+3.60x</text>
+<line x1="180.0" y1="384.0" x2="920.0" y2="384.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="377.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CZCE.SM</text>
+<rect x="180.0" y="366.0" width="50.4" height="16.0" fill="#d29922" stroke="none"/>
+<text x="235.4" y="377.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+3.58x</text>
+<line x1="180.0" y1="408.0" x2="920.0" y2="408.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="401.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CZCE.CF</text>
+<rect x="180.0" y="390.0" width="50.2" height="16.0" fill="#d29922" stroke="none"/>
+<text x="235.2" y="401.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+3.56x</text>
+<line x1="180.0" y1="432.0" x2="920.0" y2="432.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="425.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">SHFE.br</text>
+<rect x="180.0" y="414.0" width="27.7" height="16.0" fill="#d29922" stroke="none"/>
+<text x="212.7" y="425.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.96x</text>
+<line x1="180.0" y1="456.0" x2="920.0" y2="456.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="449.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CFFEX.IH</text>
+<rect x="180.0" y="438.0" width="27.1" height="16.0" fill="#d29922" stroke="none"/>
+<text x="212.1" y="449.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.92x</text>
+<line x1="180.0" y1="480.0" x2="920.0" y2="480.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="473.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">DCE.pg</text>
+<rect x="180.0" y="462.0" width="25.9" height="16.0" fill="#d29922" stroke="none"/>
+<text x="210.9" y="473.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.84x</text>
+<line x1="180.0" y1="504.0" x2="920.0" y2="504.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="497.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">SHFE.bu</text>
+<rect x="180.0" y="486.0" width="25.5" height="16.0" fill="#d29922" stroke="none"/>
+<text x="210.5" y="497.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.81x</text>
+<line x1="180.0" y1="528.0" x2="920.0" y2="528.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="521.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CFFEX.IM</text>
+<rect x="180.0" y="510.0" width="25.3" height="16.0" fill="#d29922" stroke="none"/>
+<text x="210.3" y="521.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.80x</text>
+<line x1="180.0" y1="552.0" x2="920.0" y2="552.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="545.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CFFEX.IF</text>
+<rect x="180.0" y="534.0" width="24.8" height="16.0" fill="#d29922" stroke="none"/>
+<text x="209.8" y="545.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.76x</text>
+<line x1="180.0" y1="576.0" x2="920.0" y2="576.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="569.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">SHFE.sn</text>
+<rect x="180.0" y="558.0" width="24.4" height="16.0" fill="#d29922" stroke="none"/>
+<text x="209.4" y="569.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.73x</text>
+<line x1="180.0" y1="600.0" x2="920.0" y2="600.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="593.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">CFFEX.IC</text>
+<rect x="180.0" y="582.0" width="24.3" height="16.0" fill="#d29922" stroke="none"/>
+<text x="209.3" y="593.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.73x</text>
+<line x1="180.0" y1="624.0" x2="920.0" y2="624.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="617.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">SHFE.au</text>
+<rect x="180.0" y="606.0" width="22.3" height="16.0" fill="#d29922" stroke="none"/>
+<text x="207.3" y="617.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.58x</text>
+<line x1="180.0" y1="648.0" x2="920.0" y2="648.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="641.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">GFEX.lc</text>
+<rect x="180.0" y="630.0" width="20.5" height="16.0" fill="#d29922" stroke="none"/>
+<text x="205.5" y="641.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.46x</text>
+<line x1="180.0" y1="672.0" x2="920.0" y2="672.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="665.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">INE.lu</text>
+<rect x="180.0" y="654.0" width="19.2" height="16.0" fill="#d29922" stroke="none"/>
+<text x="204.2" y="665.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.36x</text>
+<line x1="180.0" y1="696.0" x2="920.0" y2="696.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="689.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">SHFE.ag</text>
+<rect x="180.0" y="678.0" width="18.4" height="16.0" fill="#d29922" stroke="none"/>
+<text x="203.4" y="689.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.30x</text>
+<line x1="180.0" y1="720.0" x2="920.0" y2="720.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="713.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">SHFE.fu</text>
+<rect x="180.0" y="702.0" width="17.5" height="16.0" fill="#d29922" stroke="none"/>
+<text x="202.5" y="713.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.24x</text>
+<line x1="180.0" y1="744.0" x2="920.0" y2="744.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="737.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">INE.sc</text>
+<rect x="180.0" y="726.0" width="16.9" height="16.0" fill="#d29922" stroke="none"/>
+<text x="201.9" y="737.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.20x</text>
+<line x1="180.0" y1="768.0" x2="920.0" y2="768.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="761.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">INE.ec</text>
+<rect x="180.0" y="750.0" width="10.7" height="16.0" fill="#d29922" stroke="none"/>
+<text x="195.7" y="761.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+0.76x</text>
+<line x1="180.0" y1="50.0" x2="180.0" y2="780.0" stroke="#8b949e" stroke-width="1"/>
+</svg>

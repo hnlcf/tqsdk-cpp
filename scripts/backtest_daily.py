@@ -11,7 +11,8 @@ Strategy:
   * long: close > EMA60 and close > prior Donchian upper
   * short: close < EMA60 and close < prior Donchian lower
   * next-open entry, 2*ATR14 initial stop, channel/EMA exit
-  * 30% notional allocation, commission on both sides
+  * 30% of sleeve equity as initial margin, integer lots
+  * contract multiplier and per-lot commission from config/daily_backtest_specs.json
   * one position per product; no pyramiding
 
 Run:
@@ -64,7 +65,40 @@ class Params:
     stop_atr: float = 2.0
     allocation: float = 0.30
     initial_equity: float = 1_000_000.0
+    # Used only when an instrument has no exchange commission snapshot.
     commission_rate: float = 0.0001
+    # margin: 30% of sleeve equity as initial margin (leverage from 1/margin_rate)
+    # notional: 30% notional exposure (no leverage, comparison mode)
+    sizing: str = "margin"
+    maintenance_ratio: float = 0.75
+
+
+@dataclass
+class Spec:
+    symbol: str
+    multiplier: float
+    margin_rate: float
+    commission_per_lot: float
+    price_tick: float = 0.0
+    source: str = ""
+
+
+def load_specs(path: Path) -> dict[str, Spec]:
+    payload = json.loads(path.read_text())
+    specs: dict[str, Spec] = {}
+    for symbol, value in payload.items():
+        try:
+            specs[symbol] = Spec(
+                symbol=symbol,
+                multiplier=max(0.0, float(value.get("volume_multiple", 0.0))),
+                margin_rate=max(0.0, float(value.get("margin_rate_est", 0.0))),
+                commission_per_lot=max(0.0, float(value.get("commission_per_lot", 0.0))),
+                price_tick=max(0.0, float(value.get("price_tick", 0.0))),
+                source=str(value.get("source", "")),
+            )
+        except (TypeError, ValueError):
+            continue
+    return specs
 
 
 @dataclass
@@ -78,6 +112,9 @@ class Trade:
     return_pct: float
     holding_days: int
     reason: str
+    lots: float = 0.0
+    multiplier: float = 0.0
+    margin_rate: float = 0.0
 
 
 @dataclass
@@ -114,6 +151,15 @@ class Result:
     drawdowns: list[float] = field(default_factory=list)
     trade_details: list[Trade] = field(default_factory=list)
     status: str = "included"
+    multiplier: float = 0.0
+    margin_rate: float = 0.0
+    commission_per_lot: float = 0.0
+    avg_lots: float = 0.0
+    avg_leverage: float = 0.0
+    max_leverage: float = 0.0
+    avg_margin_pct: float = 0.0
+    skipped_entries: int = 0
+    margin_calls: int = 0
 
 
 def parse_date(ns: int):
@@ -251,7 +297,7 @@ def yearly_returns(dates: list[str], equity: list[float]) -> dict[int, float]:
 # ---------------------------------------------------------------------------
 
 
-def backtest(product: str, symbol: str, bars: list[Bar], params: Params) -> Result:
+def backtest(product: str, symbol: str, bars: list[Bar], params: Params, spec: Spec) -> Result:
     warmup = max(params.ema_period, params.donchian_period, params.atr_period) + 1
     if len(bars) <= warmup + 2:
         return Result(
@@ -259,7 +305,11 @@ def backtest(product: str, symbol: str, bars: list[Bar], params: Params) -> Resu
             str(bars[-1].date) if bars else "", 0, 0, 0.0, params.initial_equity,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0,
             0.0, 0.0, {}, status="too_short",
+            multiplier=spec.multiplier, margin_rate=spec.margin_rate,
+            commission_per_lot=spec.commission_per_lot,
         )
+    multiplier = spec.multiplier if spec.multiplier > 0 else 1.0
+    margin_rate = spec.margin_rate if spec.margin_rate > 0 else 0.10
     closes = [bar.close for bar in bars]
     ema_values = ema(closes, params.ema_period)
     upper, lower = donchian(bars, params.donchian_period)
@@ -267,10 +317,11 @@ def backtest(product: str, symbol: str, bars: list[Bar], params: Params) -> Resu
 
     cash = params.initial_equity
     position = 0
-    units = 0.0
+    lots = 0
     entry_price = 0.0
     entry_date = ""
-    entry_index = 0
+    entry_equity = 0.0
+    entry_leverage = 0.0
     stop_price = 0.0
     pending: tuple[str, str] | None = None
     trades: list[Trade] = []
@@ -280,17 +331,27 @@ def backtest(product: str, symbol: str, bars: list[Bar], params: Params) -> Resu
     exposure_days = 0
     long_trades = short_trades = 0
     long_pnl = short_pnl = 0.0
+    lots_samples: list[float] = []
+    leverage_samples: list[float] = []
+    margin_samples: list[float] = []
+    skipped_entries = 0
+    margin_calls = 0
+
+    def exit_fee(price: float) -> float:
+        if spec.commission_per_lot > 0:
+            return spec.commission_per_lot * lots
+        return abs(price * multiplier * lots) * params.commission_rate
 
     def close_trade(exit_date: str, exit_price: float, reason: str, index: int) -> None:
-        nonlocal cash, position, units, entry_price, fees_paid, long_trades, short_trades
+        nonlocal cash, position, lots, entry_price, fees_paid, long_trades, short_trades
         nonlocal long_pnl, short_pnl
         if position == 0:
             return
-        gross = (exit_price - entry_price) * units * position
-        fee = abs(exit_price * units) * params.commission_rate
+        gross = (exit_price - entry_price) * multiplier * lots * position
+        fee = exit_fee(exit_price)
         cash += gross - fee
         fees_paid += fee
-        trade_return = gross / max(1.0, cash - gross) * 100.0
+        trade_return = gross / max(1.0, entry_equity) * 100.0
         trade = Trade(
             "long" if position > 0 else "short",
             entry_date,
@@ -301,6 +362,9 @@ def backtest(product: str, symbol: str, bars: list[Bar], params: Params) -> Resu
             trade_return,
             max(0, (bars[index].date - datetime.strptime(entry_date, "%Y-%m-%d").date()).days),
             reason,
+            lots=float(lots),
+            multiplier=multiplier,
+            margin_rate=margin_rate,
         )
         trades.append(trade)
         if position > 0:
@@ -310,8 +374,7 @@ def backtest(product: str, symbol: str, bars: list[Bar], params: Params) -> Resu
             short_trades += 1
             short_pnl += trade.pnl
         position = 0
-        units = 0.0
-        entry_price = 0.0
+        lots = 0
 
     start_index = warmup
     for i in range(start_index, len(bars)):
@@ -321,15 +384,30 @@ def backtest(product: str, symbol: str, bars: list[Bar], params: Params) -> Resu
             action, side_or_reason = pending
             pending = None
             if action == "enter" and position == 0 and bar.open > 0:
-                position = 1 if side_or_reason == "long" else -1
-                entry_price = bar.open
-                entry_date = str(bar.date)
-                entry_index = i
-                units = (cash * params.allocation) / entry_price
-                fee = entry_price * units * params.commission_rate
-                cash -= fee
-                fees_paid += fee
-                stop_price = entry_price - position * params.stop_atr * atr_values[i - 1]
+                per_lot_notional = bar.open * multiplier
+                if per_lot_notional <= 0:
+                    continue
+                if params.sizing == "notional":
+                    lots = int(math.floor((cash * params.allocation) / per_lot_notional))
+                    required_margin = lots * per_lot_notional * margin_rate
+                else:
+                    margin_per_lot = per_lot_notional * margin_rate
+                    lots = int(math.floor((cash * params.allocation) / margin_per_lot)) if margin_per_lot > 0 else 0
+                    required_margin = lots * per_lot_notional * margin_rate
+                if lots < 1:
+                    skipped_entries += 1
+                    # Do not enter, but continue to evaluate the bar normally.
+                else:
+                    position = 1 if side_or_reason == "long" else -1
+                    entry_price = bar.open
+                    entry_date = str(bar.date)
+                    entry_equity = cash
+                    entry_leverage = lots * per_lot_notional / max(1.0, entry_equity)
+                    fee = spec.commission_per_lot * lots if spec.commission_per_lot > 0 else per_lot_notional * lots * params.commission_rate
+                    cash -= fee
+                    fees_paid += fee
+                    stop_price = entry_price - position * params.stop_atr * atr_values[i - 1]
+                    lots_samples.append(float(lots))
             elif action == "exit" and position != 0:
                 close_trade(str(bar.date), bar.open, side_or_reason, i)
 
@@ -344,6 +422,15 @@ def backtest(product: str, symbol: str, bars: list[Bar], params: Params) -> Resu
                 else:
                     exit_price = bar.open if bar.open >= stop_price else stop_price
                 close_trade(str(bar.date), exit_price, "atr_stop", i)
+
+        # Futures margin call: if mark-to-market equity falls below maintenance
+        # margin, liquidate at the close. This is deliberately conservative.
+        if position != 0:
+            marked = cash + (bar.close - entry_price) * multiplier * lots * position
+            required = lots * bar.close * multiplier * margin_rate
+            if required > 0 and marked < required * params.maintenance_ratio:
+                close_trade(str(bar.date), bar.close, "margin_call", i)
+                margin_calls += 1
 
         if position != 0:
             if position > 0:
@@ -360,7 +447,10 @@ def backtest(product: str, symbol: str, bars: list[Bar], params: Params) -> Resu
                     pending = ("enter", "long" if long_signal else "short")
 
         if position != 0:
-            mark = cash + (bar.close - entry_price) * units * position
+            mark = cash + (bar.close - entry_price) * multiplier * lots * position
+            notional = lots * bar.close * multiplier
+            leverage_samples.append(notional / max(1.0, mark))
+            margin_samples.append(lots * bar.close * multiplier * margin_rate / max(1.0, mark) * 100.0)
         else:
             mark = cash
         equity_dates.append(str(bar.date))
@@ -374,7 +464,9 @@ def backtest(product: str, symbol: str, bars: list[Bar], params: Params) -> Resu
         return Result(symbol, product, len(bars), str(bars[0].date), str(bars[-1].date), 0,
                       0, 0.0, params.initial_equity, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                       0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, fees_paid, 0.0, 0.0, {},
-                      status="no_equity")
+                      status="no_equity", multiplier=multiplier, margin_rate=margin_rate,
+                      commission_per_lot=spec.commission_per_lot,
+                      skipped_entries=skipped_entries, margin_calls=margin_calls)
 
     total_return = (equity_values[-1] / params.initial_equity - 1.0) * 100.0
     cagr, sharpe, sortino, calmar = annualized_stats(equity_values, equity_dates)
@@ -418,6 +510,15 @@ def backtest(product: str, symbol: str, bars: list[Bar], params: Params) -> Resu
         equity=equity_values,
         drawdowns=daily_drawdowns(equity_values),
         trade_details=trades,
+        multiplier=multiplier,
+        margin_rate=margin_rate,
+        commission_per_lot=spec.commission_per_lot,
+        avg_lots=statistics.fmean(lots_samples) if lots_samples else 0.0,
+        avg_leverage=statistics.fmean(leverage_samples) if leverage_samples else 0.0,
+        max_leverage=max(leverage_samples, default=0.0),
+        avg_margin_pct=statistics.fmean(margin_samples) if margin_samples else 0.0,
+        skipped_entries=skipped_entries,
+        margin_calls=margin_calls,
     )
 
 
@@ -594,7 +695,8 @@ def svg_line_chart(
 
 
 def svg_horizontal_bars(path: Path, title: str, items: list[tuple[str, float]], color_positive: str,
-                        color_negative: str, width: int = 1000, row_h: int = 24) -> None:
+                        color_negative: str, width: int = 1000, row_h: int = 24,
+                        suffix: str = "%") -> None:
     top, left, right = 50, 180, 80
     height = top + max(1, len(items)) * row_h + 30
     svg = Svg(width, height)
@@ -613,10 +715,10 @@ def svg_horizontal_bars(path: Path, title: str, items: list[tuple[str, float]], 
         svg.text(left - 8, y + row_h // 2 + 3, label, 9, "#c9d1d9", "end")
         if value >= 0:
             svg.rect(zero_x, y + 4, x - zero_x, row_h - 8, color_positive)
-            svg.text(max(x + 5, zero_x + 5), y + row_h // 2 + 3, f"{value:+.2f}%", 9, "#c9d1d9")
+            svg.text(max(x + 5, zero_x + 5), y + row_h // 2 + 3, f"{value:+.2f}{suffix}", 9, "#c9d1d9")
         else:
             svg.rect(x, y + 4, zero_x - x, row_h - 8, color_negative)
-            svg.text(min(x - 5, zero_x - 5), y + row_h // 2 + 3, f"{value:+.2f}%", 9, "#c9d1d9", "end")
+            svg.text(min(x - 5, zero_x - 5), y + row_h // 2 + 3, f"{value:+.2f}{suffix}", 9, "#c9d1d9", "end")
     svg.line(zero_x, top, zero_x, height - 20, "#8b949e", 1)
     svg.save(path)
 
@@ -744,7 +846,9 @@ def write_csv(path: Path, results: list[Result]) -> None:
         "final_equity", "total_return_pct", "cagr_pct", "max_drawdown_pct", "sharpe",
         "sortino", "calmar", "profit_factor", "avg_trade_pct", "median_trade_pct",
         "avg_holding_days", "long_trades", "short_trades", "long_pnl", "short_pnl",
-        "fees", "exposure_pct", "buy_hold_pct",
+        "fees", "exposure_pct", "buy_hold_pct", "multiplier", "margin_rate",
+        "avg_lots", "avg_leverage", "max_leverage", "avg_margin_pct",
+        "skipped_entries", "margin_calls",
     ]
     with path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
@@ -763,6 +867,9 @@ def write_report(
     first_half: dict[str, Any],
     second_half: dict[str, Any],
     charts: dict[str, str],
+    specs: dict[str, Spec],
+    notional_portfolio: dict[str, Any],
+    sizing_mode: str,
 ) -> None:
     included = len(results)
     total_trades = sum(result.trades for result in results)
@@ -801,8 +908,9 @@ def write_report(
         f"- 原始数据区间：2016-01-05 至 2026-11-11（各品种上市日不同）",
         f"- 可交易信号区间：{portfolio.get('start', '')} 至 {portfolio.get('end', '')}",
         f"- 信号周期：日线",
-        f"- 参数：EMA{params.ema_period}、Donchian{params.donchian_period}、ATR{params.atr_period}、{params.stop_atr:.0f}ATR 止损、{params.allocation*100:.0f}% 名义仓位、单边手续费 {params.commission_rate*10000:.2f} bp",
+        f"- 参数：EMA{params.ema_period}、Donchian{params.donchian_period}、ATR{params.atr_period}、{params.stop_atr:.0f}ATR 止损、{params.allocation*100:.0f}% 保证金仓位、整数手",
         "- 执行：信号在收盘产生，下一交易日开盘成交；盘中止损；不进行同日反手；每品种最多 1 个方向仓位。",
+        "- 杠杆：保证金模式按 `lots = floor(权益 × 30% / (价格 × 合约乘数 × 保证金率))` 计算；保证金率来自当前合约规格快照。",
         "",
         "## 1. 数据与样本",
         "",
@@ -823,7 +931,20 @@ def write_report(
         "",
         "> 流动性规则：最近 250 根日线的成交量中位数低于阈值、零成交占比过高、历史少于最小 bar 数，或远端无数据。",
         "",
-        "## 2. 组合总体结果",
+        "### 1.2 合约规格快照",
+        "",
+        "| 品种 | 合约乘数 | 保证金率估计 | 每手手续费 |",
+        "|---|---:|---:|---:|",
+    ]
+    for symbol in sorted(specs):
+        if symbol not in {result.symbol for result in results}:
+            continue
+        spec = specs[symbol]
+        lines.append(
+            f"| {symbol} | {spec.multiplier:g} | {spec.margin_rate*100:.2f}% | {spec.commission_per_lot:.2f} |"
+        )
+    lines += [
+
         "",
         "| 指标 | 数值 |",
         "|---|---:|",
@@ -841,6 +962,11 @@ def write_report(
         f"| 单品种收益中位数 | {median_return:+.2f}% |",
         f"| 单品种平均最大回撤 | {avg_dd:.2f}% |",
         f"| 单品种平均 Sharpe | {avg_sharpe:.3f} |",
+        f"| 单品种平均名义杠杆 | {statistics.fmean([r.avg_leverage for r in results]):.2f}x |",
+        f"| 单品种最大名义杠杆 | {max((r.max_leverage for r in results), default=0):.2f}x |",
+        f"| 单品种平均保证金占用 | {statistics.fmean([r.avg_margin_pct for r in results]):.2f}% |",
+        f"| 因一手保证金超过预算跳过的信号 | {sum(r.skipped_entries for r in results)} |",
+        f"| 保证金强平次数 | {sum(r.margin_calls for r in results)} |",
         f"| 全部交易 Profit Factor | {portfolio_pf:.3f} |",
         f"| 全部交易平均单笔收益 | {avg_trade_all:+.3f}% |",
         f"| 全部交易平均持仓天 | {avg_hold_all:.1f} |",
@@ -853,7 +979,18 @@ def write_report(
         "",
         f"![组合权益与回撤]({charts['portfolio']})",
         "",
-        "### 2.1 年度收益",
+        "### 2.1 杠杆模式对照",
+        "",
+        "同一策略、同一品种池，分别按 **30% 保证金** 和 **30% 名义（无杠杆）** 计算：",
+        "",
+        "| 模型 | 总收益 | CAGR | 最大回撤 | Sharpe |",
+        "|---|---:|---:|---:|---:|",
+        f"| 30% 保证金（主模型） | {portfolio.get('total_return_pct', 0):+.2f}% | {portfolio.get('cagr_pct', 0):+.2f}% | {portfolio.get('max_drawdown_pct', 0):.2f}% | {portfolio.get('sharpe', 0):.2f} |",
+        f"| 30% 名义（无杠杆对照） | {notional_portfolio.get('total_return_pct', 0):+.2f}% | {notional_portfolio.get('cagr_pct', 0):+.2f}% | {notional_portfolio.get('max_drawdown_pct', 0):.2f}% | {notional_portfolio.get('sharpe', 0):.2f} |",
+        "",
+        f"主模型：`{sizing_mode}`。保证金模式每品种只使用 30% 权益作为初始保证金，余下通过合约乘数/保证金率形成杠杆；名义模式每品种只持有 30% 名义价值，不使用杠杆。",
+        "",
+        "### 2.2 年度收益",
         "",
         "| 年份 | 组合收益 |",
         "|---|---:|",
@@ -887,18 +1024,22 @@ def write_report(
         "",
         f"![风险收益散点]({charts['scatter']})",
         "",
+        "### 3.2.1 杠杆分布",
+        "",
+        f"![品种杠杆分布]({charts['leverage']})",
+        "",
         "### 3.3 分品种详细数据",
         "",
-        "| 品种 | 区间 | Bars | 交易 | 胜率 | 期末权益 | 总收益 | CAGR | 最大回撤 | Sharpe | Sortino | Calmar | PF | 平均持仓天 | 多/空交易 | 暴露 | 买入持有 |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| 品种 | 区间 | Bars | 交易 | 胜率 | 期末权益 | 总收益 | CAGR | 最大回撤 | Sharpe | 杠杆均值 | 保证金占用 | 平均手数 | 跳过信号 | 多/空交易 | 买入持有 |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for result in sorted(results, key=lambda item: item.total_return_pct, reverse=True):
         lines.append(
             f"| {result.symbol} | {result.start}~{result.end} | {result.bars} | {result.trades} | "
             f"{result.win_rate:.1f}% | {result.final_equity:,.0f} | {result.total_return_pct:+.2f}% | {result.cagr_pct:+.2f}% | "
-            f"{result.max_drawdown_pct:.2f}% | {result.sharpe:.2f} | {result.sortino:.2f} | "
-            f"{result.calmar:.2f} | {result.profit_factor:.2f} | {result.avg_holding_days:.0f} | "
-            f"{result.long_trades}/{result.short_trades} | {result.exposure_pct:.1f}% | {result.buy_hold_pct:+.2f}% |"
+            f"{result.max_drawdown_pct:.2f}% | {result.sharpe:.2f} | {result.avg_leverage:.2f}x | "
+            f"{result.avg_margin_pct:.1f}% | {result.avg_lots:.1f} | {result.skipped_entries} | "
+            f"{result.long_trades}/{result.short_trades} | {result.buy_hold_pct:+.2f}% |"
         )
     quantile_returns = statistics.quantiles([r.total_return_pct for r in results], n=4)
     quantile_dd = statistics.quantiles([r.max_drawdown_pct for r in results], n=4)
@@ -978,11 +1119,12 @@ def write_report(
         "",
         "1. 本报告使用 Tq 官方 Backtest MD 日线指数连续，覆盖 2016-01 至 2026-11，约 2,635 根日线；",
         "2. 回测信号和成交严格按“收盘产生信号、下一交易日开盘成交”，止损在盘中触发；",
-        "3. 组合曲线是各品种策略日收益的等权平均，不是统一资金账户的逐笔撮合结果；",
+        "3. 组合曲线是各品种策略日收益的等权平均，不是统一资金账户的逐笔撮合结果；每个品种使用 30% 权益作为初始保证金，组合平均杠杆见第 2 节；",
         "4. 使用当前品种池和当前流动性过滤，存在幸存者偏差；",
-        "5. 手续费按名义金额 1 bp 近似，未模拟滑点、涨跌停、保证金和合约乘数差异；",
-        "6. 指数连续没有换月跳空，适合研究信号，但不能直接当作可交易主连价格；",
-        "7. 单品种交易次数有限时，胜率/PF 的统计显著性有限，需结合多品种和分年度结果看。",
+        "5. 合约乘数、每手手续费和保证金率来自当前 `config/daily_backtest_specs.json` 快照；保证金率是当前每手保证金/(最新指数收盘×乘数)的估算，历史保证金调整未逐日建模；",
+        "6. 交易成本使用当前每手手续费，未模拟滑点、涨跌停、强平滑点和合约乘数/手续费历史变化；",
+        "7. 指数连续没有换月跳空，适合研究信号，但不能直接当作可交易主连价格；",
+        "8. 单品种交易次数有限时，胜率/PF 的统计显著性有限，需结合多品种和分年度结果看。",
         "",
         "### 7.1 机器可读文件",
         "",
@@ -1064,6 +1206,9 @@ def main() -> int:
     parser.add_argument("--stop-atr", type=float, default=2.0)
     parser.add_argument("--allocation", type=float, default=0.30)
     parser.add_argument("--commission", type=float, default=0.0001)
+    parser.add_argument("--spec-file", default="config/daily_backtest_specs.json")
+    parser.add_argument("--sizing", choices=["margin", "notional"], default="margin")
+    parser.add_argument("--maintenance-ratio", type=float, default=0.75)
     args = parser.parse_args()
     params = Params(
         ema_period=args.ema,
@@ -1072,10 +1217,14 @@ def main() -> int:
         stop_atr=args.stop_atr,
         allocation=args.allocation,
         commission_rate=args.commission,
+        sizing=args.sizing,
+        maintenance_ratio=args.maintenance_ratio,
     )
+    specs = load_specs(Path(args.spec_file))
     data_dir = Path(args.data_dir)
     paths = sorted(Path(item) for item in glob.glob(str(data_dir / "KQ.i@*.json")))
     results: list[Result] = []
+    universe: list[tuple[str, str, list[Bar], Spec]] = []
     excluded: list[dict[str, str]] = []
     failure_file = data_dir / "_failures.json"
     if failure_file.exists():
@@ -1104,7 +1253,12 @@ def main() -> int:
                 }
             )
             continue
-        result = backtest(product, symbol, bars, params)
+        spec = specs.get(symbol)
+        if spec is None or spec.multiplier <= 0 or spec.margin_rate <= 0:
+            excluded.append({"symbol": symbol, "reason": "缺少合约乘数/保证金率规格"})
+            continue
+        universe.append((product, symbol, bars, spec))
+        result = backtest(product, symbol, bars, params, spec)
         if result.trades == 0:
             excluded.append({"symbol": symbol, "reason": "区间内无交易信号"})
             continue
@@ -1118,6 +1272,24 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     charts.mkdir(parents=True, exist_ok=True)
     portfolio = portfolio_stats(results)
+    notional_params = Params(
+        ema_period=params.ema_period,
+        donchian_period=params.donchian_period,
+        atr_period=params.atr_period,
+        stop_atr=params.stop_atr,
+        allocation=params.allocation,
+        initial_equity=params.initial_equity,
+        commission_rate=params.commission_rate,
+        sizing="notional",
+        maintenance_ratio=params.maintenance_ratio,
+    )
+    notional_results = [
+        result
+        for product, symbol, bars, spec in universe
+        for result in [backtest(product, symbol, bars, notional_params, spec)]
+        if result.trades > 0
+    ]
+    notional_portfolio = portfolio_stats(notional_results)
     first_half = run_half(results, 2016, 2021)
     second_half = run_half(results, 2022, 2026)
 
@@ -1177,6 +1349,20 @@ def main() -> int:
         "Max drawdown %",
         "Total return %",
     )
+    leverage_sorted = sorted(results, key=lambda item: item.avg_leverage, reverse=True)
+    leverage_items = [
+        (item.symbol.replace("KQ.i@", ""), item.avg_leverage)
+        for item in leverage_sorted[:15] + leverage_sorted[-15:]
+    ]
+    svg_horizontal_bars(
+        charts / "leverage_ranking.svg",
+        "Average notional leverage by product (margin sizing)",
+        leverage_items,
+        "#d29922",
+        "#8b949e",
+        width=1000,
+        suffix="x",
+    )
     years = sorted({year for item in results for year in item.yearly})
     svg_heatmap(
         charts / "yearly_heatmap.svg",
@@ -1230,6 +1416,7 @@ def main() -> int:
         "top_equity": chart_ref("top_equity"),
         "histogram": chart_ref("trade_histogram"),
         "long_short": chart_ref("long_short"),
+        "leverage": chart_ref("leverage_ranking"),
     }
 
     # Include drawdown image in the report right after the equity image.
@@ -1243,6 +1430,9 @@ def main() -> int:
         first_half,
         second_half,
         charts_map,
+        specs,
+        notional_portfolio,
+        params.sizing,
     )
     text = report_text_path.read_text()
     anchor = f"![组合权益与回撤]({charts_map['portfolio']})"
@@ -1255,13 +1445,14 @@ def main() -> int:
     write_csv(output / "results.csv", sorted_results)
     with (output / "trades.csv").open("w", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["symbol", "side", "entry_date", "exit_date", "entry_price", "exit_price", "pnl", "return_pct", "holding_days", "reason"])
+        writer.writerow(["symbol", "side", "entry_date", "exit_date", "entry_price", "exit_price", "lots", "multiplier", "margin_rate", "pnl", "return_pct", "holding_days", "reason"])
         for result in sorted_results:
             for trade in result.trade_details:
                 writer.writerow([
                     result.symbol, trade.side, trade.entry_date, trade.exit_date,
-                    trade.entry_price, trade.exit_price, trade.pnl, trade.return_pct,
-                    trade.holding_days, trade.reason,
+                    trade.entry_price, trade.exit_price, trade.lots, trade.multiplier,
+                    trade.margin_rate, trade.pnl, trade.return_pct, trade.holding_days,
+                    trade.reason,
                 ])
     with (output / "yearly_returns.csv").open("w", newline="") as handle:
         years = sorted({year for result in sorted_results for year in result.yearly})
@@ -1291,8 +1482,12 @@ def main() -> int:
                     "stop_atr": params.stop_atr,
                     "allocation": params.allocation,
                     "commission_rate": params.commission_rate,
+                    "sizing": params.sizing,
+                    "maintenance_ratio": params.maintenance_ratio,
+                    "spec_file": str(args.spec_file),
                 },
                 "portfolio": {k: v for k, v in portfolio.items() if k not in ("equity_dates", "equity")},
+                "notional_portfolio": {k: v for k, v in notional_portfolio.items() if k not in ("equity_dates", "equity")},
                 "first_half": first_half,
                 "second_half": second_half,
                 "excluded": excluded,

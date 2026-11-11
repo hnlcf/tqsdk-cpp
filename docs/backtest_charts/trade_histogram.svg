@@ -1,40 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420">
 <rect width="1000" height="420" fill="#0d1117"/>
 <text x="65.0" y="24.0" fill="#f0f6fc" font-size="16" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="bold">Trade return distribution</text>
-<rect x="66.0" y="373.9" width="34.4" height="1.1" fill="#58a6ff" stroke="none"/>
-<rect x="102.4" y="42.0" width="34.4" height="333.0" fill="#58a6ff" stroke="none"/>
-<rect x="138.8" y="290.8" width="34.4" height="84.2" fill="#58a6ff" stroke="none"/>
-<rect x="175.2" y="360.3" width="34.4" height="14.7" fill="#58a6ff" stroke="none"/>
-<rect x="211.6" y="369.7" width="34.4" height="5.3" fill="#58a6ff" stroke="none"/>
-<rect x="248.0" y="374.0" width="34.4" height="1.0" fill="#58a6ff" stroke="none"/>
-<rect x="284.4" y="374.6" width="34.4" height="0.4" fill="#58a6ff" stroke="none"/>
-<rect x="320.8" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="357.2" y="374.9" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="393.6" y="374.8" width="34.4" height="0.2" fill="#58a6ff" stroke="none"/>
-<rect x="430.0" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="466.4" y="374.9" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="502.8" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="539.2" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="575.6" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="612.0" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="648.4" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="684.8" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="721.2" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="757.6" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="794.0" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="830.4" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="866.8" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
+<rect x="66.0" y="371.9" width="34.4" height="3.1" fill="#58a6ff" stroke="none"/>
+<rect x="102.4" y="320.0" width="34.4" height="55.0" fill="#58a6ff" stroke="none"/>
+<rect x="138.8" y="42.0" width="34.4" height="333.0" fill="#58a6ff" stroke="none"/>
+<rect x="175.2" y="100.4" width="34.4" height="274.6" fill="#58a6ff" stroke="none"/>
+<rect x="211.6" y="311.8" width="34.4" height="63.2" fill="#58a6ff" stroke="none"/>
+<rect x="248.0" y="335.7" width="34.4" height="39.3" fill="#58a6ff" stroke="none"/>
+<rect x="284.4" y="350.6" width="34.4" height="24.4" fill="#58a6ff" stroke="none"/>
+<rect x="320.8" y="359.3" width="34.4" height="15.7" fill="#58a6ff" stroke="none"/>
+<rect x="357.2" y="364.7" width="34.4" height="10.3" fill="#58a6ff" stroke="none"/>
+<rect x="393.6" y="366.4" width="34.4" height="8.6" fill="#58a6ff" stroke="none"/>
+<rect x="430.0" y="370.2" width="34.4" height="4.8" fill="#58a6ff" stroke="none"/>
+<rect x="466.4" y="371.6" width="34.4" height="3.4" fill="#58a6ff" stroke="none"/>
+<rect x="502.8" y="371.4" width="34.4" height="3.6" fill="#58a6ff" stroke="none"/>
+<rect x="539.2" y="374.2" width="34.4" height="0.8" fill="#58a6ff" stroke="none"/>
+<rect x="575.6" y="373.1" width="34.4" height="1.9" fill="#58a6ff" stroke="none"/>
+<rect x="612.0" y="374.2" width="34.4" height="0.8" fill="#58a6ff" stroke="none"/>
+<rect x="648.4" y="374.2" width="34.4" height="0.8" fill="#58a6ff" stroke="none"/>
+<rect x="684.8" y="374.8" width="34.4" height="0.2" fill="#58a6ff" stroke="none"/>
+<rect x="721.2" y="374.6" width="34.4" height="0.4" fill="#58a6ff" stroke="none"/>
+<rect x="757.6" y="374.8" width="34.4" height="0.2" fill="#58a6ff" stroke="none"/>
+<rect x="794.0" y="374.4" width="34.4" height="0.6" fill="#58a6ff" stroke="none"/>
+<rect x="830.4" y="374.8" width="34.4" height="0.2" fill="#58a6ff" stroke="none"/>
+<rect x="866.8" y="374.8" width="34.4" height="0.2" fill="#58a6ff" stroke="none"/>
 <rect x="903.2" y="375.0" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
-<rect x="939.6" y="374.9" width="34.4" height="0.1" fill="#58a6ff" stroke="none"/>
+<rect x="939.6" y="374.6" width="34.4" height="0.4" fill="#58a6ff" stroke="none"/>
 <line x1="65.0" y1="375.0" x2="65.0" y2="379.0" stroke="#8b949e" stroke-width="1.0"/>
-<text x="65.0" y="400.0" fill="#8b949e" font-size="10" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="middle" font-weight="normal">-7.2%</text>
+<text x="65.0" y="400.0" fill="#8b949e" font-size="10" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="middle" font-weight="normal">-36.8%</text>
 <line x1="292.5" y1="375.0" x2="292.5" y2="379.0" stroke="#8b949e" stroke-width="1.0"/>
-<text x="292.5" y="400.0" fill="#8b949e" font-size="10" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="middle" font-weight="normal">15.9%</text>
+<text x="292.5" y="400.0" fill="#8b949e" font-size="10" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="middle" font-weight="normal">28.0%</text>
 <line x1="520.0" y1="375.0" x2="520.0" y2="379.0" stroke="#8b949e" stroke-width="1.0"/>
-<text x="520.0" y="400.0" fill="#8b949e" font-size="10" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="middle" font-weight="normal">39.1%</text>
+<text x="520.0" y="400.0" fill="#8b949e" font-size="10" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="middle" font-weight="normal">92.9%</text>
 <line x1="747.5" y1="375.0" x2="747.5" y2="379.0" stroke="#8b949e" stroke-width="1.0"/>
-<text x="747.5" y="400.0" fill="#8b949e" font-size="10" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="middle" font-weight="normal">62.3%</text>
+<text x="747.5" y="400.0" fill="#8b949e" font-size="10" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="middle" font-weight="normal">157.7%</text>
 <line x1="975.0" y1="375.0" x2="975.0" y2="379.0" stroke="#8b949e" stroke-width="1.0"/>
-<text x="975.0" y="400.0" fill="#8b949e" font-size="10" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="middle" font-weight="normal">85.4%</text>
+<text x="975.0" y="400.0" fill="#8b949e" font-size="10" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="middle" font-weight="normal">222.5%</text>
 <text x="16.0" y="208.5" fill="#8b949e" font-size="10" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="middle" font-weight="normal">trades</text>
 </svg>

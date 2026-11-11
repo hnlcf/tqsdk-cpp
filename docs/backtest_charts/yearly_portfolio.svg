@@ -3,47 +3,47 @@
 <text x="180.0" y="24.0" fill="#f0f6fc" font-size="16" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="bold">Portfolio yearly return</text>
 <line x1="180.0" y1="72.0" x2="920.0" y2="72.0" stroke="#21262d" stroke-width="0.5"/>
 <text x="172.0" y="65.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">2016</text>
-<rect x="433.0" y="54.0" width="487.0" height="16.0" fill="#3fb950" stroke="none"/>
-<text x="925.0" y="65.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+2.70%</text>
+<rect x="322.3" y="54.0" width="597.7" height="16.0" fill="#3fb950" stroke="none"/>
+<text x="925.0" y="65.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+31.32%</text>
 <line x1="180.0" y1="96.0" x2="920.0" y2="96.0" stroke="#21262d" stroke-width="0.5"/>
 <text x="172.0" y="89.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">2017</text>
-<rect x="180.0" y="78.0" width="253.0" height="16.0" fill="#f85149" stroke="none"/>
-<text x="175.0" y="89.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">-1.40%</text>
+<rect x="180.0" y="78.0" width="142.3" height="16.0" fill="#f85149" stroke="none"/>
+<text x="175.0" y="89.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">-7.46%</text>
 <line x1="180.0" y1="120.0" x2="920.0" y2="120.0" stroke="#21262d" stroke-width="0.5"/>
 <text x="172.0" y="113.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">2018</text>
-<rect x="433.0" y="102.0" width="69.7" height="16.0" fill="#3fb950" stroke="none"/>
-<text x="507.7" y="113.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+0.39%</text>
+<rect x="322.3" y="102.0" width="92.8" height="16.0" fill="#3fb950" stroke="none"/>
+<text x="420.2" y="113.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+4.86%</text>
 <line x1="180.0" y1="144.0" x2="920.0" y2="144.0" stroke="#21262d" stroke-width="0.5"/>
 <text x="172.0" y="137.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">2019</text>
-<rect x="412.8" y="126.0" width="20.2" height="16.0" fill="#f85149" stroke="none"/>
-<text x="407.8" y="137.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">-0.11%</text>
+<rect x="267.2" y="126.0" width="55.2" height="16.0" fill="#f85149" stroke="none"/>
+<text x="262.2" y="137.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">-2.89%</text>
 <line x1="180.0" y1="168.0" x2="920.0" y2="168.0" stroke="#21262d" stroke-width="0.5"/>
 <text x="172.0" y="161.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">2020</text>
-<rect x="433.0" y="150.0" width="350.5" height="16.0" fill="#3fb950" stroke="none"/>
-<text x="788.5" y="161.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.94%</text>
+<rect x="322.3" y="150.0" width="495.6" height="16.0" fill="#3fb950" stroke="none"/>
+<text x="822.9" y="161.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+25.97%</text>
 <line x1="180.0" y1="192.0" x2="920.0" y2="192.0" stroke="#21262d" stroke-width="0.5"/>
 <text x="172.0" y="185.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">2021</text>
-<rect x="433.0" y="174.0" width="75.5" height="16.0" fill="#3fb950" stroke="none"/>
-<text x="513.5" y="185.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+0.42%</text>
+<rect x="322.3" y="174.0" width="125.7" height="16.0" fill="#3fb950" stroke="none"/>
+<text x="453.0" y="185.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+6.59%</text>
 <line x1="180.0" y1="216.0" x2="920.0" y2="216.0" stroke="#21262d" stroke-width="0.5"/>
 <text x="172.0" y="209.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">2022</text>
-<rect x="433.0" y="198.0" width="79.9" height="16.0" fill="#3fb950" stroke="none"/>
-<text x="517.8" y="209.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+0.44%</text>
+<rect x="322.3" y="198.0" width="12.6" height="16.0" fill="#3fb950" stroke="none"/>
+<text x="339.9" y="209.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+0.66%</text>
 <line x1="180.0" y1="240.0" x2="920.0" y2="240.0" stroke="#21262d" stroke-width="0.5"/>
 <text x="172.0" y="233.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">2023</text>
-<rect x="433.0" y="222.0" width="1.6" height="16.0" fill="#3fb950" stroke="none"/>
-<text x="439.6" y="233.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+0.01%</text>
+<rect x="322.3" y="222.0" width="56.3" height="16.0" fill="#3fb950" stroke="none"/>
+<text x="383.6" y="233.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+2.95%</text>
 <line x1="180.0" y1="264.0" x2="920.0" y2="264.0" stroke="#21262d" stroke-width="0.5"/>
 <text x="172.0" y="257.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">2024</text>
-<rect x="433.0" y="246.0" width="167.2" height="16.0" fill="#3fb950" stroke="none"/>
-<text x="605.1" y="257.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+0.93%</text>
+<rect x="322.3" y="246.0" width="87.8" height="16.0" fill="#3fb950" stroke="none"/>
+<text x="415.1" y="257.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+4.60%</text>
 <line x1="180.0" y1="288.0" x2="920.0" y2="288.0" stroke="#21262d" stroke-width="0.5"/>
 <text x="172.0" y="281.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">2025</text>
-<rect x="433.0" y="270.0" width="12.8" height="16.0" fill="#3fb950" stroke="none"/>
-<text x="450.7" y="281.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+0.07%</text>
+<rect x="230.8" y="270.0" width="91.5" height="16.0" fill="#f85149" stroke="none"/>
+<text x="225.8" y="281.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">-4.80%</text>
 <line x1="180.0" y1="312.0" x2="920.0" y2="312.0" stroke="#21262d" stroke-width="0.5"/>
 <text x="172.0" y="305.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">2026</text>
-<rect x="433.0" y="294.0" width="205.1" height="16.0" fill="#3fb950" stroke="none"/>
-<text x="643.0" y="305.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+1.14%</text>
-<line x1="433.0" y1="50.0" x2="433.0" y2="324.0" stroke="#8b949e" stroke-width="1"/>
+<rect x="322.3" y="294.0" width="131.1" height="16.0" fill="#3fb950" stroke="none"/>
+<text x="458.5" y="305.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+6.87%</text>
+<line x1="322.3" y1="50.0" x2="322.3" y2="324.0" stroke="#8b949e" stroke-width="1"/>
 </svg>
