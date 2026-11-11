@@ -39,7 +39,11 @@ python3 scripts/strategy_scan.py \
 SHFE / DCE / CZCE / INE / GFEX 的主要活跃品种，共 54 个品种
 ```
 
-## 3. 当前实际结果
+## 3. 正式十年日线回测
+
+本文件记录的是早期 4h 扫描；正式回测改为日线、2016-2026、69 个品种，见 [DAILY_STRATEGY_BACKTEST.md](DAILY_STRATEGY_BACKTEST.md)。
+
+## 4. 早期 4h 扫描实际结果
 
 2026-11-11 运行结果保存于：
 

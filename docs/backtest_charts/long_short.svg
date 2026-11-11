@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="128" viewBox="0 0 800 128">
+<rect width="800" height="128" fill="#0d1117"/>
+<text x="180.0" y="24.0" fill="#f0f6fc" font-size="16" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="bold">Average PnL by side</text>
+<line x1="180.0" y1="72.0" x2="720.0" y2="72.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="65.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">long (2123)</text>
+<rect x="275.4" y="54.0" width="444.6" height="16.0" fill="#3fb950" stroke="none"/>
+<text x="725.0" y="65.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="start" font-weight="normal">+2126.37%</text>
+<line x1="180.0" y1="96.0" x2="720.0" y2="96.0" stroke="#21262d" stroke-width="0.5"/>
+<text x="172.0" y="89.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">short (1971)</text>
+<rect x="180.0" y="78.0" width="95.4" height="16.0" fill="#f85149" stroke="none"/>
+<text x="175.0" y="89.0" fill="#c9d1d9" font-size="9" font-family="DejaVu Sans, Arial, sans-serif" text-anchor="end" font-weight="normal">-456.54%</text>
+<line x1="275.4" y1="50.0" x2="275.4" y2="108.0" stroke="#8b949e" stroke-width="1"/>
+</svg>
