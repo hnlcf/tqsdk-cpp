@@ -187,8 +187,8 @@ DEB/RPM 之外还提供 Docker/Podman 镜像入口：
 
 - `VITE_API_TOKEN` 如果参与构建，会嵌入前端静态资源；仅限受控部署，生产优先
   使用反向代理认证/OIDC。
-- 当前包同时携带 C++ 头文件和 CMake 导出文件，方便下游开发；如果发布严格
-  runtime 产品，可再拆 `tqsdk-dev`。
+- 当前 runtime 包不包含 C++ 头文件和 CMake 导出文件；下游开发包后续单独拆
+  为 `tqsdk-dev`。
 - 本机 2026-11-11 已实际生成并验证：
   `dist/tqsdk_0.1.0_amd64.deb`、`dist/tqsdk-0.1.0-1.x86_64.rpm`、
   `dist/tqsdk-0.1.0-linux-x86_64.tar.gz`；DEB 通过 `dpkg-deb` 容器校验，

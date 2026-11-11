@@ -3,6 +3,7 @@
 #include "tqsdk/pch.h"
 
 #include "tqsdk/constants.h"
+#include "tqsdk/data/continuous_table.h"
 
 #include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/multiaccount/multi_account_manager.h"
@@ -91,6 +92,17 @@ inline void from_json(const json& j, AccountQuery& q) {
     q.account = j.value("account", std::string{});
 }
 
+/// `/kline/{symbol}/{duration_ns}?adjust=forward|back`。
+/// 仅 `KQ.m@...` 主连的 1d K 线支持复权。
+struct KlineQuery {
+    std::string adjust;
+    std::string width;
+};
+inline void from_json(const json& j, KlineQuery& q) {
+    q.adjust = j.value("adjust", std::string{});
+    q.width  = j.value("width", std::string{});
+}
+
 /// `/ticks/{symbol}` 查询参数；`source=cache` 从 TickStore 读取历史。
 struct TickQuery {
     std::string limit;
@@ -176,7 +188,8 @@ public:
                MultiAccountManager*        accounts   = nullptr,
                TickStore*                  tick_store = nullptr,
                AuthOptions                 auth       = {},
-               std::shared_ptr<audit::Log> audit      = nullptr);
+               std::shared_ptr<audit::Log> audit      = nullptr,
+               ContinuousTable*            continuous = nullptr);
 
     /// 双 executor 构造：
     ///   - io_ex      ：accept / socket 读写（可跨多线程、每连接一条 strand）
@@ -190,7 +203,8 @@ public:
                MultiAccountManager*        accounts   = nullptr,
                TickStore*                  tick_store = nullptr,
                AuthOptions                 auth       = {},
-               std::shared_ptr<audit::Log> audit      = nullptr);
+               std::shared_ptr<audit::Log> audit      = nullptr,
+               ContinuousTable*            continuous = nullptr);
 
     /// 绑定并监听 addr:port；开始 accept 循环（后台协程）。失败抛 system_error。
     /// 需在 io_context.run() 之前调用。
@@ -242,6 +256,7 @@ private:
     AccountRouter               account_router_;
     AuthOptions                 auth_;
     std::shared_ptr<audit::Log> audit_;
+    ContinuousTable*            continuous_ = nullptr;
 
     std::unordered_map<std::string, TaskRegistry> task_registries_;
 

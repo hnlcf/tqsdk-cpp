@@ -188,7 +188,7 @@ pnpm typecheck
 pnpm build
 ```
 
-当前 Vitest 覆盖（26 项）；Playwright E2E：
+当前 Vitest 覆盖（28 项）；Playwright E2E：
 
 - 自选搜索 `SHFE.ao2701` 后大小写不变；
 - 通过 1m/5m 周期切换、分时切换、图表缩放；
@@ -201,7 +201,8 @@ pnpm build
 - 刷新后指标参数/输出配置/启用状态保留；
 - 拖动左侧 panel 后刷新，宽度保持；
 - 分时 session、bar 合并、series 映射、layout、trade diff、画线序列有纯函数单测；
-- WS 账户作用域、重连退避和重新订阅有 fake WebSocket 单测。
+- WS 账户作用域、重连退避和重新订阅有 fake WebSocket 单测；
+- KQ 主连 1d 原始/前复权/后复权 API 参数和 UI 选择已覆盖。
 
 Vitest 覆盖：
 

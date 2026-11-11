@@ -13,7 +13,8 @@ struct HttpServer::RouteHandlers {
           api_(server.api_),
           accounts_(server.accounts_),
           catalog_(server.catalog_),
-          tick_store_(server.tick_store_) {}
+          tick_store_(server.tick_store_),
+          continuous_(server.continuous_) {}
 
     TqApi* account_api(std::string_view account_id) const { return owner.account_api(account_id); }
 
@@ -40,15 +41,16 @@ struct HttpServer::RouteHandlers {
     asio::awaitable<json>     quotes(Query<QuoteBatchQuery> query);
     asio::awaitable<json>     ticks(std::string symbol, Query<TickQuery> query);
     asio::awaitable<json>     trading_snapshot(Query<AccountQuery> query);
-    asio::awaitable<json>     kline(std::string symbol, std::int64_t duration_ns);
-    asio::awaitable<json>     account(Query<AccountQuery> query);
-    asio::awaitable<json>     orders(Query<AccountQuery> query);
-    asio::awaitable<json>     trades(Query<AccountQuery> query);
-    asio::awaitable<json>     positions(Query<AccountQuery> query);
-    asio::awaitable<json>     insert_order(Query<AccountQuery> query, InsertOrderReq request);
-    asio::awaitable<json>     cancel_order(std::string order_id, Query<AccountQuery> query);
-    asio::awaitable<json>     target_create(Query<AccountQuery> query, TargetTaskRequest request);
-    asio::awaitable<json>     target_delete(std::string task_id, Query<AccountQuery> query);
+    asio::awaitable<json>
+    kline(std::string symbol, std::int64_t duration_ns, Query<KlineQuery> query);
+    asio::awaitable<json> account(Query<AccountQuery> query);
+    asio::awaitable<json> orders(Query<AccountQuery> query);
+    asio::awaitable<json> trades(Query<AccountQuery> query);
+    asio::awaitable<json> positions(Query<AccountQuery> query);
+    asio::awaitable<json> insert_order(Query<AccountQuery> query, InsertOrderReq request);
+    asio::awaitable<json> cancel_order(std::string order_id, Query<AccountQuery> query);
+    asio::awaitable<json> target_create(Query<AccountQuery> query, TargetTaskRequest request);
+    asio::awaitable<json> target_delete(std::string task_id, Query<AccountQuery> query);
     asio::awaitable<json> order_task_create(Query<AccountQuery> query, OrderTaskRequest request);
     asio::awaitable<json> order_task_delete(std::string task_id, Query<AccountQuery> query);
     asio::awaitable<json> tasks(Query<AccountQuery> query);
@@ -62,6 +64,7 @@ struct HttpServer::RouteHandlers {
     MultiAccountManager*& accounts_;
     InstrumentCatalog*&   catalog_;
     TickStore*&           tick_store_;
+    ContinuousTable*&     continuous_;
 };
 
 } // namespace serve

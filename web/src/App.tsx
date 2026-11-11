@@ -11,6 +11,7 @@ import {
 import {
   API_BASE,
   getInstruments,
+  type KlineAdjust,
   type Quote,
 } from "./api/client";
 import Topbar from "./components/Topbar";
@@ -83,6 +84,7 @@ export default function App() {
   const [selected, setSelected] = createSignal(readSelected());
   const [period, setPeriod] = createSignal(readPeriod());
   const [chartMode, setChartMode] = createSignal<"kline" | "time">(readChartMode());
+  const [adjustMode, setAdjustMode] = createSignal<KlineAdjust>("none");
 
   const [quotes, setQuotes] = createSignal<Record<string, Quote>>({});
   const [selectedAccount, setSelectedAccount] = createSignal("default");
@@ -111,9 +113,14 @@ export default function App() {
   const activeDuration = createMemo(() =>
     chartMode() === "time" ? 60_000_000_000 : periodDuration(),
   );
+  const chartAdjust = createMemo<KlineAdjust>(() => {
+    if (chartMode() !== "kline" || period() !== "1d" || !selected().startsWith("KQ.m@")) return "none";
+    return adjustMode();
+  });
   const chartData = useChartData({
     symbol: selected,
     duration: activeDuration,
+    adjust: chartAdjust,
     onQuote: (symbol, quote) =>
       setQuotes((previous) => ({ ...previous, [symbol]: quote })),
     onError: notify,
@@ -447,6 +454,9 @@ export default function App() {
                 setChartMode("kline");
               }}
               onMode={setChartMode}
+              continuousMain={selected().startsWith("KQ.m@")}
+              adjust={chartAdjust()}
+              onAdjust={setAdjustMode}
             />
             <div
               class="panel-resizer vertical"

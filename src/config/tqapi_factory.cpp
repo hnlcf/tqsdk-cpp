@@ -590,6 +590,15 @@ NodeConfig build_node_from_toml(const toml::table& root) {
         cfg.kline_cache.file = cfg.market_cache_file;
     if (!tick_file_set)
         cfg.tick_cache.file = cfg.market_cache_file;
+    if (const auto& c = require_table(root, "continuous"); !c.empty()) {
+        cfg.continuous.enabled = get_bool(c, "enabled", cfg.continuous.enabled);
+        cfg.continuous.url     = get_str(c, "url", cfg.continuous.url);
+        cfg.continuous.file    = get_str(c, "file", cfg.continuous.file);
+        cfg.continuous.refresh_interval =
+            std::chrono::seconds(std::max<int64_t>(60, get_int(c, "refresh_interval_sec", 86400)));
+        cfg.continuous.initial_delay =
+            std::chrono::seconds(std::max<int64_t>(0, get_int(c, "initial_delay_sec", 1)));
+    }
     if (const auto& a = require_table(root, "audit"); !a.empty()) {
         cfg.audit.enabled   = get_bool(a, "enabled", cfg.audit.enabled);
         cfg.audit.file      = get_str(a, "file", cfg.audit.file);

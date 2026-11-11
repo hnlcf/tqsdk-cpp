@@ -12,6 +12,8 @@ C++20 期货数据与交易基础设施，目标是把 TqSdk 的“异步数据�
 - WASM 指标插件：自动扫描 manifest、浮动指标选择器、逐输出颜色/线型/显隐、EMA/MA 动态均线；
   已内置 EMA/MA/BOLL/MACD/RSI/ATR/Donchian/KDJ/CCI/OBV/VWAP；
 - K 线基础画线：水平线/趋势线、清除、按 symbol|period 持久化；
+- KQ.i@ 指数 / KQ.m@ 主连；主连 1d 原始/前复权/后复权；
+- EMA60 + Donchian22 + ATR 策略扫描脚本；
 - REST/WS token 认证、日志脱敏、JSONL 审计、systemd/Caddy/nginx 部署模板；
 - 高级报单 FAK/FOK、市价/对价/五档价、TargetPosTask/InsertOrderTask、RiskManager 风控；
 - Tick/DataSeries/DataDownloader、期权 ATM+Greeks、TradingStatus/动态 URL、多账户与回测；
@@ -166,6 +168,8 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - [docs/PACKAGING.md](docs/PACKAGING.md)
 - [docs/CONTAINERS.md](docs/CONTAINERS.md)
+- [docs/CONTINUOUS_CONTRACTS.md](docs/CONTINUOUS_CONTRACTS.md)
+- [docs/STRATEGY_EMA60_DONCHIAN.md](docs/STRATEGY_EMA60_DONCHIAN.md)
 - [docs/CTP_TRADE_MATRIX.md](docs/CTP_TRADE_MATRIX.md)
 - [docs/CTP_WEEKLY_TEST_PLAN.md](docs/CTP_WEEKLY_TEST_PLAN.md)
 - [docs/P6_AUTOMATION.md](docs/P6_AUTOMATION.md)
@@ -176,8 +180,8 @@ docs/             架构、模块、信息流、状态机、运维、专题
 ## 当前状态
 
 - `./scripts/package_release.sh`：生成 DEB/RPM/TGZ；详见 docs/PACKAGING.md；
-- `ctest`：355 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
-- Web：`pnpm typecheck`、`pnpm test`（26 项）、`pnpm build`、Playwright E2E 通过；
+- `ctest`：358 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
+- Web：`pnpm typecheck`、`pnpm test`（28 项）、`pnpm build`、Playwright E2E 通过；
   K 线/分时/WASM 指标/盘口/三键下单/合并持仓/委托/成交/权益已完成浏览器验证；
 - 多账户：REST/WS/task/risk 均支持 `?account=`，双 Sim 账户集成测试通过；
 - 指标配置/启用状态/输出样式/动态均线和 panel 尺寸浏览器本地持久化；

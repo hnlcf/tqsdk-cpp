@@ -3046,3 +3046,20 @@ html[data-theme="light"] .indicator-popover {
   font-size: 10px;
   white-space: nowrap;
 }
+
+.adjust-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.adjust-select select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  padding: 4px 6px;
+  font-size: 11px;
+}

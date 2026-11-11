@@ -94,6 +94,10 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 DESTDIR="$STAGE" cmake --install "$BUILD" --prefix /usr
 
+# Runtime package: headers/CMake exports are intentionally excluded. Split them
+# into a future tqsdk-dev package instead of shipping compiler files to servers.
+rm -rf "$STAGE/usr/include" "$STAGE/usr/lib/cmake"
+
 # Static web terminal.
 mkdir -p "$STAGE/usr/share/tqsdk/web"
 cp -a "$ROOT/web/dist/." "$STAGE/usr/share/tqsdk/web/"

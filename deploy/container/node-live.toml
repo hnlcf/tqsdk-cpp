@@ -36,3 +36,10 @@ enabled = false
 enabled = false
 [runtime]
 threads = 2
+
+[continuous]
+enabled = true
+url = "https://files.shinnytech.com/continuous_table.json"
+file = "/var/lib/tqsdk/continuous_table.json"
+refresh_interval_sec = 86400
+initial_delay_sec = 1

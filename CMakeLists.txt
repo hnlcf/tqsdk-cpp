@@ -73,6 +73,7 @@ add_library(tqsdk_core SHARED
     src/data/diff_merge_klines.cpp
     src/data/kline_store.cpp
     src/data/tick_store.cpp
+    src/data/continuous_table.cpp
     src/data/data_downloader.cpp
     src/option/option_analytics.cpp
     src/multiaccount/multi_account_manager.cpp
@@ -258,6 +259,7 @@ if(TQSDK_BUILD_TESTS)
         tests/channel/channel_multiplex_test.cpp
         tests/data/data_manager_test.cpp
         tests/data/data_series_test.cpp
+        tests/data/continuous_table_test.cpp
         tests/data/tick_store_test.cpp
         tests/option/option_analytics_test.cpp
         tests/multiaccount/multi_account_test.cpp

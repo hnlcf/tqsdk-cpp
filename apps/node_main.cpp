@@ -43,6 +43,7 @@ struct NodeRuntime {
     std::shared_ptr<KlineStore>          kline_store;
     std::shared_ptr<TickStore>           tick_store;
     std::shared_ptr<audit::Log>          audit;
+    std::shared_ptr<ContinuousTable>     continuous;
     std::shared_ptr<TqApi>               api;
     std::shared_ptr<MultiAccountManager> accounts;
     std::unique_ptr<serve::HttpServer>   http;
@@ -118,6 +119,13 @@ int main(int argc, char** argv) {
         if (!rt->kline_store->ready()) {
             SPDLOG_WARN("[node] kline cache unavailable; continuing without history cache");
         }
+    }
+    if (cfg.continuous.enabled) {
+        rt->continuous = std::make_shared<ContinuousTable>(cfg.continuous);
+        if (!rt->continuous->load_local()) {
+            SPDLOG_WARN("[node] continuous table not available yet; background refresh will retry");
+        }
+        rt->continuous->start_background_refresh();
     }
     if (cfg.audit.enabled) {
         try {
@@ -219,7 +227,9 @@ int main(int argc, char** argv) {
                                                                           rt->catalog.get(),
                                                                           rt->accounts.get(),
                                                                           rt->tick_store.get(),
-                                                                          std::move(auth_opts));
+                                                                          std::move(auth_opts),
+                                                                          rt->audit,
+                                                                          rt->continuous.get());
         try {
             rt->http->listen(cfg.serve_bind, cfg.serve_port);
         } catch (const std::exception& e) {

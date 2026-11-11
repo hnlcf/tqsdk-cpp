@@ -130,9 +130,10 @@ void HttpServer::setup_routes() {
          })},
         {http::verb::get,
          "/kline/{symbol}/{duration_ns}",
-         make_entry([handlers](std::string symbol, std::int64_t duration_ns) {
-             return handlers->kline(std::move(symbol), duration_ns);
-         })},
+         make_entry(
+             [handlers](std::string symbol, std::int64_t duration_ns, Query<KlineQuery> query) {
+                 return handlers->kline(std::move(symbol), duration_ns, std::move(query));
+             })},
         {http::verb::get, "/account", make_entry([handlers](Query<AccountQuery> query) {
              return handlers->account(std::move(query));
          })},

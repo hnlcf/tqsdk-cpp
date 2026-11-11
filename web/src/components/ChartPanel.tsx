@@ -8,6 +8,7 @@ import KLineChart from "../chart/KLineChart";
 import IntradayChart from "../chart/IntradayChart";
 import IndicatorSettings from "./IndicatorSettings";
 import type { Theme } from "../chart/theme";
+import type { KlineAdjust } from "../api/client";
 import type { ChartDrawing, DrawMode, NewChartDrawing } from "../chart/drawings";
 import { readChartDrawings, saveChartDrawings } from "../lib/storage";
 
@@ -33,6 +34,9 @@ interface Props {
   onWasmOutput?: (id: string, outputId: string, patch: Partial<WasmOutputConfig>) => void;
   onPeriod: (period: string) => void;
   onMode: (mode: "kline" | "time") => void;
+  continuousMain?: boolean;
+  adjust?: KlineAdjust;
+  onAdjust?: (mode: KlineAdjust) => void;
 }
 
 export default function ChartPanel(props: Props) {
@@ -153,6 +157,20 @@ export default function ChartPanel(props: Props) {
           </div>
         </Show>
         <div class="toolbar-tools">
+          <Show when={props.continuousMain && props.period === "1d"}>
+            <label class="adjust-select">
+              <small>主连</small>
+              <select
+                aria-label="主连复权"
+                value={props.adjust ?? "none"}
+                onChange={(event) => props.onAdjust?.(event.currentTarget.value as KlineAdjust)}
+              >
+                <option value="none">原始</option>
+                <option value="forward">前复权</option>
+                <option value="back">后复权</option>
+              </select>
+            </label>
+          </Show>
           <span class="wasm-toolbar-badge">WASM {activeWasm()}</span>
           <button type="button" class="tool-button indicator-settings-trigger" onClick={() => setSettingsOpen(true)}>
             指标设置
@@ -178,7 +196,7 @@ export default function ChartPanel(props: Props) {
             bars={props.bars}
             last={last()}
             symbol={props.symbol}
-            resetKey={`${props.symbol}|${props.period}|${props.mode}`}
+            resetKey={`${props.symbol}|${props.period}|${props.mode}|${props.adjust ?? "none"}`}
             theme={props.theme}
             priceDecimals={props.decimals}
             wasmSeries={props.wasmSeries}

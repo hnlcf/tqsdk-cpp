@@ -252,6 +252,18 @@ export interface TradeSnapshot {
   trade_date_time?: number;
 }
 
+export type KlineAdjust = "none" | "forward" | "back";
+
+export interface KlineResponse {
+  symbol: string;
+  duration_ns: number;
+  bars: KlineBar[];
+  adjust?: KlineAdjust;
+  adjusted?: boolean;
+  adjust_error?: string;
+  adjust_warnings?: string[];
+}
+
 export interface TradeData {
   account?: AccountSnapshot;
   positions?: Record<string, PositionSnapshot>;
@@ -427,9 +439,15 @@ export function getQuotes(symbols: string[], signal?: AbortSignal) {
   });
 }
 
-export function getKline(symbol: string, durationNs: number, signal?: AbortSignal) {
-  return requestJson<{ symbol: string; duration_ns: number; bars: KlineBar[] }>(
-    `/kline/${encodeURIComponent(symbol)}/${durationNs}`,
+export function getKline(
+  symbol: string,
+  durationNs: number,
+  adjust: KlineAdjust = "none",
+  signal?: AbortSignal,
+) {
+  const suffix = adjust === "none" ? "" : `?adjust=${encodeURIComponent(adjust)}`;
+  return requestJson<KlineResponse>(
+    `/kline/${encodeURIComponent(symbol)}/${durationNs}${suffix}`,
     { signal },
   );
 }

@@ -395,7 +395,7 @@ pnpm e2e
 node scripts/check_wasm_plugins.mjs
   PASS atr / boll / donchian / ema6(8ch) / ma(8ch) / macd / rsi
 
-Vitest: 26/26
+Vitest: 28/28
 Playwright: 1/1
 ```
 

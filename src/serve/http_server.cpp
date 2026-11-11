@@ -16,7 +16,8 @@ HttpServer::HttpServer(TqApi*                      api,
                        MultiAccountManager*        accounts,
                        TickStore*                  tick_store,
                        AuthOptions                 auth,
-                       std::shared_ptr<audit::Log> audit)
+                       std::shared_ptr<audit::Log> audit,
+                       ContinuousTable*            continuous)
     : HttpServer(api,
                  ex,
                  std::move(ws_options),
@@ -25,7 +26,8 @@ HttpServer::HttpServer(TqApi*                      api,
                  accounts,
                  tick_store,
                  std::move(auth),
-                 std::move(audit)) {}
+                 std::move(audit),
+                 continuous) {}
 
 HttpServer::HttpServer(TqApi*                      api,
                        asio::any_io_executor       io_ex,
@@ -35,7 +37,8 @@ HttpServer::HttpServer(TqApi*                      api,
                        MultiAccountManager*        accounts,
                        TickStore*                  tick_store,
                        AuthOptions                 auth,
-                       std::shared_ptr<audit::Log> audit)
+                       std::shared_ptr<audit::Log> audit,
+                       ContinuousTable*            continuous)
     : api_(api),
       accounts_(accounts),
       tick_store_(tick_store),
@@ -43,6 +46,7 @@ HttpServer::HttpServer(TqApi*                      api,
       account_router_(api_, accounts_),
       auth_(std::move(auth)),
       audit_(std::move(audit)),
+      continuous_(continuous),
       io_ex_(std::move(io_ex)),
       data_ex_(data_ex ? std::move(data_ex) : io_ex_),
       acceptor_(io_ex_),
