@@ -24,6 +24,7 @@
 | [CONTINUOUS_CONTRACTS.md](CONTINUOUS_CONTRACTS.md) | KQ 主连/指数、continuous_table 与 1d 前后复权 |
 | [STRATEGY_EMA60_DONCHIAN.md](STRATEGY_EMA60_DONCHIAN.md) | EMA60 + Donchian22 + ATR 策略扫描 |
 | [STRATEGY_SCAN_20261111.md](STRATEGY_SCAN_20261111.md) | 2026-11-11 54 品种扫描记录 |
+| [CTP_SINGLE_ACCOUNT_STRATEGY.md](CTP_SINGLE_ACCOUNT_STRATEGY.md) | 单 SimNow 账户 CTP 量化测试步骤 |
 | [CI.md](CI.md) | 本地 CI、ASan/TSan、短 soak 和回归门禁 |
 | [SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md) | SimNow 真实 CTP 验收流程和报告 |
 | [P0_SIMNOW_TEST_PLAN.md](P0_SIMNOW_TEST_PLAN.md) | P0 高级报单/执行任务/风控 SimNow 验收清单 |
