@@ -34,7 +34,17 @@ HttpServer::HttpServer(TqApi*                api,
       acceptor_(io_ex_),
       ws_(std::make_shared<WebSocketHub>(api_, data_ex_, io_ex_, std::move(ws_options))) {
     ws_->set_catalog(catalog_);
+    if (accounts_ != nullptr) {
+        accounts_->set_account_removed_handler(
+            [this](const std::string& account_id) { drop_account_hub(account_id); });
+    }
     setup_routes();
+}
+
+HttpServer::~HttpServer() {
+    if (accounts_ != nullptr) {
+        accounts_->set_account_removed_handler({});
+    }
 }
 
 std::shared_ptr<WebSocketHub> HttpServer::ensure_ws_hub(const AccountScope& scope) {

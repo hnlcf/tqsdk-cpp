@@ -46,6 +46,22 @@ test("indicator picker, multi-EMA editing, output visibility and symbol casing",
   await expect(page.getByRole("button", { name: "分时", exact: true })).toHaveClass(/active/);
   await page.getByRole("button", { name: "1m", exact: true }).click();
   await expect(page.getByRole("button", { name: "1m", exact: true })).toHaveClass(/active/);
+  await page.getByRole("button", { name: "清除画线" }).click();
+  await page.getByRole("button", { name: "画趋势线" }).click();
+  await page.locator(".chart-canvas").click({ position: { x: canvasBox.width * 0.35, y: canvasBox.height * 0.4 } });
+  await page.waitForTimeout(700);
+  await page.locator(".chart-canvas").click({ position: { x: canvasBox.width * 0.65, y: canvasBox.height * 0.6 } });
+  await expect(page.locator(".drawing-count")).toHaveText("画线 1");
+  await page.getByRole("button", { name: "清除画线" }).click();
+  await expect(page.locator(".drawing-count")).toHaveText("画线 0");
+  await page.getByRole("button", { name: "画水平线" }).click();
+  await page.waitForTimeout(700);
+  await page.locator(".chart-canvas").click({ position: { x: canvasBox.width / 2, y: canvasBox.height / 2 } });
+  await expect(page.locator(".drawing-count")).toHaveText("画线 1");
+  await page.reload();
+  await expect(page.locator(".drawing-count")).toHaveText("画线 1");
+  await page.getByRole("button", { name: "清除画线" }).click();
+  await expect(page.locator(".drawing-count")).toHaveText("画线 0");
 
   await page.getByTitle("添加合约").click();
   const search = page.locator('.watch-add input[placeholder^="代码/名称"]');

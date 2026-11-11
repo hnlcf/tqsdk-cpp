@@ -395,15 +395,15 @@ CTP session monitor：
 使用 `./scripts/soak_long_job.sh --duration 60 --reconnect-interval 10`：
 
 ```text
-http_ok:        430,901
+http_ok:        411,323
 http_err:       0
-ws_messages:    59,950
+ws_messages:    57,249
 ws_err:         0
 order_ok:       10
 order_err:      1（网关重启窗口内预期失败）
 reconnects:     5
-node_max_rss:   34,972KB
-gw_max_rss:     26,804KB
+node_max_rss:   34,444KB
+gw_max_rss:     26,424KB
 fatal:          ""
 ```
 

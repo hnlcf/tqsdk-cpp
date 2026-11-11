@@ -422,3 +422,70 @@ TEST(MultiAccountHttp, TaskRegistryIdsArePerAccount) {
     manager.close();
     io.run_for(std::chrono::milliseconds(100));
 }
+
+TEST(MultiAccountHttp, RemovedAccountDropsHubAndRejectsStream) {
+    asio::io_context           io;
+    auto                       a = make_account(io, 1'000'000);
+    auto                       b = make_account(io, 2'000'000);
+    tqsdk::MultiAccountManager manager;
+    ASSERT_TRUE(manager.add_account("A", a.api));
+    ASSERT_TRUE(manager.add_account("B", b.api));
+
+    tqsdk::serve::HttpServer server(
+        a.api.get(), io.get_executor(), {}, io.get_executor(), nullptr, &manager);
+    server.listen("127.0.0.1", 0);
+
+    // Added after HttpServer construction; no gateway/background loop needed for
+    // the WS routing test. The removal callback must drop the lazy hub.
+    auto c = std::make_shared<tqsdk::TqApi>(io.get_executor(), nullptr, nullptr);
+    ASSERT_TRUE(manager.add_account("C", c));
+
+    bool rejected_after_remove = false;
+    asio::co_spawn(
+        io,
+        [&]() -> asio::awaitable<void> {
+            WsClient ws(io);
+            co_await ws.connect("127.0.0.1", server.port(), "/stream?account=C");
+            co_await ws.read_json();
+            co_await ws.send_json(json{{"op", "subscribe"},
+                                       {"symbols", json::array()},
+                                       {"klines", json::array()},
+                                       {"topics", {"account"}}});
+            co_await read_snapshot(ws);
+            co_await ws.close();
+            co_return;
+        },
+        [&](std::exception_ptr ep) {
+            if (ep)
+                std::rethrow_exception(ep);
+            io.stop();
+        });
+    io.run();
+
+    manager.remove_account("C");
+    io.restart();
+    asio::co_spawn(
+        io,
+        [&]() -> asio::awaitable<void> {
+            try {
+                WsClient ws(io);
+                co_await ws.connect("127.0.0.1", server.port(), "/stream?account=C");
+            } catch (const std::exception&) {
+                rejected_after_remove = true;
+            }
+            co_return;
+        },
+        [&](std::exception_ptr ep) {
+            if (ep)
+                std::rethrow_exception(ep);
+            io.stop();
+        });
+    io.run();
+    EXPECT_TRUE(rejected_after_remove);
+
+    io.restart();
+    server.stop();
+    manager.close();
+    c.reset();
+    io.run_for(std::chrono::milliseconds(200));
+}

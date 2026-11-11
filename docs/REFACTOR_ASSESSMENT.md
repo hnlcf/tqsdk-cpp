@@ -102,14 +102,15 @@ AccountScope {
 handler 通过 `scope.tasks` 直接访问本账户任务，task id 在账户内独立；新增
 `TaskRegistryIdsArePerAccount` 集成测试验证 A/B 任务隔离和同 id 不串账户。
 
-### 4.2 WebSocket hub 生命周期（2026-11-10 已改为懒创建）
+### 4.2 WebSocket hub 生命周期（懒创建 + 自动移除）
 
 `HttpServer` 不再在构造时预先创建所有账户 hub；收到 `/stream?account=` 时在
 `data_ex_` 上解析账户并按需创建 hub，避免启动期静态枚举。
 
-已提供 `HttpServer::drop_account_hub()`，可在控制线程停止并移除额外账户 hub；
-仍需补：`MultiAccountManager::remove_account()` 自动通知 HttpServer 的集成验收，
-以及运行中新增账户的完整端到端验收。
+已提供 `HttpServer::drop_account_hub()`；`MultiAccountManager` 通过
+`set_account_removed_handler()` 在 `remove_account()/close()` 时通知 HttpServer，
+先停止该账户 hub 再关闭 TqApi。`RemovedAccountDropsHubAndRejectsStream` 覆盖
+“server 构造后新增账户 → 建 hub → 删除账户 → `/stream` 返回 404”。
 
 ### 4.3 路由文件已按资源拆分（2026-11-10）
 
@@ -150,7 +151,7 @@ websocket 与路由表；catalog/option、market、trading、task/risk 分别拆
 
 ### P1（需要验收）
 
-5. WS hub 动态账户生命周期：懒创建和 `drop_account_hub()` 已完成；运行中新增/移除账户的完整验收仍待补；
+5. ✅ WS hub 动态账户生命周期：懒创建、`drop_account_hub()`、manager 自动通知和增删验收完成；
 6. ✅ 路由按资源拆分；
 7. ✅ 增加 KDJ/CCI/OBV/VWAP；指标增量计算/Worker 池仍按 profile 决定；
 8. 前端虚拟列表按实际行数决定（待实测）。

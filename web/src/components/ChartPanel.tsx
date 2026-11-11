@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 import type { Quote } from "../api/client";
 import { formatPrice, formatVolume, quoteChange } from "../lib/format";
 import { instrumentName } from "../lib/instruments";
@@ -8,6 +8,8 @@ import KLineChart from "../chart/KLineChart";
 import IntradayChart from "../chart/IntradayChart";
 import IndicatorSettings from "./IndicatorSettings";
 import type { Theme } from "../chart/theme";
+import type { ChartDrawing, DrawMode, NewChartDrawing } from "../chart/drawings";
+import { readChartDrawings, saveChartDrawings } from "../lib/storage";
 
 export interface PeriodOption {
   id: string;
@@ -35,6 +37,32 @@ interface Props {
 
 export default function ChartPanel(props: Props) {
   const [settingsOpen, setSettingsOpen] = createSignal(false);
+  const drawingScope = () => `${props.symbol}|${props.period}`;
+  const [drawings, setDrawings] = createSignal<ChartDrawing[]>(readChartDrawings(drawingScope()));
+  const [drawMode, setDrawMode] = createSignal<DrawMode>("none");
+  let drawingScopeKey = drawingScope();
+  createEffect(() => {
+    const scope = drawingScope();
+    if (scope === drawingScopeKey) return;
+    drawingScopeKey = scope;
+    untrack(() => setDrawings(readChartDrawings(scope)));
+    setDrawMode("none");
+  });
+  const commitDrawings = (next: ChartDrawing[]) => {
+    setDrawings(next);
+    saveChartDrawings(drawingScope(), next);
+  };
+  const addDrawing = (drawing: NewChartDrawing) => {
+    const id = `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const created: ChartDrawing =
+      drawing.kind === "horizontal" ? { ...drawing, id } : { ...drawing, id };
+    commitDrawings([...drawings(), created]);
+    setDrawMode("none");
+  };
+  const clearDrawings = () => {
+    commitDrawings([]);
+    setDrawMode("none");
+  };
   const last = createMemo(() => props.bars.at(-1));
   const change = createMemo(() => quoteChange(props.quote));
   const activeWasm = () =>
@@ -100,6 +128,30 @@ export default function ChartPanel(props: Props) {
             )}
           </For>
         </div>
+        <Show when={props.mode === "kline"}>
+          <div class="drawing-tools" aria-label="图表画线工具">
+            <button
+              type="button"
+              class={drawMode() === "horizontal" ? "active" : ""}
+              aria-label="画水平线"
+              onClick={() => setDrawMode(drawMode() === "horizontal" ? "none" : "horizontal")}
+            >
+              水平线
+            </button>
+            <button
+              type="button"
+              class={drawMode() === "trend" ? "active" : ""}
+              aria-label="画趋势线"
+              onClick={() => setDrawMode(drawMode() === "trend" ? "none" : "trend")}
+            >
+              趋势线
+            </button>
+            <button type="button" aria-label="清除画线" onClick={clearDrawings}>
+              清除
+            </button>
+            <span class="drawing-count">画线 {drawings().length}</span>
+          </div>
+        </Show>
         <div class="toolbar-tools">
           <span class="wasm-toolbar-badge">WASM {activeWasm()}</span>
           <button type="button" class="tool-button indicator-settings-trigger" onClick={() => setSettingsOpen(true)}>
@@ -130,6 +182,9 @@ export default function ChartPanel(props: Props) {
             theme={props.theme}
             priceDecimals={props.decimals}
             wasmSeries={props.wasmSeries}
+            drawings={drawings()}
+            drawMode={drawMode()}
+            onDrawing={addDrawing}
           />
         </Show>
       </div>

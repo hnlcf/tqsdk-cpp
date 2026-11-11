@@ -6,6 +6,7 @@ import {
   CrosshairMode,
   HistogramSeries,
   LineSeries,
+  LineStyle,
   type CandlestickData,
   createChart,
   createSeriesMarkers,
@@ -21,6 +22,7 @@ import {
 import type { OHLCV } from "../indicators/indicators";
 import { chartColors, type Theme } from "./theme";
 import type { WasmSeries } from "../indicators/wasm/types";
+import { drawingLine, type ChartDrawing, type DrawMode, type NewChartDrawing } from "./drawings";
 import { chinaDateTime, chinaTickMark } from "./time";
 import { formatLegendPrice, toCandlestick, toLineData, toLineStyle, toVolumeData } from "./seriesMapping";
 
@@ -33,6 +35,9 @@ interface Props {
   theme: Theme;
   priceDecimals?: number;
   wasmSeries?: WasmSeries[];
+  drawings?: ChartDrawing[];
+  drawMode?: DrawMode;
+  onDrawing?: (drawing: NewChartDrawing) => void;
 }
 
 type AnySeries = ISeriesApi<SeriesType>;
@@ -47,7 +52,9 @@ export default function KLineChart(props: Props) {
   let appliedResetKey = "";
   let fitPending = true;
   const indicatorSeries = new Map<string, AnySeries>();
+  const drawingSeries = new Map<string, AnySeries>();
   const wasmMarkers = new Map<string, ISeriesMarkersPluginApi<Time>>();
+  let pendingTrend: { t1: number; price1: number } | undefined;
   const [ready, setReady] = createSignal(false);
   const [hover, setHover] = createSignal<OHLCV | undefined>();
 
@@ -167,6 +174,42 @@ export default function KLineChart(props: Props) {
     clearIndicators();
     addWasmSeries();
     updateWasmIndicators(props.bars);
+  }
+
+  function clearDrawings() {
+    if (!chart) return;
+    for (const series of drawingSeries.values()) {
+      try {
+        chart.removeSeries(series);
+      } catch {
+        // Chart may already be disposing.
+      }
+    }
+    drawingSeries.clear();
+  }
+
+  function syncDrawings() {
+    if (!chart) return;
+    clearDrawings();
+    for (const drawing of props.drawings ?? []) {
+      const data = drawingLine(drawing, props.bars);
+      if (data.length < 2) continue;
+      const series = chart.addSeries(
+        LineSeries,
+        {
+          color: "#f0b90b",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+          title: drawing.kind === "horizontal" ? "水平线" : "趋势线",
+        },
+        0,
+      );
+      series.setData(data);
+      drawingSeries.set(drawing.id, series as AnySeries);
+    }
   }
 
   function updateWasmIndicators(bars: OHLCV[]) {
@@ -327,6 +370,49 @@ export default function KLineChart(props: Props) {
     });
     chart.priceScale("").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
 
+    chart.subscribeClick((param) => {
+      const activeChart = chart;
+      if (!activeChart || props.drawMode === "none" || !param.point || !candle) return;
+      const price = candle.coordinateToPrice(param.point.y);
+      if (typeof price !== "number" || !Number.isFinite(price)) return;
+      const rawTime =
+        param.time ?? activeChart.timeScale().coordinateToTime(param.point.x) ?? undefined;
+      if (props.drawMode === "horizontal") {
+        props.onDrawing?.({ kind: "horizontal", price });
+        return;
+      }
+      let time = typeof rawTime === "number" ? rawTime : Number(rawTime);
+      if (!Number.isFinite(time)) {
+        // Some Lightweight Charts versions return a business-day object here.
+        // Fall back to the bar whose x coordinate is nearest the click.
+        let bestDistance = Number.POSITIVE_INFINITY;
+        let bestTime = props.bars.at(-1)?.time;
+        for (const bar of props.bars) {
+          const coordinate = activeChart.timeScale().timeToCoordinate(bar.time as Time);
+          if (typeof coordinate !== "number") continue;
+          const distance = Math.abs(coordinate - param.point.x);
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestTime = bar.time;
+          }
+        }
+        time = Number(bestTime);
+      }
+      if (!Number.isFinite(time)) return;
+      if (!pendingTrend) {
+        pendingTrend = { t1: time, price1: price };
+        return;
+      }
+      props.onDrawing?.({
+        kind: "trend",
+        t1: pendingTrend.t1,
+        price1: pendingTrend.price1,
+        t2: time,
+        price2: price,
+      });
+      pendingTrend = undefined;
+    });
+
     chart.subscribeCrosshairMove((param) => {
       if (!param.point || !param.time || !candle) {
         setHover(undefined);
@@ -350,6 +436,7 @@ export default function KLineChart(props: Props) {
     setReady(true);
     updateSeriesData(true);
     rebuildIndicators();
+    syncDrawings();
 
     onCleanup(() => {
       chart?.remove();
@@ -357,6 +444,7 @@ export default function KLineChart(props: Props) {
       candle = undefined;
       volume = undefined;
       priceLine = undefined;
+      drawingSeries.clear();
     });
   });
 
@@ -406,6 +494,17 @@ export default function KLineChart(props: Props) {
     props.wasmSeries;
     colors();
     rebuildIndicators();
+  });
+
+  createEffect(() => {
+    if (!ready() || !chart) return;
+    props.drawings;
+    props.bars.length;
+    syncDrawings();
+  });
+
+  createEffect(() => {
+    if (props.drawMode !== "trend") pendingTrend = undefined;
   });
 
   createEffect(() => {

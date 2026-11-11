@@ -14,19 +14,33 @@ bool MultiAccountManager::add_account(AccountId account_id, std::shared_ptr<TqAp
 
 bool MultiAccountManager::remove_account(const AccountId& account_id) {
     std::shared_ptr<TqApi> retiring;
+    AccountRemovedHandler  handler;
     {
         std::lock_guard lock(mutex_);
         auto            it = accounts_.find(account_id);
         if (it == accounts_.end())
             return false;
+        handler  = account_removed_handler_;
         retiring = std::move(it->second);
         accounts_.erase(it);
         // Retain until io_context drain; see close().
         retired_apis_.push_back(retiring);
     }
+    // Stop downstream clients before the API disappears.
+    if (handler) {
+        try {
+            handler(account_id);
+        } catch (...) {
+        }
+    }
     if (retiring)
         retiring->close();
     return true;
+}
+
+void MultiAccountManager::set_account_removed_handler(AccountRemovedHandler handler) {
+    std::lock_guard lock(mutex_);
+    account_removed_handler_ = std::move(handler);
 }
 
 std::shared_ptr<TqApi> MultiAccountManager::find_account(const AccountId& account_id) const {
@@ -68,19 +82,26 @@ asio::awaitable<CommandAck> MultiAccountManager::cancel_order(const AccountId&  
 }
 
 void MultiAccountManager::close() {
-    std::vector<std::shared_ptr<TqApi>> apis;
+    std::vector<std::pair<AccountId, std::shared_ptr<TqApi>>> closing;
+    AccountRemovedHandler                                     handler;
     {
         std::lock_guard lock(mutex_);
-        apis.reserve(accounts_.size() + retired_apis_.size());
-        for (auto& [_, api] : accounts_)
-            apis.push_back(std::move(api));
+        closing.reserve(accounts_.size());
+        handler = account_removed_handler_;
+        for (auto& [id, api] : accounts_)
+            closing.emplace_back(id, std::move(api));
         accounts_.clear();
         default_account_id_.clear();
-        apis.insert(apis.end(), retired_apis_.begin(), retired_apis_.end());
-        retired_apis_.clear();
-        retired_apis_ = apis;
+        for (const auto& [id, api] : closing)
+            retired_apis_.push_back(api);
     }
-    for (auto& api : apis) {
+    for (const auto& [id, api] : closing) {
+        if (handler) {
+            try {
+                handler(id);
+            } catch (...) {
+            }
+        }
         if (api)
             api->close();
     }

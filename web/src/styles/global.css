@@ -3016,3 +3016,33 @@ html[data-theme="light"] .indicator-popover {
   text-align: left;
   cursor: pointer;
 }
+
+.drawing-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.drawing-tools button {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  padding: 5px 8px;
+  font-size: 11px;
+  transition: 140ms ease;
+}
+
+.drawing-tools button:hover,
+.drawing-tools button.active {
+  color: var(--text);
+  border-color: rgba(240, 185, 11, 0.4);
+  background: rgba(240, 185, 11, 0.1);
+}
+
+.drawing-count {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}

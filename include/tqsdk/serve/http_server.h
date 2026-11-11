@@ -181,6 +181,8 @@ public:
 
     /// 绑定并监听 addr:port；开始 accept 循环（后台协程）。失败抛 system_error。
     /// 需在 io_context.run() 之前调用。
+    ~HttpServer();
+
     void listen(const std::string& address, uint16_t port);
 
     /// 停止监听并关闭 acceptor（幂等）。

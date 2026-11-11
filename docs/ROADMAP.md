@@ -23,7 +23,7 @@
 2. ✅ **WebSocket 多账户过滤**：`/stream?account=` 选择每账户独立 hub；Web 账户切换会重连并带账户订阅。
 3. ✅ **账户级 task/risk**：`/task/*`、`/risk/*` 支持 `?account=`，任务按账户过滤，风控使用对应 TqApi。
 4. ✅ **进程级双账户验收**：两个独立 Sim gw + node 的 `/accounts`、下单、持仓、task/risk、`/stream?account=` 已通过；真实 CTP/SimNow 双账户仍待执行，见 [MULTI_ACCOUNT_ACCEPTANCE.md](MULTI_ACCOUNT_ACCEPTANCE.md)。
-5. **前端 E2E/视觉回归**：Playwright 覆盖搜索选合约、切换合约/周期、K 线缩放、账户切换、断线重连。
+5. **前端 E2E/视觉回归**：已覆盖搜索选合约、切换合约/周期、K 线缩放、基础画线；账户切换、断线重连和视觉基线仍待补。
 6. ✅ **IPC/WS fuzz 冒烟 + 24h-72h soak 脚本 + GitHub Actions workflow**；远程 runner 尚未实际执行，真实 72h 尚未跑。
 7. **CTP 连续 5 个交易日 soak 与交易日矩阵**；真实交易日不可压缩。
 8. **生产化**：TLS/认证（node 目前 loopback）、systemd/supervisor、日志脱敏、审计。
@@ -102,7 +102,7 @@
 - TqAuth 快期认证与目录 Bearer header 已接入；
 - ✅ 顶栏账户选择器、运维页、持仓固定列宽、K 线切换缩放/本地时间；
 - ✅ 指标 Worker 并行、全隐藏跳过、输出缓存、自选/侧栏/持仓表尺寸持久化；
-- 图表画线 primitive/overlay、指标增量计算（按 profile）；
+- ✅ 基础水平线/趋势线持久化；高级 Fibonacci/自由画线、指标增量计算（profile 后决定）；
 - 前端 Playwright 端到端扩展（登录/订阅/真实下单/重连/视觉回归）；
 - 虚拟列表、列宽/排序持久化；
 - 期权希腊字母、波动率与更完整期权分析；

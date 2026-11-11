@@ -149,11 +149,10 @@ tqsdk.watchlists.v2        自选列表
 
 - Apache-2.0，自托管，TradingView 风格；
 - 蜡烛/面积/柱状/线、十字光标、缩放、panes、primitive；
-- 不内置指标和画线工具；
-- 指标由 `src/indicators` 计算，再添加为 series；
-- 当前实现 MA/BOLL/MACD/RSI 及当前价/昨收线；
-- 完整趋势线/斐波那契/自由画线需要 primitive/overlay，或改用
-  KLineChart（Apache-2.0，内置指标和 overlay）。
+- 指标由 WASM 插件计算，再添加为 series；
+- 已内置 EMA/MA/BOLL/MACD/RSI/ATR/Donchian/KDJ/CCI/OBV/VWAP；
+- 已实现基础水平线/趋势线（localStorage 按 symbol|period 持久化）；
+- 斐波那契/自由画线/编辑手柄仍需要 primitive/overlay；
 
 TradingView **Advanced Charts / Charting Library** 提供完整指标和画线，但
 是专有许可，不是开源依赖。若需要这些能力，应单独评估许可，不应默认打包。
@@ -170,7 +169,8 @@ web/src/
   hooks/useTradingSession.ts   账户/持仓/委托/成交/下单
   chart/data.ts                OHLCV 转换 + bar 合并纯函数
   chart/seriesMapping.ts       纯 candle/line/volume 映射
-  chart/KLineChart.tsx         K线 + WASM 指标 + panes
+  chart/drawings.ts            画线类型/校验/序列点
+  chart/KLineChart.tsx         K线 + WASM 指标 + panes + 画线
   chart/IntradayChart.tsx      分时
   chart/theme.ts               图表主题
   indicators/indicators.ts     分时/session 工具（旧指标计算已删除）
@@ -188,10 +188,11 @@ pnpm typecheck
 pnpm build
 ```
 
-当前 Vitest 覆盖（20 项）；Playwright E2E：
+当前 Vitest 覆盖（23 项）；Playwright E2E：
 
 - 自选搜索 `SHFE.ao2701` 后大小写不变；
-- 通过 1m/5m 周期切换、分时切换和图表缩放；
+- 通过 1m/5m 周期切换、分时切换、图表缩放；
+- 水平线/趋势线绘制、清除和刷新持久化；
 - 账户选择器可见；
 - 指标设置是浮动列表，点击插件进入详情；输出可单独配置显示、颜色、线型和线宽；
 - EMA/MA 支持最多 8 个周期槽位的添加/移除。
@@ -199,7 +200,7 @@ pnpm build
 - 启用 MA 后出现 MA5；关闭 MACD DIF 后对应输出消失；
 - 刷新后指标参数/输出配置/启用状态保留；
 - 拖动左侧 panel 后刷新，宽度保持；
-- 分时 session、bar 合并、series 映射、layout、trade diff 有纯函数单测。
+- 分时 session、bar 合并、series 映射、layout、trade diff、画线序列有纯函数单测。
 
 Vitest 覆盖：
 
@@ -213,8 +214,8 @@ CTP 验收。
 
 ## 8. 后续
 
-- 画线 primitive/overlay；
-- 指标 Worker（大数据量）；
+- 高级画线（Fibonacci/自由画线/编辑手柄）；
+- 指标 Worker/增量计算（已有全量 profile，0.65ms/11 插件）；
 - 虚拟列表/列宽持久化；
 - 期权希腊字母/波动率；
 - WebSocket 压缩或二进制行情；

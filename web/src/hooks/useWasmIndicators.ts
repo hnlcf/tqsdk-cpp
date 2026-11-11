@@ -36,6 +36,7 @@ export function useWasmIndicators(bars: Accessor<OHLCV[]>, chartScope: Accessor<
     { key: string; outputs: Float64Array[]; manifest: WasmManifest }
   >();
   let timer: number | undefined;
+  let generation = 0;
 
   function patch(id: string, next: Partial<WasmPluginView>) {
     setPlugins((previous) =>
@@ -68,6 +69,8 @@ export function useWasmIndicators(bars: Accessor<OHLCV[]>, chartScope: Accessor<
   }
 
   function schedule() {
+    generation += 1;
+    const scheduled = generation;
     if (timer !== undefined) {
       window.clearTimeout(timer);
       timer = undefined;
@@ -86,6 +89,7 @@ export function useWasmIndicators(bars: Accessor<OHLCV[]>, chartScope: Accessor<
     const snapshot = active.map((plugin) => ({ ...plugin, values: [...plugin.values] }));
     timer = window.setTimeout(() => {
       timer = undefined;
+      if (scheduled !== generation) return;
       const latest = bars();
       if (latest.length === 0) return;
       const barsKey = [
@@ -128,7 +132,11 @@ export function useWasmIndicators(bars: Accessor<OHLCV[]>, chartScope: Accessor<
             return [] as WasmSeries[];
           }
         }),
-      ).then((results) => setSeries(results.flat()));
+      ).then((results) => {
+        // Drop results from an older debounce/compute; a newer bars/params
+        // generation must win even if an older plugin worker finishes later.
+        if (scheduled === generation) setSeries(results.flat());
+      });
     }, 120);
   }
 

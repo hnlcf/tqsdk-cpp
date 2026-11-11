@@ -1,3 +1,6 @@
+import type { ChartDrawing } from "../chart/drawings";
+import { isChartDrawing } from "../chart/drawings";
+
 export type Theme = "dark" | "light";
 export type View = "terminal" | "futures" | "options" | "ops";
 
@@ -6,6 +9,7 @@ const KEY_WATCHLIST = "tqsdk.watchlist.v1";
 const KEY_SELECTED = "tqsdk.selected.v1";
 const KEY_PERIOD = "tqsdk.period.v1";
 const KEY_CHART_MODE = "tqsdk.chartMode.v1";
+const KEY_DRAWINGS = "tqsdk.chart.drawings.v1";
 
 export const DEFAULT_WATCHLIST = [
   "SHFE.rb2701",
@@ -237,4 +241,18 @@ export function readWorkspaceLayout(): WorkspaceLayout {
 
 export function saveWorkspaceLayout(layout: WorkspaceLayout): void {
   writeJson(KEY_WORKSPACE_LAYOUT, layout);
+}
+
+
+export function readChartDrawings(symbol: string): ChartDrawing[] {
+  const all = readJson<Record<string, unknown>>(KEY_DRAWINGS, {});
+  const rows = all[symbol];
+  return Array.isArray(rows) ? rows.filter(isChartDrawing) : [];
+}
+
+export function saveChartDrawings(symbol: string, drawings: ChartDrawing[]): void {
+  if (!symbol) return;
+  const all = readJson<Record<string, ChartDrawing[]>>(KEY_DRAWINGS, {});
+  all[symbol] = drawings;
+  writeJson(KEY_DRAWINGS, all);
 }

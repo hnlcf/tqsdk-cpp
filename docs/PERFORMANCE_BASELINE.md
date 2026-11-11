@@ -110,3 +110,11 @@ WebSocket 首帧 snapshot：15.09ms；静默行情下 2s 收 10 条消息（约 
 - 前端虚拟列表：当自选/持仓行数达到数千行再引入；
 - `scripts/bench_wasm_plugins.mjs` / `scripts/bench_http_ws.py` 作为回归记录，
   不设成波形不稳定的硬性 CI 门槛。
+
+
+## 7. 指标增量计算结论（2026-11-11）
+
+11 个插件 × 5000 根全量计算约 **0.65ms**，低于 120ms 防抖和 1s 级 K 线更新
+周期；当前不做 ABI v2 增量计算。已增加前端 generation guard，避免较慢的旧
+worker 结果覆盖新 bars/params。只有大周期、全插件开启且 profile 证明超过帧预算
+时，才引入增量 ABI。
