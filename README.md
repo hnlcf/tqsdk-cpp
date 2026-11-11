@@ -165,6 +165,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/SOAK_PERF.md](docs/SOAK_PERF.md)
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - [docs/PACKAGING.md](docs/PACKAGING.md)
+- [docs/CONTAINERS.md](docs/CONTAINERS.md)
 - [docs/CTP_TRADE_MATRIX.md](docs/CTP_TRADE_MATRIX.md)
 - [docs/CTP_WEEKLY_TEST_PLAN.md](docs/CTP_WEEKLY_TEST_PLAN.md)
 - [docs/P6_AUTOMATION.md](docs/P6_AUTOMATION.md)

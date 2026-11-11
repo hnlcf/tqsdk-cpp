@@ -173,7 +173,17 @@ gh release create v0.1.0 dist/tqsdk_0.1.0_amd64.deb \
 - HTTPS 仓库和客户端公钥安装；
 - 保留每次 release 的 `SHA256SUMS` 和构建日志。
 
-## 7. 注意事项
+## 7. 容器镜像
+
+DEB/RPM 之外还提供 Docker/Podman 镜像入口：
+
+```bash
+./scripts/build_container.sh --engine podman --smoke-test
+```
+
+详见 [CONTAINERS.md](CONTAINERS.md)。
+
+## 8. 注意事项
 
 - `VITE_API_TOKEN` 如果参与构建，会嵌入前端静态资源；仅限受控部署，生产优先
   使用反向代理认证/OIDC。

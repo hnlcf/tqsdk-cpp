@@ -1,0 +1,52 @@
+# Container demo: node owns a local SimTdGateway, no external gw/CTP needed.
+[md]
+kind = "none"
+
+[td]
+kind = "sim"
+initial_balance = 1000000.0
+
+[td.specs."SHFE.rb2701"]
+volume_multiple = 10.0
+price_tick = 1.0
+margin_rate = 0.1
+commission_per_lot = 2.0
+
+[td.last_prices]
+"SHFE.rb2701" = 3800.0
+
+[serve]
+bind = "0.0.0.0"
+port = 18081
+symbols = ["SHFE.rb2701"]
+
+# Demo only. Mount a real node.toml with [serve.auth] enabled for deployment.
+[serve.auth]
+enabled = false
+
+[serve.ws]
+path = "/stream"
+heartbeat_interval_ms = 30000
+max_clients = 128
+max_queue = 512
+
+[instruments]
+enabled = false
+
+[tq_auth]
+enabled = false
+
+[kline_cache]
+enabled = false
+
+[tick_cache]
+enabled = false
+
+[audit]
+enabled = true
+file = "/var/log/tqsdk/audit.log"
+max_bytes = 10485760
+max_files = 5
+
+[runtime]
+threads = 2

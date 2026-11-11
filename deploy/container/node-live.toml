@@ -1,0 +1,38 @@
+# Live market-data demo: public Tq MD for quotes/klines, local SimTd for trading.
+# Do not use this file for production trading credentials.
+[md]
+kind = "tq"
+host = "free-openmd.shinnytech.com"
+port = "443"
+path = "/t/md/front/mobile"
+[td]
+kind = "sim"
+initial_balance = 1000000.0
+[td.specs."SHFE.rb2701"]
+volume_multiple = 10.0
+price_tick = 1.0
+margin_rate = 0.1
+commission_per_lot = 2.0
+[td.last_prices]
+"SHFE.rb2701" = 3800.0
+[serve]
+bind = "0.0.0.0"
+port = 18081
+symbols = ["SHFE.rb2701"]
+[serve.auth]
+enabled = false
+[serve.ws]
+path = "/stream"
+heartbeat_interval_ms = 30000
+max_clients = 64
+max_queue = 512
+[instruments]
+enabled = false
+[tq_auth]
+enabled = false
+[kline_cache]
+enabled = false
+[tick_cache]
+enabled = false
+[runtime]
+threads = 2

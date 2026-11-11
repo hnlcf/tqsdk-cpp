@@ -1,0 +1,31 @@
+# Optional gw-only container role. Node-sim.toml does not consume this gw.
+[listen]
+transport = "tcp"
+tcp_host = "0.0.0.0"
+tcp_port = 4321
+
+[ipc]
+encoding = "json"
+handshake_timeout_ms = 5000
+heartbeat_interval_ms = 1000
+heartbeat_timeout_ms = 5000
+local_name = "tqsdk-gw-container"
+
+[md]
+kind = "none"
+
+[td]
+kind = "sim"
+initial_balance = 1000000.0
+
+[td.specs."SHFE.rb2701"]
+volume_multiple = 10.0
+price_tick = 1.0
+margin_rate = 0.1
+commission_per_lot = 2.0
+
+[td.last_prices]
+"SHFE.rb2701" = 3800.0
+
+[runtime]
+threads = 2
