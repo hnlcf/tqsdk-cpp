@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(tqsdk_cpp VERSION 0.2.2 LANGUAGES CXX)
+project(tqsdk_cpp VERSION 0.2.3 LANGUAGES CXX)
 
 # 包名/版本来由 CMake 生成，避免 C++/脚本/安装包各写一份。
 set(TQSDK_PACKAGE_NAME  "tqsdk-cpp")
