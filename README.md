@@ -47,6 +47,17 @@ pnpm install
 pnpm dev
 ```
 
+### Python 策略环境
+
+```bash
+uv sync --extra dev
+uv run tqsdk-strategies
+uv run python -m unittest discover -s python/tests -v
+```
+
+依赖取舍、uv lock、wheel 与 native C++ 库的打包边界见
+[docs/PYTHON_PACKAGING.md](docs/PYTHON_PACKAGING.md)。
+
 ### 启动 live
 
 ```bash
@@ -181,6 +192,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/PYTHON_BACKTEST.md](docs/PYTHON_BACKTEST.md)
 - [docs/PYTHON_LIVE_TRADING.md](docs/PYTHON_LIVE_TRADING.md)
 - [docs/PYTHON_LIBRARY.md](docs/PYTHON_LIBRARY.md)
+- [docs/PYTHON_PACKAGING.md](docs/PYTHON_PACKAGING.md)
 - [docs/CTP_SINGLE_ACCOUNT_STRATEGY.md](docs/CTP_SINGLE_ACCOUNT_STRATEGY.md)
 - [docs/CTP_TRADE_MATRIX.md](docs/CTP_TRADE_MATRIX.md)
 - [docs/CTP_WEEKLY_TEST_PLAN.md](docs/CTP_WEEKLY_TEST_PLAN.md)

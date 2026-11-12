@@ -29,6 +29,7 @@
 | [PYTHON_BACKTEST.md](PYTHON_BACKTEST.md) | C++ BacktestEngine 的 Python ctypes 绑定 |
 | [PYTHON_LIVE_TRADING.md](PYTHON_LIVE_TRADING.md) | Python 实时策略 -> node REST -> CTP |
 | [PYTHON_LIBRARY.md](PYTHON_LIBRARY.md) | tqsdk_py 抽象层：数据/策略/consumer/backtest/live |
+| [PYTHON_PACKAGING.md](PYTHON_PACKAGING.md) | numpy/pandas 取舍、uv 环境、wheel/native 打包 |
 | [CTP_SINGLE_ACCOUNT_STRATEGY.md](CTP_SINGLE_ACCOUNT_STRATEGY.md) | 单 SimNow 账户 CTP 量化测试步骤 |
 | [CI.md](CI.md) | 本地 CI、ASan/TSan、短 soak 和回归门禁 |
 | [SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md) | SimNow 真实 CTP 验收流程和报告 |

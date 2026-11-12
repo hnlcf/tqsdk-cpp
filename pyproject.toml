@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tqsdk-py"
+version = "0.1.0"
+description = "Python strategy framework and C++ BacktestEngine adapter for tqsdk-cpp"
+readme = "docs/PYTHON_LIBRARY.md"
+requires-python = ">=3.11"
+license = {text = "Proprietary"}
+authors = [{name = "tqsdk-cpp"}]
+dependencies = []
+
+[project.optional-dependencies]
+# Research/data preparation only. The live signal path intentionally has no
+# pandas/numpy dependency, so a minimal deployment remains small.
+research = [
+    "numpy>=2.0",
+    "pandas>=2.0",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.8",
+]
+
+[project.scripts]
+tqsdk-live = "tqsdk_py.cli:live_main"
+tqsdk-backtest = "tqsdk_py.cli:backtest_main"
+tqsdk-strategies = "tqsdk_py.cli:list_strategies_main"
+
+[project.urls]
+Documentation = "https://github.com/hnlcf/tqsdk-cpp/tree/main/docs"
+
+[tool.setuptools]
+package-dir = {"" = "python"}
+# Compatibility modules kept at the original import names.
+py-modules = [
+    "tqsdk_backtest",
+    "tqsdk_backtest_cli",
+    "tqsdk_strategy",
+    "tqsdk_live",
+]
+
+[tool.setuptools.packages.find]
+where = ["python"]
+include = ["tqsdk_py", "tqsdk_py.*"]
+
+[tool.setuptools.package-data]
+tqsdk_py = ["py.typed"]
+
+[tool.uv]
+# The C++ libtqsdk_backtest.so is built by CMake/DEB/RPM, not by uv.
+# Set TQSDK_BACKTEST_LIB when running BacktestRunner from a source checkout.
+package = true

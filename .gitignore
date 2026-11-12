@@ -61,3 +61,9 @@ wasm/**/target/
 
 # release package output
 dist/
+
+# ---- Python / uv ----
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/

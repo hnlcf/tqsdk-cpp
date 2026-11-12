@@ -118,7 +118,10 @@ def find_library() -> Path:
         return path
 
     package_root = Path(__file__).resolve().parent
-    candidates: list[Path] = []
+    candidates: list[Path] = [
+        package_root / "lib" / "libtqsdk_backtest.so",
+        package_root / "libtqsdk_backtest.so",
+    ]
     for root in (Path.cwd(), package_root, package_root.parent):
         candidates.extend(root.glob("build*/libtqsdk_backtest.so"))
         candidates.extend(root.glob("build*/lib/libtqsdk_backtest.so"))

@@ -161,6 +161,12 @@ def build_live_runner(args: argparse.Namespace) -> LiveRunner:
     )
 
 
+def list_strategies_main(argv: list[str] | None = None) -> int:
+    """Console entry point for registered strategy discovery."""
+    print_strategies(default_manager())
+    return 0
+
+
 def live_main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a registered strategy against tqsdk-node")
     add_strategy_arguments(parser)

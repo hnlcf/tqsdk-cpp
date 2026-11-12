@@ -44,6 +44,8 @@ bars = JsonBarSource("artifacts/tq_daily").load("KQ.i@DCE.jm", 86_400_000_000_00
 - `JsonBarSource`：研究 JSON 文件/目录；
 - `NodeBarSource`：包装 node REST，live 预热和轮询；
 - `InMemoryBarSource`：测试、示例、策略调试；
+- `PandasBarSource`：可选研究适配器，只有使用它才需要
+  `uv sync --extra research`；
 - `closed_bars()`：live 去掉可能未收盘的最后一根。
 
 ## 3. 策略接口

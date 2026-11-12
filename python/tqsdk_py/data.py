@@ -7,7 +7,7 @@ import re
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import Any, Protocol, Sequence
 
 from .models import Bar, ContractSpec
 
@@ -30,6 +30,60 @@ class InMemoryBarSource(BarSource):
         values = self.bars.get(symbol, []) if isinstance(self.bars, dict) else self.bars
         out = [Bar.from_value(item) for item in values]
         return out[-width:] if width > 0 else out
+
+
+class PandasBarSource(BarSource):
+    """Optional adapter for research DataFrames (requires `uv sync --extra research`).
+
+    pandas is imported lazily, so the live framework keeps zero mandatory
+    third-party dependencies.
+    """
+
+    def __init__(self, frame: Any):
+        self.frame = frame
+
+    def load(self, symbol: str, duration_ns: int, width: int = 200) -> list[Bar]:
+        import pandas as pd  # type: ignore[import-not-found]
+
+        frame = self.frame
+        if isinstance(frame, (str, Path)):
+            frame = pd.read_csv(frame)
+        if not isinstance(frame, pd.DataFrame):
+            raise TypeError("PandasBarSource expects a DataFrame or CSV path")
+        frame = frame.copy()
+        if "datetime" not in frame.columns:
+            if isinstance(frame.index, pd.DatetimeIndex):
+                frame["datetime"] = frame.index
+            else:
+                frame = frame.reset_index()
+        required = {"datetime", "open", "high", "low", "close"}
+        missing = required - set(frame.columns)
+        if missing:
+            raise ValueError(f"missing DataFrame columns: {sorted(missing)}")
+        values = frame[["datetime", "open", "high", "low", "close"]]
+        if "volume" in frame.columns:
+            values = frame[["datetime", "open", "high", "low", "close", "volume"]]
+        parsed: list[Bar] = []
+        for row in values.itertuples(index=False, name=None):
+            dt_value = row[0]
+            if isinstance(dt_value, (int, float)):
+                dt = int(dt_value)
+            elif hasattr(dt_value, "value"):
+                dt = int(dt_value.value)
+            else:
+                dt = int(pd.Timestamp(dt_value).value)
+            parsed.append(
+                Bar(
+                    dt,
+                    float(row[1]),
+                    float(row[2]),
+                    float(row[3]),
+                    float(row[4]),
+                    float(row[5]) if len(row) > 5 else 0.0,
+                )
+            )
+        parsed.sort(key=lambda item: item.datetime)
+        return parsed[-width:] if width > 0 else parsed
 
 
 class JsonBarSource(BarSource):
