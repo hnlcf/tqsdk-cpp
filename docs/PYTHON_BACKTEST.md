@@ -180,7 +180,7 @@ CTest 也会自动注册 `PythonTests`（构建 Python 解释器可用时）。
 - SignalConsumer/WeCom 组合和 LiveRunner 信号链路；
 - BacktestRunner 调用 C++ 引擎并消费策略信号。
 
-当前 Python 测试：**19/19**。
+当前 Python 测试：**20/20**。
 
 ## 7. 回测 CLI 与策略选择
 

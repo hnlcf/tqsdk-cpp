@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import unittest
 from unittest.mock import patch
 
@@ -31,7 +32,7 @@ from tqsdk_py import (
     entry_price,
     resolve_spec,
 )
-from tqsdk_py.cli import parse_params
+from tqsdk_py.cli import load_env_file, parse_params
 from tqsdk_py.registry import StrategyRegistry, UnknownStrategyError
 from tqsdk_py.strategy import Strategy
 
@@ -172,6 +173,25 @@ class StrategySignalTest(unittest.TestCase):
         )
         self.assertIsInstance(strategy, Dummy)
         self.assertEqual(strategy.value, 7)
+
+    def test_env_file_loader_does_not_override(self) -> None:
+        import tempfile
+
+        old = os.environ.get("TQSDK_TEST_ENV_VALUE")
+        os.environ.pop("TQSDK_TEST_ENV_VALUE", None)
+        try:
+            with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as handle:
+                handle.write("TQSDK_TEST_ENV_VALUE=from_file\n")
+                path = handle.name
+            load_env_file(path)
+            self.assertEqual(os.environ.get("TQSDK_TEST_ENV_VALUE"), "from_file")
+            os.environ["TQSDK_TEST_ENV_VALUE"] = "existing"
+            load_env_file(path)
+            self.assertEqual(os.environ.get("TQSDK_TEST_ENV_VALUE"), "existing")
+        finally:
+            os.environ.pop("TQSDK_TEST_ENV_VALUE", None)
+            if old is not None:
+                os.environ["TQSDK_TEST_ENV_VALUE"] = old
 
     def test_param_parser(self) -> None:
         self.assertEqual(

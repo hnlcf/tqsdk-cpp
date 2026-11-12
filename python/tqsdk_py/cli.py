@@ -25,6 +25,34 @@ from .node import NodeClient
 from .signals import LoggingConsumer, SignalDispatcher, WeComConsumer
 
 
+def load_env_file(path: str | Path = ".env") -> str:
+    """Load simple KEY=VALUE entries without overriding the process env.
+
+    This is intentionally dependency-free. It is used for local notification
+    settings such as TQSDK_WECOM_WEBHOOK; secrets are never printed.
+    """
+    env_path = Path(path)
+    if not env_path.is_file():
+        return ""
+    for raw in env_path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        os.environ[key] = value
+    return str(env_path)
+
+
 def add_strategy_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--strategy",
@@ -175,6 +203,7 @@ def live_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--account", default="default")
     parser.add_argument("--token", default=os.environ.get("TQSDK_SERVE_TOKEN", ""))
     parser.add_argument("--max-volume", type=int, default=0)
+    parser.add_argument("--env-file", default=".env", help="optional KEY=VALUE env file")
     parser.add_argument("--poll-interval", type=float, default=5.0)
     parser.add_argument("--width", type=int, default=200)
     parser.add_argument("--max-cycles", type=int, default=0)
@@ -185,6 +214,7 @@ def live_main(argv: list[str] | None = None) -> int:
         help="environment variable containing the WeCom robot webhook URL",
     )
     args = parser.parse_args(argv)
+    load_env_file(args.env_file)
     args.max_cycles = None if args.max_cycles <= 0 else args.max_cycles
     manager = default_manager()
     if args.list_strategies:
