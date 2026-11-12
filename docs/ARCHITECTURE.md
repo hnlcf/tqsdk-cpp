@@ -53,7 +53,8 @@
 - **两进程生产模式**：gw 接真实网关，node 通过 IPC 代理；
 - **单进程测试/回测**：`TqApi` 直接持有 Sim/Mock/Tq 网关，不启动 gw/node。
 
-Web 前端永远不链接 `tqsdk_core`，只通过 node REST/WS 通信。
+Web 前端永远不链接 `tqsdk_core`，只通过 node REST/WS 通信。CTP 也只进入
+`tqsdk-gw` 的可选 `libtqsdk_ctp.so`，node/backtest 不加载 CTP SDK。
 
 ## 3. 分层与依赖方向
 

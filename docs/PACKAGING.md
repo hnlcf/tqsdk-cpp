@@ -90,6 +90,7 @@ TQSDK_RPMBUILD=/path/to/rpmbuild ./scripts/package_release.sh --formats rpm
 /usr/bin/tqsdk-gw
 /usr/bin/tqsdk-node
 /usr/lib/libtqsdk_core.so*              # tqsdk-libs
+/usr/lib/libtqsdk_ctp.so*               # tqsdk-libs，仅 gw 使用的 CTP 网关
 /usr/lib/libtqsdk_backtest.so*          # tqsdk-libs
 /usr/lib/libthost*.so*                  # tqsdk-libs，CTP runtime
 /usr/include/tqsdk/                     # tqsdk-dev / tqsdk-devel

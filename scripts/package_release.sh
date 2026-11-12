@@ -185,7 +185,7 @@ for format in "${REQUESTED[@]}"; do
             --architecture "$DEB_ARCH" \
             --depends "libc6, libstdc++6, libgcc-s1" \
             --description "TQSDK shared runtime libraries" \
-            --description-body " Shared core/backtest libraries and CTP runtime." \
+            --description-body " Shared core/backtest libraries, optional CTP gateway library and CTP runtime." \
             --allow-no-node
         python3 "$ROOT/scripts/package_deb.py" \
             --stage "$DEV_STAGE" \

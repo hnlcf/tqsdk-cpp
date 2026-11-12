@@ -3,7 +3,7 @@
 镜像包含：
 
 - `tqsdk-gw` / `tqsdk-node`；
-- `libtqsdk_core.so` 和捆绑的 CTP runtime；
+- `libtqsdk_core.so`、`libtqsdk_ctp.so` 和捆绑的 CTP runtime；
 - 已构建的 SolidJS/WASM Web 终端；
 - nginx（静态站点 + `/api` 反向代理）；
 - 容器入口脚本和 Sim/实盘示例配置。
@@ -23,6 +23,7 @@ dist/stage/tqsdk-0.1.0/
   usr/bin/tqsdk-gw
   usr/bin/tqsdk-node
   usr/lib/libtqsdk_core.so*
+  usr/lib/libtqsdk_ctp.so*
   usr/share/tqsdk/web/
 ```
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(tqsdk_cpp VERSION 0.2.1 LANGUAGES CXX)
+project(tqsdk_cpp VERSION 0.2.2 LANGUAGES CXX)
 
 # 包名/版本来由 CMake 生成，避免 C++/脚本/安装包各写一份。
 set(TQSDK_PACKAGE_NAME  "tqsdk-cpp")
@@ -39,7 +39,7 @@ if(TQSDK_BUILD_TESTS)
     find_package(GTest CONFIG REQUIRED)
 endif()
 
-# ---------- 核心动态库（CTP 开启时直接并入同一 .so） ----------
+# ---------- 核心动态库（不链接 CTP；node/backtest 只依赖本库） ----------
 add_library(tqsdk_core SHARED
     src/api/tq_api.cpp
     src/api/tq_api_order.cpp
@@ -237,8 +237,10 @@ if(TQSDK_ENABLE_CTP)
         INTERFACE_INCLUDE_DIRECTORIES "${CTP_INCLUDE_DIR}"
     )
 
-    # CTP 源文件直接编译进唯一的 tqsdk_core 动态库，不再生成第二个库。
-    target_sources(tqsdk_core PRIVATE
+    # CTP 是 gw 进程的插件式运行时，单独成一个动态库。
+    # tqsdk-node / tqsdk_backtest 只链接 tqsdk_core，因此不会把 CTP SDK
+    # 或其静态初始化代码带入数据服务进程。
+    add_library(tqsdk_ctp SHARED
         src/gateway/ctp/ctp_td_gateway.cpp
         src/gateway/ctp/ctp_td_orders.cpp
         src/gateway/ctp/ctp_td_queries.cpp
@@ -248,12 +250,20 @@ if(TQSDK_ENABLE_CTP)
         src/gateway/ctp/ctp_order_store.cpp
         src/gateway/ctp/ctp_spi_impl.cpp
     )
-
-    target_link_libraries(tqsdk_core PRIVATE ctp_trader ctp_md)
-    target_compile_definitions(tqsdk_core PUBLIC TQSDK_ENABLE_CTP=1)
-    target_include_directories(tqsdk_core PUBLIC
+    target_precompile_headers(tqsdk_ctp PRIVATE include/tqsdk/pch.h)
+    target_link_libraries(tqsdk_ctp
+        PUBLIC tqsdk_core
+        PRIVATE ctp_trader ctp_md
+    )
+    target_compile_definitions(tqsdk_ctp PUBLIC TQSDK_ENABLE_CTP=1)
+    target_include_directories(tqsdk_ctp PUBLIC
         $<BUILD_INTERFACE:${CTP_INCLUDE_DIR}>
         $<INSTALL_INTERFACE:include>
+    )
+    set_target_properties(tqsdk_ctp PROPERTIES
+        VERSION ${PROJECT_VERSION}
+        SOVERSION 0
+        INSTALL_RPATH "$ORIGIN"
     )
 endif()
 
@@ -262,7 +272,12 @@ option(TQSDK_BUILD_APPS "Build tqsdk-gw and tqsdk-node executables" ON)
 
 if(TQSDK_BUILD_APPS)
     add_executable(tqsdk-gw apps/gw_main.cpp)
-    target_link_libraries(tqsdk-gw PRIVATE tqsdk_core)
+    # gw 是唯一需要 CTP 的进程；node 不链接 tqsdk_ctp。
+    if(TQSDK_ENABLE_CTP)
+        target_link_libraries(tqsdk-gw PRIVATE tqsdk_core tqsdk_ctp)
+    else()
+        target_link_libraries(tqsdk-gw PRIVATE tqsdk_core)
+    endif()
 
     add_executable(tqsdk-node apps/node_main.cpp)
     target_link_libraries(tqsdk-node PRIVATE tqsdk_core)
@@ -352,14 +367,22 @@ if(TQSDK_BUILD_TESTS)
     if(TQSDK_ENABLE_CTP)
         target_sources(tqsdk_tests PRIVATE
             tests/gateway/ctp_mapping_test.cpp
-        tests/gateway/ctp_query_pipeline_test.cpp
+            tests/gateway/ctp_query_pipeline_test.cpp
             tests/gateway/ctp_order_store_test.cpp
             tests/gateway/ctp_fault_injection_test.cpp
         )
+        target_link_libraries(tqsdk_tests PRIVATE tqsdk_ctp)
     endif()
 
     include(GoogleTest)
     gtest_discover_tests(tqsdk_tests)
+
+    # CLI regression: --help/--version must not start background services or
+    # touch CTP-only singletons before returning.
+    if(TQSDK_BUILD_APPS)
+        add_test(NAME CliHelpNode COMMAND $<TARGET_FILE:tqsdk-node> --help)
+        add_test(NAME CliHelpGateway COMMAND $<TARGET_FILE:tqsdk-gw> --help)
+    endif()
 
     # ctypes binding test: the C++ target is built by the normal build, then
     # Python loads it from the build tree.
@@ -381,6 +404,9 @@ endif()
 # 让 lib 下的 libtqsdk_core.so 能找到同目录的 CTP SDK 动态库。
 if(UNIX)
     set_target_properties(tqsdk_core PROPERTIES INSTALL_RPATH "$ORIGIN")
+    if(TQSDK_ENABLE_CTP)
+        set_target_properties(tqsdk_ctp PROPERTIES INSTALL_RPATH "$ORIGIN")
+    endif()
     if(TQSDK_BUILD_APPS)
         set_target_properties(tqsdk-gw tqsdk-node PROPERTIES INSTALL_RPATH "$ORIGIN/../lib")
     endif()
@@ -391,13 +417,20 @@ if(TQSDK_BUILD_APPS)
             RUNTIME DESTINATION bin)
 endif()
 
-# 唯一的核心动态库（CTP 开启时 CTP 目标文件已编入本库）。
 install(TARGETS tqsdk_core
         EXPORT tqsdkTargets
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin
         INCLUDES DESTINATION include)
+if(TQSDK_ENABLE_CTP)
+    install(TARGETS tqsdk_ctp
+            EXPORT tqsdkTargets
+            ARCHIVE DESTINATION lib
+            LIBRARY DESTINATION lib
+            RUNTIME DESTINATION bin
+            INCLUDES DESTINATION include)
+endif()
 
 include(CMakePackageConfigHelpers)
 configure_package_config_file(

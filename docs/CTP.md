@@ -41,9 +41,10 @@ cmake -S . -B build-ctp -G Ninja \
 cmake --build build-ctp -j
 ```
 
-`tqsdk_core` 现在是**唯一的动态库**：CTP 源文件直接编入 `libtqsdk_core.so`，
-不再生成 `tqsdk_ctp_gateway` 第二个库。CTP 的 `thost*.so` 作为私有运行时依赖
-链接进核心库。
+CTP 源码现在编入独立的 **`libtqsdk_ctp.so`**。`tqsdk_core` 不包含 CTP
+符号，也不链接 `thost*.so`；只有 `tqsdk-gw` 链接 `libtqsdk_ctp.so`。
+因此 `tqsdk-node`、Python backtest 库和 Web 数据面不会加载 CTP SDK，也不会
+触发 CTP 的静态初始化代码。
 
 打包：
 
@@ -58,6 +59,7 @@ cmake --build build-ctp --target package
 bin/tqsdk-gw
 bin/tqsdk-node
 lib/libtqsdk_core.so
+lib/libtqsdk_ctp.so
 lib/libthosttraderapi_se.so
 lib/libthostmduserapi_se.so
 include/tqsdk/...
@@ -66,8 +68,10 @@ share/tqsdk/config/{gw,node}.toml
 share/doc/tqsdk/...
 ```
 
-- `libtqsdk_core.so` 的 `DT_NEEDED` 只记录 `libthost*.so` 文件名，不写构建机绝对路径；
-- 安装 RPATH：核心库 `$ORIGIN`，可执行文件 `$ORIGIN/../lib`，解压即可运行；
+- `libtqsdk_core.so` 不依赖 `libthost*.so`；`libtqsdk_ctp.so` 才依赖它们；
+- `libtqsdk_ctp.so` 的 `DT_NEEDED` 只记录 `libthost*.so` 文件名，不写构建机绝对路径；
+- 安装 RPATH：`libtqsdk_core.so`/`libtqsdk_ctp.so` 使用 `$ORIGIN`，可执行文件使用
+  `$ORIGIN/../lib`，解压即可运行；
 - CTP SDK 头文件一并安装到 `include/`，下游可继续使用 CTP 网关头文件。
 
 未开启 `TQSDK_ENABLE_CTP` 时，`md.kind=ctp` / `td.kind=ctp` 会记录错误并退化为
@@ -240,7 +244,8 @@ CTP API 自带前置重连。网关在 `OnFrontDisconnected`：
   - 高优先级报单/成交任务优先于查询回调执行；
 - `tests/ipc/gateway_server_test.cpp::DuplicateCommandReusesCachedAck`
   - 同一 `<op>:<rid>` 发送两次，网关只调用一次交易网关，两次都回同一 ack；
-- `-DTQSDK_ENABLE_CTP=ON` 全量构建：`libtqsdk_core.so` + `tqsdk-gw`（CTP 已并入核心库）；
+- `-DTQSDK_ENABLE_CTP=ON` 全量构建：`libtqsdk_core.so` + `libtqsdk_ctp.so` +
+  `tqsdk-gw`（只有 gw 链接 CTP；node/backtest 不链接）；
 - CTP 网关进程启动/停止 smoke：指向不可达前置，确认 `Init/Release`、
   event loop 退出正常；
 - 全量测试：CTP 构建下 ctest 通过（联网行情测试仍跳过）。

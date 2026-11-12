@@ -52,7 +52,6 @@ struct NodeRuntime {
 } // namespace
 
 int main(int argc, char** argv) {
-    tqsdk::HolidayCalendar::start_global();
     CLI::App    app{"tqsdk-node: data service process (gw proxy + HTTP serve)"};
     std::string config_path;
     std::string log_level;
@@ -77,6 +76,12 @@ int main(int argc, char** argv) {
     if (threads > 0) {
         cfg.runtime.threads = normalize_worker_threads(threads);
     }
+
+    // Start the holiday refresher only after CLI parsing/config loading.
+    // Otherwise `--help`/`--version` create a background network thread and
+    // then return from main while that thread is still touching process-wide
+    // objects, which produced a SIGSEGV during static teardown.
+    tqsdk::HolidayCalendar::start_global();
 
     if (cfg.auth.enabled) {
         if (cfg.auth.token.empty() && !cfg.auth.token_env.empty()) {
