@@ -145,7 +145,21 @@ inline void from_json(const Json& j, WsPing&) {
 using WsClientMessage = std::variant<WsSubscribe, WsUnsubscribe, WsPing>;
 
 inline void to_json(Json& j, const WsClientMessage& m) {
-    std::visit([&j](const auto& v) { j = v; }, m);
+    // Avoid a generic std::visit + JSON conversion here: libstdc++ 13/14 with
+    // clang 18 can diagnose a recursive exception specification in variant.
+    switch (m.index()) {
+    case 0:
+        j = std::get<0>(m);
+        break;
+    case 1:
+        j = std::get<1>(m);
+        break;
+    case 2:
+        j = std::get<2>(m);
+        break;
+    default:
+        throw WsProtocolError("invalid client message variant");
+    }
 }
 
 /// 从 JSON DOM / 文本解析客户端消息；失败抛 WsProtocolError。
@@ -288,7 +302,33 @@ using WsServerMessage =
     std::variant<WsWelcome, WsSubscribed, WsUnsubscribed, WsSnapshot, WsDiff, WsPong, WsError>;
 
 inline void to_json(Json& j, const WsServerMessage& m) {
-    std::visit([&j](const auto& v) { j = v; }, m);
+    // See WsClientMessage::to_json: explicit switch is portable across
+    // clang/libstdc++ combinations (notably clang 18 + libstdc++ 14).
+    switch (m.index()) {
+    case 0:
+        j = std::get<0>(m);
+        break;
+    case 1:
+        j = std::get<1>(m);
+        break;
+    case 2:
+        j = std::get<2>(m);
+        break;
+    case 3:
+        j = std::get<3>(m);
+        break;
+    case 4:
+        j = std::get<4>(m);
+        break;
+    case 5:
+        j = std::get<5>(m);
+        break;
+    case 6:
+        j = std::get<6>(m);
+        break;
+    default:
+        throw WsProtocolError("invalid server message variant");
+    }
 }
 
 /// 从 JSON DOM / 文本解析服务端消息；失败抛 WsProtocolError。
