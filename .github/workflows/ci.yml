@@ -75,6 +75,24 @@ jobs:
             build/Testing/Temporary/
           if-no-files-found: ignore
 
+  python:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.28"
+
+      - name: Sync Python environment
+        run: uv sync --extra dev
+
+      - name: Verify wheel entry points and strategy registry
+        run: |
+          uv run tqsdk-strategies
+          uv run python -c "from tqsdk_py import default_manager; assert 'ema_donchian' in default_manager().names()"
+
   web:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

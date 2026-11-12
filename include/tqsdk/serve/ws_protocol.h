@@ -163,13 +163,13 @@ inline void to_json(Json& j, const WsClientMessage& m) {
     // clang 18 can diagnose a recursive exception specification in variant.
     switch (m.index()) {
     case 0:
-        j = std::get<0>(m);
+        to_json(j, std::get<0>(m));
         break;
     case 1:
-        j = std::get<1>(m);
+        to_json(j, std::get<1>(m));
         break;
     case 2:
-        j = std::get<2>(m);
+        to_json(j, std::get<2>(m));
         break;
     default:
         throw WsProtocolError("invalid client message variant");
@@ -323,25 +323,25 @@ inline void to_json(Json& j, const WsServerMessage& m) {
     // clang/libstdc++ combinations (notably clang 18 + libstdc++ 14).
     switch (m.index()) {
     case 0:
-        j = std::get<0>(m);
+        to_json(j, std::get<0>(m));
         break;
     case 1:
-        j = std::get<1>(m);
+        to_json(j, std::get<1>(m));
         break;
     case 2:
-        j = std::get<2>(m);
+        to_json(j, std::get<2>(m));
         break;
     case 3:
-        j = std::get<3>(m);
+        to_json(j, std::get<3>(m));
         break;
     case 4:
-        j = std::get<4>(m);
+        to_json(j, std::get<4>(m));
         break;
     case 5:
-        j = std::get<5>(m);
+        to_json(j, std::get<5>(m));
         break;
     case 6:
-        j = std::get<6>(m);
+        to_json(j, std::get<6>(m));
         break;
     default:
         throw WsProtocolError("invalid server message variant");

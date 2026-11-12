@@ -104,3 +104,27 @@ python3 scripts/soak_two_process.py \
   18081 已启动；测试只读，不下单。
 - 版本/包名由 CMake `version.h.in` 注入，`tqsdk-node --version` 和
   `/healthz` 可快速确认构建版本。
+
+
+## Python uv job
+
+CI 另有一个独立的 `python` job：
+
+```text
+uv sync --extra dev
+uv run tqsdk-strategies
+uv run python -c "from tqsdk_py import default_manager; ..."
+```
+
+它验证 `pyproject.toml`、`uv.lock`、wheel entry point 和策略注册表；
+native `libtqsdk_backtest.so` 由 C++ job 构建并由 CTest 覆盖。
+
+## 2026-11-12 CI build fix
+
+失败原因：GitHub Ubuntu 24.04 的 clang 18 + libstdc++ 14 在处理
+`std::visit` 泛型 lambda + nlohmann::json 隐式转换时触发
+"exception specification ... uses itself" 编译错误。
+
+修复：`ws_protocol.h` 的 client/server variant JSON 序列化改为显式
+`switch(index) + std::get`，不再依赖该 libstdc++ 的 `std::visit` 实例化路径。
+同时 CI build 改为 `-j 2`，失败时上传 `build.log`。
