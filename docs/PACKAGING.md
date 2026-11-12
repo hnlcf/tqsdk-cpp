@@ -228,8 +228,9 @@ DEB/RPM 之外还提供 Docker/Podman 镜像入口：
 `.github/workflows/release.yml` 在推送 `v*` tag 时执行：
 
 1. 安装 CMake/Ninja/clang/uv/pnpm/rpm；
-2. vcpkg 构建 `tqsdk-gw`、`tqsdk-node`、`tqsdk_backtest`（GitHub hosted runner
-   使用 `TQSDK_ENABLE_CTP=OFF`，不包含 proprietary CTP SDK）；
+2. vcpkg 构建 `tqsdk-gw`、`tqsdk-node`、`tqsdk_backtest`；
+   仓库 `third_party/ctp/` 已内置 CTP SDK，因此 Action 构建
+   `TQSDK_ENABLE_CTP=ON`，包含真实 CTP runtime；
 3. 构建 Web；
 4. 跑 Python tests；
 5. 调用 `scripts/package_release.sh` 生成 DEB/RPM/TGZ、image archive、wheel；
@@ -242,5 +243,5 @@ git tag -a v0.2.0 -m "TQSDK 0.2.0"
 git push origin v0.2.0
 ```
 
-不需要本机构建后再 `gh release upload`。如果公司/自托管 runner 中有
-`third_party/ctp`，把 workflow 的 `TQSDK_ENABLE_CTP=OFF` 改为 `ON` 即可。
+不需要本机构建后再 `gh release upload`。如果仓库没有 `third_party/ctp`（例如 SDK 未随仓库分发），
+才需要改为 `TQSDK_ENABLE_CTP=OFF` 或使用自托管 runner。

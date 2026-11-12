@@ -64,15 +64,15 @@ jobs:
 
       - name: Build C++ runtime and backtest library
         run: |
-          # GitHub-hosted runners do not contain the proprietary CTP SDK.
-          # Release builds therefore use SimTd/Tq MD and TQSDK_ENABLE_CTP=OFF.
+          # The CTP SDK is vendored under third_party/ctp in this repository,
+          # so release builds include the real CTP runtime from source.
           cmake -S . -B build-package -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_MANIFEST_DIR="$VCPKG_MANIFEST_DIR" \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DTQSDK_BUILD_TESTS=OFF \
-            -DTQSDK_ENABLE_CTP=OFF \
+            -DTQSDK_ENABLE_CTP=ON \
             -DTQSDK_BUILD_APPS=ON \
             -DTQSDK_BUILD_EXAMPLES=OFF
           cmake --build build-package -j 2 \
