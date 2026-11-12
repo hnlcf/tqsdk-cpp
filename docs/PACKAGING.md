@@ -221,3 +221,26 @@ DEB/RPM 之外还提供 Docker/Podman 镜像入口：
 - RPM 的 `rpmbuild` 必须完整安装 `rpm-build` 脚本；仅复制一个 `rpmbuild`
   可执行文件可能在 `%install` 的 brp/check 阶段缺脚本。
 - DEB 的 postinst 会创建系统用户，容器/无 systemd 环境安装后需手动启动。
+
+
+## 9. Tag 触发的 GitHub Release Action
+
+`.github/workflows/release.yml` 在推送 `v*` tag 时执行：
+
+1. 安装 CMake/Ninja/clang/uv/pnpm/rpm；
+2. vcpkg 构建 `tqsdk-gw`、`tqsdk-node`、`tqsdk_backtest`（GitHub hosted runner
+   使用 `TQSDK_ENABLE_CTP=OFF`，不包含 proprietary CTP SDK）；
+3. 构建 Web；
+4. 跑 Python tests；
+5. 调用 `scripts/package_release.sh` 生成 DEB/RPM/TGZ、image archive、wheel；
+6. 用 `softprops/action-gh-release` 直接上传到该 tag 的 Release。
+
+发版：
+
+```bash
+git tag -a v0.2.0 -m "TQSDK 0.2.0"
+git push origin v0.2.0
+```
+
+不需要本机构建后再 `gh release upload`。如果公司/自托管 runner 中有
+`third_party/ctp`，把 workflow 的 `TQSDK_ENABLE_CTP=OFF` 改为 `ON` 即可。

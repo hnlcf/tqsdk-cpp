@@ -18,9 +18,19 @@ fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/SPECS" "$TMP/SOURCES" "$TMP/BUILD" "$TMP/BUILDROOT" "$TMP/RPMS" "$TMP/SRPMS"
+CTP_LIBS=""
+if compgen -G "$STAGE/usr/lib/libthost*.so*" >/dev/null; then
+    CTP_LIBS="/usr/lib/libthost*.so*"
+fi
+CTP_HEADERS=""
+if compgen -G "$STAGE/usr/include/*.h" >/dev/null; then
+    CTP_HEADERS="/usr/include/*.h"
+fi
 sed -e "s#@STAGE@#$STAGE#g" \
     -e "s#@VERSION@#$VERSION#g" \
     -e "s#@ARCH@#$ARCH#g" \
+    -e "s#@CTP_LIBS@#$CTP_LIBS#g" \
+    -e "s#@CTP_HEADERS@#$CTP_HEADERS#g" \
     "$ROOT/deploy/package/$SPEC_TEMPLATE" >"$TMP/SPECS/${SPEC_TEMPLATE%.in}.spec"
 
 mkdir -p "$OUTPUT"

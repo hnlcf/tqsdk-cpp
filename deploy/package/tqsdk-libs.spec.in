@@ -24,4 +24,4 @@ cp -a %{_stage}/. %{buildroot}/
 %defattr(-,root,root,-)
 /usr/lib/libtqsdk_core.so*
 /usr/lib/libtqsdk_backtest.so*
-/usr/lib/libthost*.so*
+@CTP_LIBS@

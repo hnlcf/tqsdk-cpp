@@ -22,5 +22,5 @@ cp -a %{_stage}/. %{buildroot}/
 %files
 %defattr(-,root,root,-)
 /usr/include/tqsdk
-/usr/include/*.h
+@CTP_HEADERS@
 /usr/lib/cmake/tqsdk

@@ -1,0 +1,120 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      VCPKG_MANIFEST_DIR: ${{ github.workspace }}/ci
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+      TQSDK_PACKAGE_BUILD_DIR: build-package
+      TQSDK_PACKAGE_OUTPUT_DIR: dist
+      TQSDK_PACKAGE_FORMATS: deb,rpm,tgz,container
+      TQSDK_CONTAINER_ENGINE: docker
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build/release tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build clang libssl-dev curl zip unzip tar \
+            rpm binutils gzip
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.28"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.16.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Checkout and bootstrap vcpkg
+        run: |
+          if [ ! -d "$VCPKG_ROOT" ]; then
+            git clone --depth 1 https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          fi
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg
+            build-package/vcpkg_installed
+          key: release-vcpkg-${{ runner.os }}-${{ hashFiles('ci/vcpkg.json') }}
+
+      - name: Build C++ runtime and backtest library
+        run: |
+          # GitHub-hosted runners do not contain the proprietary CTP SDK.
+          # Release builds therefore use SimTd/Tq MD and TQSDK_ENABLE_CTP=OFF.
+          cmake -S . -B build-package -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_MANIFEST_DIR="$VCPKG_MANIFEST_DIR" \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DTQSDK_BUILD_TESTS=OFF \
+            -DTQSDK_ENABLE_CTP=OFF \
+            -DTQSDK_BUILD_APPS=ON \
+            -DTQSDK_BUILD_EXAMPLES=OFF
+          cmake --build build-package -j 2 \
+            --target tqsdk-gw tqsdk-node tqsdk_backtest
+
+      - name: Build Web terminal
+        run: |
+          pnpm --dir web install --frozen-lockfile
+          VITE_API_BASE=/api pnpm --dir web build
+
+      - name: Python tests
+        env:
+          TQSDK_BACKTEST_LIB: ${{ github.workspace }}/build-package/libtqsdk_backtest.so
+        run: |
+          uv sync --extra dev
+          uv run python -m unittest discover -s python/tests -v
+
+      - name: Build DEB/RPM/TGZ/image/Python wheel
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          VERSION="${VERSION#v}"
+          ./scripts/package_release.sh \
+            --skip-build --skip-web \
+            --version "$VERSION" \
+            --formats deb,rpm,tgz,container
+
+      - name: Verify checksums
+        run: |
+          cd dist
+          sha256sum -c SHA256SUMS
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: TQSDK ${{ github.ref_name }}
+          generate_release_notes: true
+          # Keep the release artifacts explicit; dist/stage is intentionally
+          # not uploaded.
+          files: |
+            dist/tqsdk*.deb
+            dist/tqsdk-*.rpm
+            dist/tqsdk-*.tar.gz
+            dist/*.whl
+            dist/SHA256SUMS
