@@ -7,6 +7,7 @@ STAGE=${1:?staging directory required}
 OUTPUT=${2:?output directory required}
 VERSION=${3:?version required}
 ARCH=${4:-x86_64}
+SPEC_TEMPLATE=${5:-tqsdk.spec.in}
 RPMBUILD=${TQSDK_RPMBUILD:-$(command -v rpmbuild || true)}
 
 if [[ -z "$RPMBUILD" ]]; then
@@ -20,10 +21,10 @@ mkdir -p "$TMP/SPECS" "$TMP/SOURCES" "$TMP/BUILD" "$TMP/BUILDROOT" "$TMP/RPMS" "
 sed -e "s#@STAGE@#$STAGE#g" \
     -e "s#@VERSION@#$VERSION#g" \
     -e "s#@ARCH@#$ARCH#g" \
-    "$ROOT/deploy/package/tqsdk.spec.in" >"$TMP/SPECS/tqsdk.spec"
+    "$ROOT/deploy/package/$SPEC_TEMPLATE" >"$TMP/SPECS/${SPEC_TEMPLATE%.in}.spec"
 
 mkdir -p "$OUTPUT"
-"$RPMBUILD" -bb "$TMP/SPECS/tqsdk.spec" \
+"$RPMBUILD" -bb "$TMP/SPECS/${SPEC_TEMPLATE%.in}.spec" \
     --define "_topdir $TMP" \
     --define "_arch $ARCH" \
     >/tmp/tqsdk_rpmbuild.log 2>&1

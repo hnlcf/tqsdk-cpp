@@ -1,0 +1,26 @@
+%define _stage @STAGE@
+%define _pkg_version @VERSION@
+
+Name:           tqsdk-devel
+Version:        %{_pkg_version}
+Release:        1
+Summary:        TQSDK C++ development headers and CMake exports
+License:        Proprietary
+URL:            https://github.com/
+BuildArch:      @ARCH@
+AutoReqProv:    no
+Requires:       tqsdk-libs = %{version}-%{release}
+
+%description
+C++ headers, generated version header and CMake package exports for TQSDK.
+
+%install
+rm -rf %{buildroot}
+mkdir -p %{buildroot}
+cp -a %{_stage}/. %{buildroot}/
+
+%files
+%defattr(-,root,root,-)
+/usr/include/tqsdk
+/usr/include/*.h
+/usr/lib/cmake/tqsdk

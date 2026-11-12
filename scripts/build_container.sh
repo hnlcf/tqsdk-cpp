@@ -10,6 +10,7 @@ VERSION=${TQSDK_VERSION:-0.1.0}
 RELEASE_DIR=${TQSDK_RELEASE_DIR:-dist/stage/tqsdk-$VERSION}
 SMOKE=0
 PORT=${TQSDK_SMOKE_PORT:-18088}
+ARCHIVE=${TQSDK_CONTAINER_ARCHIVE:-}
 
 usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
 while [[ $# -gt 0 ]]; do
@@ -21,6 +22,7 @@ while [[ $# -gt 0 ]]; do
     --release-dir) RELEASE_DIR=$2; shift 2 ;;
     --smoke-test) SMOKE=1; shift ;;
     --port) PORT=$2; shift 2 ;;
+    --archive) ARCHIVE=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -49,6 +51,18 @@ fi
     --build-arg "TQSDK_VERSION=$VERSION" \
     --build-arg "RELEASE_DIR=$RELEASE_DIR" \
     .
+
+if [[ -n "$ARCHIVE" ]]; then
+    mkdir -p "$(dirname "$ARCHIVE")"
+    TMP_ARCHIVE="${ARCHIVE}.tmp"
+    if [[ "$ENGINE" == podman ]]; then
+        "$ENGINE" save --format docker-archive "$IMAGE" | gzip -9 >"$TMP_ARCHIVE"
+    else
+        "$ENGINE" save "$IMAGE" | gzip -9 >"$TMP_ARCHIVE"
+    fi
+    mv "$TMP_ARCHIVE" "$ARCHIVE"
+    echo "image archive: $ARCHIVE"
+fi
 
 if (( SMOKE )); then
     NAME="tqsdk-smoke-$$"

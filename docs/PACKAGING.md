@@ -26,13 +26,14 @@ RPM 需要 `rpmbuild`，也可以通过 `TQSDK_RPMBUILD` 指定路径。
 ```bash
 export VCPKG_ROOT=/path/to/vcpkg
 
-# 默认 deb+rpm+tgz
+# 默认 deb+rpm+tgz+container（本地有 podman 或 docker 时）
 ./scripts/package_release.sh
 
 # 只生成指定格式
 ./scripts/package_release.sh --formats deb
 ./scripts/package_release.sh --formats rpm
 ./scripts/package_release.sh --formats deb,rpm,tgz
+./scripts/package_release.sh --formats deb,rpm,tgz,container
 ```
 
 首次运行会：
@@ -49,9 +50,17 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 ```text
 dist/
-  tqsdk_0.1.0_amd64.deb
+  tqsdk_0.1.0_amd64.deb                 # gateway/node/web runtime
+  tqsdk-libs_0.1.0_amd64.deb            # shared libraries
+  tqsdk-dev_0.1.0_amd64.deb             # headers + CMake exports
   tqsdk-0.1.0-1.x86_64.rpm
-  tqsdk-0.1.0-linux-x86_64.tar.gz
+  tqsdk-libs-0.1.0-1.x86_64.rpm
+  tqsdk-devel-0.1.0-1.x86_64.rpm
+  tqsdk-0.1.0-linux-x86_64.tar.gz       # runnable runtime tree
+  tqsdk-libs-0.1.0-linux-x86_64.tar.gz
+  tqsdk-dev-0.1.0-linux-x86_64.tar.gz
+  tqsdk-image-0.1.0-x86_64.tar.gz       # podman/docker image archive
+  tqsdk_py-0.1.0-py3-none-any.whl       # uv-built Python package (if uv exists)
   tqsdk-0.1.0.files.txt
   SHA256SUMS
   stage/tqsdk-0.1.0/
@@ -80,8 +89,11 @@ TQSDK_RPMBUILD=/path/to/rpmbuild ./scripts/package_release.sh --formats rpm
 ```text
 /usr/bin/tqsdk-gw
 /usr/bin/tqsdk-node
-/usr/lib/libtqsdk_core.so*
-/usr/lib/libthost*.so*                 # CTP runtime，随包分发
+/usr/lib/libtqsdk_core.so*              # tqsdk-libs
+/usr/lib/libtqsdk_backtest.so*          # tqsdk-libs
+/usr/lib/libthost*.so*                  # tqsdk-libs，CTP runtime
+/usr/include/tqsdk/                     # tqsdk-dev / tqsdk-devel
+/usr/lib/cmake/tqsdk/                   # tqsdk-dev / tqsdk-devel
 /usr/lib/systemd/system/tqsdk-gw.service
 /usr/lib/systemd/system/tqsdk-node.service
 /usr/lib/systemd/system/tqsdk.target
@@ -110,15 +122,19 @@ TQSDK_RPMBUILD=/path/to/rpmbuild ./scripts/package_release.sh --formats rpm
 Debian/Ubuntu：
 
 ```bash
-sudo dpkg -i dist/tqsdk_0.1.0_amd64.deb
-# 缺依赖时：
-sudo apt-get -f install
+sudo dpkg -i dist/tqsdk-libs_0.1.0_amd64.deb \
+             dist/tqsdk_0.1.0_amd64.deb
+# 开发时需要：
+sudo dpkg -i dist/tqsdk-dev_0.1.0_amd64.deb
 ```
 
 Fedora/RHEL：
 
 ```bash
-sudo rpm -Uvh dist/tqsdk-0.1.0-1.x86_64.rpm
+sudo rpm -Uvh dist/tqsdk-libs-0.1.0-1.x86_64.rpm \
+             dist/tqsdk-0.1.0-1.x86_64.rpm
+# 开发时需要：
+sudo rpm -Uvh dist/tqsdk-devel-0.1.0-1.x86_64.rpm
 ```
 
 安装后：
@@ -139,14 +155,16 @@ Caddy/nginx 负责 `/usr/share/tqsdk/web` 静态资源和 `/api` 反向代理。
 ## 5. 验证
 
 ```bash
-# Debian
-dpkg-deb -I dist/tqsdk_0.1.0_amd64.deb
-dpkg-deb -c dist/tqsdk_0.1.0_amd64.deb | head
+# Debian（三个包）
+for f in dist/tqsdk_0.1.0_amd64.deb dist/tqsdk-libs_0.1.0_amd64.deb dist/tqsdk-dev_0.1.0_amd64.deb; do
+  ar p "$f" control.tar.gz | tar -xzO ./control
+done
 
-# RPM
-rpm -qpi dist/tqsdk-0.1.0-1.x86_64.rpm
-rpm -qpl dist/tqsdk-0.1.0-1.x86_64.rpm | head
-rpm -qpR dist/tqsdk-0.1.0-1.x86_64.rpm
+# RPM（三个包）
+for f in dist/tqsdk-0.1.0-1.x86_64.rpm dist/tqsdk-libs-0.1.0-1.x86_64.rpm dist/tqsdk-devel-0.1.0-1.x86_64.rpm; do
+  rpm -qpR "$f"
+  rpm -qpl "$f" | head
+done
 
 # 二进制 RPATH（应包含 $ORIGIN/../lib）
 readelf -d dist/stage/tqsdk-0.1.0/usr/bin/tqsdk-node | grep RUNPATH
@@ -157,12 +175,17 @@ readelf -d dist/stage/tqsdk-0.1.0/usr/bin/tqsdk-node | grep RUNPATH
 
 ## 6. 发布
 
-生成校验文件后，可把 `dist/` 作为 release artifact：
+生成校验文件后，把 `dist/` 作为 release artifact：
 
 ```bash
 (cd dist && sha256sum -c SHA256SUMS)
-gh release create v0.1.0 dist/tqsdk_0.1.0_amd64.deb \
-  dist/tqsdk-0.1.0-1.x86_64.rpm dist/tqsdk-0.1.0-linux-x86_64.tar.gz \
+gh release create v0.1.0 \
+  dist/tqsdk_0.1.0_amd64.deb dist/tqsdk-libs_0.1.0_amd64.deb dist/tqsdk-dev_0.1.0_amd64.deb \
+  dist/tqsdk-0.1.0-1.x86_64.rpm dist/tqsdk-libs-0.1.0-1.x86_64.rpm dist/tqsdk-devel-0.1.0-1.x86_64.rpm \
+  dist/tqsdk-0.1.0-linux-x86_64.tar.gz dist/tqsdk-libs-0.1.0-linux-x86_64.tar.gz \
+  dist/tqsdk-dev-0.1.0-linux-x86_64.tar.gz \
+  dist/tqsdk-image-0.1.0-x86_64.tar.gz \
+  dist/tqsdk_py-0.1.0-py3-none-any.whl \
   dist/SHA256SUMS --title "TQSDK 0.1.0" --notes "release"
 ```
 
@@ -187,8 +210,9 @@ DEB/RPM 之外还提供 Docker/Podman 镜像入口：
 
 - `VITE_API_TOKEN` 如果参与构建，会嵌入前端静态资源；仅限受控部署，生产优先
   使用反向代理认证/OIDC。
-- 当前 runtime 包不包含 C++ 头文件和 CMake 导出文件；下游开发包后续单独拆
-  为 `tqsdk-dev`。
+- runtime、libs、dev/devel 已拆分：runtime 不包含头文件/CMake；
+  libs 只包含共享库和 CTP runtime；dev/devel 只包含头文件和 CMake 导出；
+- RPM 的开发包命名为 `tqsdk-devel`，DEB/TGZ 命名为 `tqsdk-dev`。
 - 本机 2026-11-11 已实际生成并验证：
   `dist/tqsdk_0.1.0_amd64.deb`、`dist/tqsdk-0.1.0-1.x86_64.rpm`、
   `dist/tqsdk-0.1.0-linux-x86_64.tar.gz`；DEB 通过 `dpkg-deb` 容器校验，

@@ -26,6 +26,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--architecture", default="amd64")
     parser.add_argument("--maintainer", default="TQSDK <louchangfeng@outlook.com>")
     parser.add_argument("--description", default="TQSDK gateway, node and web terminal")
+    parser.add_argument("--description-body", default=" TQSDK C++ data/trading gateway and SolidJS terminal.")
+    parser.add_argument("--allow-no-node", action="store_true",
+                        help="allow libs/dev stages that do not contain usr/bin/tqsdk-node")
     parser.add_argument("--depends", default="libc6, libstdc++6, libgcc-s1, passwd")
     parser.add_argument("--postinst", type=Path)
     return parser.parse_args()
@@ -104,7 +107,7 @@ def build_deb(control_tar: Path, data_tar: Path, target: Path) -> None:
 def main() -> int:
     args = parse_args()
     stage = args.stage.resolve()
-    if not (stage / "usr" / "bin" / "tqsdk-node").is_file():
+    if not args.allow_no_node and not (stage / "usr" / "bin" / "tqsdk-node").is_file():
         raise SystemExit(f"staging tree is missing usr/bin/tqsdk-node: {stage}")
 
     with tempfile.TemporaryDirectory(prefix="tqsdk-deb-build-") as tmp:
@@ -122,7 +125,7 @@ def main() -> int:
             f"Installed-Size: {installed_kib}\n"
             f"Depends: {args.depends}\n"
             f"Description: {args.description}\n"
-            " TQSDK C++ data/trading gateway and SolidJS terminal.\n"
+            f"{args.description_body}\n"
         )
         control_tar = tmpdir / "control.tar.gz"
         build_control_tar(control_tar, control, md5rows, args.postinst)

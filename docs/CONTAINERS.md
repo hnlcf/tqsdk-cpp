@@ -51,6 +51,23 @@ podman/build -f deploy/container/Dockerfile
 
 Podman 使用 `--format docker`，以保留 `HEALTHCHECK` 元数据。
 
+生成可分发镜像归档：
+
+```bash
+./scripts/build_container.sh --engine podman \
+  --archive dist/tqsdk-image-0.1.0-x86_64.tar.gz
+```
+
+归档为 gzip 压缩的 docker-archive，可用：
+
+```bash
+podman load -i dist/tqsdk-image-0.1.0-x86_64.tar.gz
+# 或
+docker load -i dist/tqsdk-image-0.1.0-x86_64.tar.gz
+```
+
+`package_release.sh --formats deb,rpm,tgz,container` 会自动生成同名镜像 tgz。
+
 ## 3. 运行 Sim 演示
 
 默认 `TQSDK_ROLE=node`，node 自带 SimTd，不需要 gw/CTP/外网：

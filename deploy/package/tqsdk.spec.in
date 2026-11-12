@@ -9,13 +9,14 @@ License:        Proprietary
 URL:            https://github.com/
 BuildArch:      @ARCH@
 AutoReqProv:    no
-Requires:       glibc, libstdc++
+Requires:       glibc, libstdc++, tqsdk-libs = %{version}-%{release}
 Requires(pre):  shadow-utils
 
 %description
 TQSDK C++ data/trading gateway, node API and SolidJS web terminal.
-This package contains the gateway and node binaries, bundled CTP runtime
-libraries, systemd units, configuration templates, web assets and docs.
+This package contains the gateway and node binaries, systemd units,
+configuration templates, web assets and docs. Shared libraries are in
+tqsdk-libs; C++ headers/CMake exports are in tqsdk-devel.
 
 %pre
 if ! getent group tqsdk >/dev/null 2>&1; then
@@ -53,9 +54,6 @@ echo "tqsdk: edit /etc/tqsdk/gw.toml and node.toml, set TQSDK_SERVE_TOKEN in tqs
 %defattr(-,root,root,-)
 /usr/bin/tqsdk-gw
 /usr/bin/tqsdk-node
-/usr/lib/libtqsdk_core.so*
-/usr/lib/libtqsdk_backtest.so*
-/usr/lib/libthost*.so*
 /usr/lib/systemd/system/tqsdk-gw.service
 /usr/lib/systemd/system/tqsdk-node.service
 /usr/lib/systemd/system/tqsdk.target

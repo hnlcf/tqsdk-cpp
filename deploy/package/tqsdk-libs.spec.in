@@ -1,0 +1,27 @@
+%define _stage @STAGE@
+%define _pkg_version @VERSION@
+
+Name:           tqsdk-libs
+Version:        %{_pkg_version}
+Release:        1
+Summary:        TQSDK shared runtime libraries
+License:        Proprietary
+URL:            https://github.com/
+BuildArch:      @ARCH@
+AutoReqProv:    no
+Requires:       glibc, libstdc++
+
+%description
+Shared runtime libraries for TQSDK (core and C++ backtest engine).
+The CTP runtime libraries are included when built with CTP support.
+
+%install
+rm -rf %{buildroot}
+mkdir -p %{buildroot}
+cp -a %{_stage}/. %{buildroot}/
+
+%files
+%defattr(-,root,root,-)
+/usr/lib/libtqsdk_core.so*
+/usr/lib/libtqsdk_backtest.so*
+/usr/lib/libthost*.so*
