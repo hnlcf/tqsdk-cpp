@@ -95,6 +95,7 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: |
           VERSION="${VERSION#v}"
+          rpmbuild --version
           ./scripts/package_release.sh \
             --skip-build --skip-web \
             --version "$VERSION" \

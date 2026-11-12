@@ -34,9 +34,13 @@ sed -e "s#@STAGE@#$STAGE#g" \
     "$ROOT/deploy/package/$SPEC_TEMPLATE" >"$TMP/SPECS/${SPEC_TEMPLATE%.in}.spec"
 
 mkdir -p "$OUTPUT"
-"$RPMBUILD" -bb "$TMP/SPECS/${SPEC_TEMPLATE%.in}.spec" \
+if ! "$RPMBUILD" -bb "$TMP/SPECS/${SPEC_TEMPLATE%.in}.spec" \
     --define "_topdir $TMP" \
     --define "_arch $ARCH" \
-    >/tmp/tqsdk_rpmbuild.log 2>&1
+    >/tmp/tqsdk_rpmbuild.log 2>&1; then
+    echo "rpmbuild failed; log follows:" >&2
+    cat /tmp/tqsdk_rpmbuild.log >&2
+    exit 1
+fi
 cp "$TMP/RPMS/$ARCH"/*.rpm "$OUTPUT"/
 echo "$OUTPUT/$(basename "$(find "$TMP/RPMS/$ARCH" -name '*.rpm' -print -quit)")"

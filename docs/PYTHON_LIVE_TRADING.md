@@ -209,6 +209,10 @@ dispatcher = SignalDispatcher(
 )
 ```
 
+CLI 启动时会自动读取当前目录的 `.env`（不会覆盖已有环境变量），
+其中 `TQSDK_WECOM_WEBHOOK` 会被用于企业微信通知；也可用
+`--env-file PATH` 指定其他文件。
+
 CLI 在环境变量 `TQSDK_WECOM_WEBHOOK` 存在时自动加入企业微信通知：
 
 ```bash
