@@ -153,6 +153,7 @@ if(TQSDK_BUILD_PYTHON_BINDING)
             DESTINATION share/tqsdk/python
             FILES_MATCHING PATTERN "*.py")
     install(FILES python/tqsdk_backtest.py
+                  python/tqsdk_backtest_cli.py
                   python/tqsdk_strategy.py
                   python/tqsdk_live.py
             DESTINATION share/tqsdk/python)

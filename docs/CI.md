@@ -38,7 +38,7 @@ artifacts/tsan/tsan.log
 
 2026-11-11 当前结果：认证/审计/部署检查已加入 CI；ASan/TSan/UBSan 358/358（本轮末重跑）；新增动态账户 hub 移除、基础画线、28 项 Web 测试和多账户 WS、
 账户级 task/risk、IPC/WS fuzz 后普通 CTest 为 359 项通过（含 Python 绑定）（2 项 TqMdNetwork
-网络测试按环境跳过）；Web Vitest 28 项，Playwright E2E 1 项，另有 WASM 插件 ABI 脚本、日线回测 helper 单测和 Python 策略/绑定单测（15 项）。
+网络测试按环境跳过）；Web Vitest 28 项，Playwright E2E 1 项，另有 WASM 插件 ABI 脚本、日线回测 helper 单测和 Python 策略/绑定单测（18 项）。
 
 ### GitHub Actions
 

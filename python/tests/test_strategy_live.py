@@ -22,14 +22,18 @@ from tqsdk_py import (
     Signal,
     SignalConsumer,
     SignalDispatcher,
-    StrategyConfig,
     StrategyContext,
+    StrategyManager,
     TargetExecutor,
+    default_manager,
     WeComConsumer,
     net_position,
     entry_price,
     resolve_spec,
 )
+from tqsdk_py.cli import parse_params
+from tqsdk_py.registry import StrategyRegistry, UnknownStrategyError
+from tqsdk_py.strategy import Strategy
 
 
 def breakout_bars() -> list[Bar]:
@@ -69,10 +73,9 @@ class FailingConsumer(SignalConsumer):
 class StrategySignalTest(unittest.TestCase):
     def setUp(self) -> None:
         self.spec = ContractSpec("X", volume_multiple=10, margin_rate=0.10)
-        self.config = StrategyConfig(symbol="X", allocation=0.30)
 
     def test_strategy_emits_actionable_signal(self) -> None:
-        strategy = EmaDonchianStrategy(self.config, self.spec)
+        strategy = EmaDonchianStrategy(spec=self.spec, symbol="X", allocation=0.30)
         context = StrategyContext(
             symbol="X",
             bars=tuple(breakout_bars()),
@@ -91,7 +94,7 @@ class StrategySignalTest(unittest.TestCase):
         self.assertIsNone(strategy.on_bar(context))
 
     def test_stop_emits_flat(self) -> None:
-        strategy = EmaDonchianStrategy(self.config, self.spec)
+        strategy = EmaDonchianStrategy(spec=self.spec, symbol="X", allocation=0.30)
         bars = tuple(breakout_bars())
         signal = strategy.on_bar(
             StrategyContext("X", bars, 0, 1_000_000, self.spec, price=125.0)
@@ -112,6 +115,44 @@ class StrategySignalTest(unittest.TestCase):
         specs = {"KQ.i@SHFE.rb": self.spec}
         self.assertIs(resolve_spec(specs, "SHFE.rb2701"), self.spec)
         self.assertIsNone(resolve_spec(specs, "DCE.jm2701"))
+
+    def test_manager_registers_and_creates_strategy(self) -> None:
+        manager = StrategyManager()
+        self.assertIn("ema_donchian", manager.names())
+        self.assertEqual(manager.resolve("ema").name, "ema_donchian")
+        strategy = manager.create(
+            "ema60",
+            spec=self.spec,
+            symbol="X",
+            params={"ema_period": 55},
+        )
+        self.assertIsInstance(strategy, EmaDonchianStrategy)
+        with self.assertRaises(UnknownStrategyError):
+            manager.create("does_not_exist", spec=self.spec)
+
+    def test_custom_strategy_contract(self) -> None:
+        class Dummy(Strategy):
+            def __init__(self, *, spec, symbol="", duration_ns=0, value=1):
+                self.spec = spec
+                self.symbol = symbol
+                self.value = value
+
+            def on_bar(self, context):
+                return None
+
+        registry = StrategyRegistry()
+        registry.register("dummy", Dummy, defaults={"value": 2})
+        strategy = registry.create(
+            "dummy", spec=self.spec, symbol="X", params={"value": 7}
+        )
+        self.assertIsInstance(strategy, Dummy)
+        self.assertEqual(strategy.value, 7)
+
+    def test_param_parser(self) -> None:
+        self.assertEqual(
+            parse_params(["ema_period=55", "stop_atr=1.5", "enabled=true", "tag=x"]),
+            {"ema_period": 55, "stop_atr": 1.5, "enabled": True, "tag": "x"},
+        )
 
     def test_position_helpers(self) -> None:
         self.assertEqual(net_position({"volume_long": 2, "volume_short": 5}), -3)
@@ -163,12 +204,11 @@ class SignalConsumerTest(unittest.TestCase):
 class LiveRunnerTest(unittest.TestCase):
     def setUp(self) -> None:
         self.spec = ContractSpec("X", volume_multiple=10, margin_rate=0.10)
-        self.config = StrategyConfig(symbol="X", allocation=0.30)
         self.source = InMemoryBarSource({"X": breakout_bars()})
 
     def test_dry_run_notifies_without_order(self) -> None:
         memory = MemoryConsumer()
-        strategy = EmaDonchianStrategy(self.config, self.spec)
+        strategy = EmaDonchianStrategy(spec=self.spec, symbol="X", allocation=0.30)
         dispatcher = SignalDispatcher([memory], DryRunExecutor(logger=lambda _: None))
         runner = LiveRunner(
             FakeNode(),
@@ -188,7 +228,7 @@ class LiveRunnerTest(unittest.TestCase):
     def test_execute_path_submits_target(self) -> None:
         memory = MemoryConsumer()
         executor = RecordingExecutor()
-        strategy = EmaDonchianStrategy(self.config, self.spec)
+        strategy = EmaDonchianStrategy(spec=self.spec, symbol="X", allocation=0.30)
         runner = LiveRunner(
             FakeNode(),
             self.source,
@@ -211,7 +251,7 @@ class BacktestAdapterTest(unittest.TestCase):
         memory = MemoryConsumer()
         runner = BacktestRunner(
             source,
-            EmaDonchianStrategy(StrategyConfig(symbol="X", allocation=0.30), spec),
+            EmaDonchianStrategy(spec=spec, symbol="X", allocation=0.30),
             spec,
             BacktestSettings(initial_balance=1_000_000, commission_rate=0.0),
             notifiers=[memory],

@@ -17,7 +17,8 @@ C++20 期货数据与交易基础设施，目标是把 TqSdk 的“异步数据�
 - 2016-2026 十年日线指数回测报告（69 个品种，含保证金/合约乘数/整数手/杠杆和图表）；
 - C++ BacktestEngine 通过 C ABI + ctypes 暴露给 Python（`python/tqsdk_backtest.py`）；
 - Python 实时策略适配器（node REST -> TargetPosTask -> CTP，`python/tqsdk_live.py`）；
-- Python 策略库 `tqsdk_py`：数据适配器、Strategy 接口、SignalConsumer/企业微信/组合消费者、BacktestRunner/LiveRunner；
+- Python 策略库 `tqsdk_py`：策略注册表/管理器、数据适配器、Strategy 接口、SignalConsumer/企业微信/组合消费者、BacktestRunner/LiveRunner；
+- 回测/实盘启动用 `--strategy <name>` 运行时选择策略；
 - REST/WS token 认证、日志脱敏、JSONL 审计、systemd/Caddy/nginx 部署模板；
 - 高级报单 FAK/FOK、市价/对价/五档价、TargetPosTask/InsertOrderTask、RiskManager 风控；
 - Tick/DataSeries/DataDownloader、期权 ATM+Greeks、TradingStatus/动态 URL、多账户与回测；
@@ -194,7 +195,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - `ctest`：359 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
 - Web：`pnpm typecheck`、`pnpm test`（28 项）、`pnpm build`、Playwright E2E 通过；
 - 日线回测 helper：`python3 scripts/test_backtest_daily.py`（4/4）；
-- Python 策略/绑定：`python3 -m unittest discover -s python/tests`（15/15）；
+- Python 策略/绑定：`python3 -m unittest discover -s python/tests`（18/18）；
   K 线/分时/WASM 指标/盘口/三键下单/合并持仓/委托/成交/权益已完成浏览器验证；
 - 多账户：REST/WS/task/risk 均支持 `?account=`，双 Sim 账户集成测试通过；
 - 指标配置/启用状态/输出样式/动态均线和 panel 尺寸浏览器本地持久化；

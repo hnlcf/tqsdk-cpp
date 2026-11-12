@@ -39,13 +39,15 @@ CTP 结算窗口可能返回 HTTP 503，这是正常的，不要据此认为进�
 ## 3. Python 策略模块
 
 ```text
-python/tqsdk_strategy.py   共享策略：EMA60 + Donchian22 + ATR14
-python/tqsdk_live.py       node REST 客户端 + live runner
-python/tqsdk_backtest.py   C++ BacktestEngine ctypes 绑定
-scripts/backtest_daily.py  十年研究回测/报告
+python/tqsdk_py/strategies/  具体策略实现和注册
+python/tqsdk_py/manager.py   策略管理器/注册表
+python/tqsdk_py/cli.py       通用 backtest/live CLI
+python/tqsdk_live.py         兼容入口
+python/tqsdk_backtest_cli.py 通用回测 CLI
+scripts/backtest_daily.py    十年研究回测/报告
 ```
 
-`EmaDonchianStrategy` 的规则和正式回测一致：
+内置 `ema_donchian` 的规则和正式回测一致：
 
 - 多头：`close > EMA60` 且突破前 22 根 Donchian 上轨；
 - 空头：`close < EMA60` 且跌破前 22 根 Donchian 下轨；
@@ -60,6 +62,8 @@ scripts/backtest_daily.py  十年研究回测/报告
 
 ```bash
 PYTHONPATH=python python3 python/tqsdk_live.py \
+  --strategy ema_donchian \
+  --param ema_period=60 \
   --node-url http://127.0.0.1:18081 \
   --account default \
   --symbol SHFE.rb2701 \
@@ -71,11 +75,19 @@ PYTHONPATH=python python3 python/tqsdk_live.py \
 
 ```bash
 PYTHONPATH=python python3 python/tqsdk_live.py \
+  --strategy ema_donchian \
+  --param ema_period=60 \
   --node-url http://127.0.0.1:18081 \
   --account default \
   --symbol SHFE.rb2701 \
   --duration-ns 86400000000000 \
   --execute --max-volume 1
+```
+
+查看所有已注册策略：
+
+```bash
+PYTHONPATH=python python3 python/tqsdk_live.py --list-strategies
 ```
 
 `--execute` 是显式安全开关；没有它绝不会 POST `/task/target`。
@@ -143,8 +155,11 @@ DELETE /task/target/{id}
 4. 从 `/positions` 读取当前净持仓和开仓价；
 5. 从 `/account` 读取 balance；
 6. 从 `/quote` 读取最新价，用于 ATR 止损监控；
-7. 调用 `EmaDonchianStrategy.decide()`；
-8. 仅当目标净持仓与当前持仓不同才提交 `/task/target`。
+7. 调用注册策略的 `Strategy.on_bar(context)`；
+8. 把策略产出的通用 `Signal` 交给 `SignalDispatcher`：
+   - notifier/组合 consumer（日志、企业微信、webhook）先通知；
+   - 可选 `TargetExecutor` 再提交 `/task/target`；
+9. 仅当目标净持仓与当前持仓不同才执行/通知。
 
 目标任务提交后，实际成交/持仓仍由 node 与 CTP 处理；Python 不假设立即成交，
 下一轮重新读取账户/持仓。
@@ -198,7 +213,7 @@ CLI 在环境变量 `TQSDK_WECOM_WEBHOOK` 存在时自动加入企业微信通�
 
 ```bash
 export TQSDK_WECOM_WEBHOOK='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...'
-PYTHONPATH=python python3 python/tqsdk_live.py   --node-url http://127.0.0.1:18081   --symbol SHFE.rb2701   --execute --max-volume 1
+PYTHONPATH=python python3 python/tqsdk_live.py   --strategy ema_donchian   --node-url http://127.0.0.1:18081   --symbol SHFE.rb2701   --execute --max-volume 1
 ```
 
 通知失败默认不阻断下单；执行器失败不会被吞掉。组合 consumer 使用

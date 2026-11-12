@@ -6,7 +6,12 @@
 python/tqsdk_py/
 ├── models.py        Bar / ContractSpec / Signal / StrategyContext
 ├── data.py          BarSource、JSON/Node/内存数据适配器
-├── strategy.py      Strategy 接口 + EMA60/Donchian22/ATR 实现
+├── strategy.py      Strategy 接口/基类（无具体策略）
+├── registry.py      策略注册表/装饰器
+├── manager.py       StrategyManager：自动发现 strategies/
+├── indicators.py    EMA/ATR/Donchian 等通用指标
+├── strategies/      具体策略实现（ema_donchian.py）
+├── cli.py           通用 backtest/live CLI（--strategy）
 ├── signals.py       SignalConsumer、企业微信、HTTP webhook、组合消费者
 ├── execution.py     TargetExecutor、DryRun、Node TargetPosTask
 ├── backtest.py      C++ BacktestEngine 适配器
@@ -21,6 +26,7 @@ python/tqsdk_py/
 python/tqsdk_backtest.py   C++ ctypes 低层接口
 python/tqsdk_strategy.py   策略旧导入名
 python/tqsdk_live.py       live CLI/旧导入名
+python/tqsdk_backtest_cli.py 通用回测 CLI
 ```
 
 ## 2. 数据适配层
@@ -61,23 +67,36 @@ target_volume < 0  目标净空
 
 策略只在目标改变时返回 `Signal`；回测和 live 使用同一个接口。
 
-内置策略：
+具体策略放在 `python/tqsdk_py/strategies/`，通过注册表自动发现：
 
 ```python
-from tqsdk_py import EmaDonchianStrategy, StrategyConfig
+from tqsdk_py import default_manager
 
-strategy = EmaDonchianStrategy(
-    StrategyConfig(
-        symbol="SHFE.rb2701",
-        ema_period=60,
-        donchian_period=22,
-        atr_period=14,
-        stop_atr=2.0,
-        allocation=0.30,
-    ),
-    spec,
+manager = default_manager()
+print(manager.names())          # ['ema_donchian']
+strategy = manager.create(
+    "ema_donchian",              # 或别名 ema / ema60
+    spec=spec,
+    symbol="SHFE.rb2701",
+    params={"ema_period": 60, "allocation": 0.30},
 )
 ```
+
+策略文件只写策略逻辑：
+
+```python
+from tqsdk_py import Strategy, register_strategy
+
+@register_strategy("my_strategy", defaults={"period": 20})
+class MyStrategy(Strategy):
+    def __init__(self, *, spec, symbol="", duration_ns=0, period=20):
+        ...
+    def on_bar(self, ctx):
+        ...
+```
+
+`StrategyManager` 会扫描 `tqsdk_py.strategies` 下所有模块，新增策略通常不需要改
+框架或 CLI。
 
 ## 4. 信号消费者
 
@@ -149,12 +168,14 @@ class TargetExecutor:
 ## 5. 回测
 
 ```python
-from tqsdk_py import BacktestRunner, BacktestSettings, JsonBarSource
-from tqsdk_py import EmaDonchianStrategy, load_specs, resolve_spec
+from tqsdk_py import BacktestRunner, BacktestSettings, JsonBarSource, default_manager
+from tqsdk_py import load_specs, resolve_spec
 
 specs = load_specs("config/daily_backtest_specs.json")
 spec = resolve_spec(specs, "SHFE.rb2701")
-strategy = EmaDonchianStrategy(StrategyConfig(symbol="SHFE.rb2701"), spec)
+strategy = default_manager().create(
+    "ema_donchian", spec=spec, symbol="SHFE.rb2701"
+)
 
 runner = BacktestRunner(
     JsonBarSource("artifacts/tq_daily"),
@@ -165,6 +186,18 @@ runner = BacktestRunner(
 )
 result = runner.run("KQ.i@SHFE.rb")
 print(result.stats)
+```
+
+通用 CLI：
+
+```bash
+PYTHONPATH=python TQSDK_BACKTEST_LIB=build/libtqsdk_backtest.so \
+python3 python/tqsdk_backtest_cli.py \
+  --strategy ema_donchian \
+  --param ema_period=60 \
+  --data-dir artifacts/tq_daily \
+  --symbol KQ.i@SHFE.rb \
+  --list-strategies
 ```
 
 `BacktestRunner` 调用 C++ `BacktestEngine`（通过 `tqsdk_backtest` ctypes 绑定），
@@ -195,16 +228,41 @@ CLI：
 ```bash
 PYTHONPATH=python \
 python3 python/tqsdk_live.py \
+  --strategy ema_donchian \
+  --param ema_period=60 \
   --node-url http://127.0.0.1:18081 \
   --symbol SHFE.rb2701 \
   --execute --max-volume 1
+```
+
+查看已注册策略：
+
+```bash
+PYTHONPATH=python python3 python/tqsdk_live.py --list-strategies
 ```
 
 不传 `--execute` 时使用 `DryRunExecutor`，但企业微信/日志 consumer 仍会收到信号。
 
 `TQSDK_WECOM_WEBHOOK` 存在时自动加入企业微信通知。
 
-## 7. 边界
+## 7. 策略注册与运行选择
+
+```bash
+# 列出注册表
+PYTHONPATH=python python3 python/tqsdk_live.py --list-strategies
+
+# 运行时选择策略
+PYTHONPATH=python python3 python/tqsdk_live.py --strategy ema_donchian --param ema_period=60 ...
+PYTHONPATH=python TQSDK_BACKTEST_LIB=build/libtqsdk_backtest.so \
+  python3 python/tqsdk_backtest_cli.py --strategy ema_donchian ...
+```
+
+新增策略：在 `python/tqsdk_py/strategies/` 放置模块，使用
+`@register_strategy("name", defaults={...})` 装饰 Strategy 子类；
+`StrategyManager` 会自动 import 该目录下的模块。策略只实现 `on_bar()`，
+不需要写 CLI、node、通知或回测启动代码。
+
+## 8. 边界
 
 - `LiveRunner` 当前使用 REST 轮询，适合日线/4h；不是 tick 级；
 - node 的 `/readyz` 不 ready 时不发信号/订单；

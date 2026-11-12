@@ -15,6 +15,11 @@ Strategy:
   * contract multiplier and per-lot commission from config/daily_backtest_specs.json
   * one position per product; no pyramiding
 
+This is a frozen research/report simulator for the published ten-year
+report. The reusable strategy implementation used by the framework and live
+runner is `python/tqsdk_py/strategies/ema_donchian.py`; the generic backtest CLI
+is `python/tqsdk_backtest_cli.py --strategy ema_donchian`.
+
 Run:
   python3 scripts/fetch_tq_daily.py --output-dir artifacts/tq_daily
   python3 scripts/backtest_daily.py \

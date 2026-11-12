@@ -175,15 +175,37 @@ CTest 也会自动注册 `PythonTests`（构建 Python 解释器可用时）。
 - 手续费；
 - 上下文 position/equity；
 - Python 异常传播；
-- dict bar 输入。
+- dict bar 输入；
+- 策略注册表/别名/参数解析；
+- SignalConsumer/WeCom 组合和 LiveRunner 信号链路；
+- BacktestRunner 调用 C++ 引擎并消费策略信号。
 
-## 7. 实时策略
+当前 Python 测试：**18/18**。
+
+## 7. 回测 CLI 与策略选择
+
+回测框架不依赖固定策略。具体策略位于 `python/tqsdk_py/strategies/`，
+通过装饰器注册到 `StrategyManager`，启动时选择：
+
+```bash
+PYTHONPATH=python TQSDK_BACKTEST_LIB=build/libtqsdk_backtest.so \
+python3 python/tqsdk_backtest_cli.py \
+  --strategy ema_donchian \
+  --param ema_period=60 \
+  --symbol KQ.i@DCE.jm \
+  --data-file artifacts/tq_daily/KQ.i@DCE.jm.json
+```
+
+```bash
+PYTHONPATH=python python3 python/tqsdk_backtest_cli.py --list-strategies
+```
 
 实时 node -> CTP 策略适配器见 [PYTHON_LIVE_TRADING.md](PYTHON_LIVE_TRADING.md)：
 
 ```text
-python/tqsdk_strategy.py  共享 EMA60/Donchian22/ATR 策略
-python/tqsdk_live.py      node REST + TargetPosTask + CTP
+python/tqsdk_py/strategies/  具体策略和注册
+python/tqsdk_py/manager.py   策略管理器
+python/tqsdk_live.py         通用 live CLI（--strategy）
 ```
 
 ## 8. 和现有 Python 回测脚本的关系
