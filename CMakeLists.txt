@@ -149,6 +149,9 @@ if(TQSDK_BUILD_PYTHON_BINDING)
             ARCHIVE DESTINATION lib
             LIBRARY DESTINATION lib
             RUNTIME DESTINATION bin)
+    install(DIRECTORY python/tqsdk_py
+            DESTINATION share/tqsdk/python
+            FILES_MATCHING PATTERN "*.py")
     install(FILES python/tqsdk_backtest.py
                   python/tqsdk_strategy.py
                   python/tqsdk_live.py
@@ -443,7 +446,7 @@ install(FILES config/gw.toml config/node.toml config/p0_simnode.toml
 install(FILES README.md docs/README.md docs/ARCHITECTURE.md docs/MODULES.md
               docs/FLOWS.md docs/STATE_MACHINES.md docs/PROTOCOLS.md docs/OPERATIONS.md
               docs/CTP.md docs/SOAK_PERF.md docs/WEB_FRONTEND.md docs/WEB_INDICATORS.md docs/TQ_AUTH.md docs/INSTRUMENTS.md
-              docs/KLINE_CACHE.md docs/SIMNOW_ACCEPTANCE.md docs/P0_SIMNOW_TEST_PLAN.md docs/ORDER_TASKS.md docs/RISK_CONTROL.md docs/TICK_DATA.md docs/OPTION_ANALYTICS.md docs/TRADING_STATUS.md docs/MULTI_ACCOUNT_BACKTEST.md docs/PYTHON_BACKTEST.md docs/PYTHON_LIVE_TRADING.md docs/ROADMAP.md
+              docs/KLINE_CACHE.md docs/SIMNOW_ACCEPTANCE.md docs/P0_SIMNOW_TEST_PLAN.md docs/ORDER_TASKS.md docs/RISK_CONTROL.md docs/TICK_DATA.md docs/OPTION_ANALYTICS.md docs/TRADING_STATUS.md docs/MULTI_ACCOUNT_BACKTEST.md docs/PYTHON_BACKTEST.md docs/PYTHON_LIVE_TRADING.md docs/PYTHON_LIBRARY.md docs/ROADMAP.md
         DESTINATION share/doc/tqsdk)
 
 # ==========================================================

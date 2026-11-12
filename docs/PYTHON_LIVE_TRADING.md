@@ -176,7 +176,35 @@ EMA60/Donchian22 是日线/4h 策略，信号在 closed bar 上产生，控制�
 - 需要额外风控时，先配置 node RiskManager，再加 Python 侧资金/日内损失限制；
 - CTP 不可交易（结算/断线）时，`LiveRunner` 只记录 not-ready，不发单。
 
-## 9. 测试
+## 9. 通知与下单组合
+
+具体可复用接口见 [PYTHON_LIBRARY.md](PYTHON_LIBRARY.md)。
+
+```python
+from tqsdk_py import (
+    NodeTargetExecutor, SignalDispatcher, WeComConsumer, LoggingConsumer
+)
+
+dispatcher = SignalDispatcher(
+    notifiers=[
+        LoggingConsumer(),
+        WeComConsumer(os.environ["TQSDK_WECOM_WEBHOOK"]),
+    ],
+    executor=NodeTargetExecutor(node, max_volume=1),
+)
+```
+
+CLI 在环境变量 `TQSDK_WECOM_WEBHOOK` 存在时自动加入企业微信通知：
+
+```bash
+export TQSDK_WECOM_WEBHOOK='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...'
+PYTHONPATH=python python3 python/tqsdk_live.py   --node-url http://127.0.0.1:18081   --symbol SHFE.rb2701   --execute --max-volume 1
+```
+
+通知失败默认不阻断下单；执行器失败不会被吞掉。组合 consumer 使用
+`CompositeConsumer`，可以继续追加邮件、HTTP webhook 等。
+
+## 10. 测试
 
 ```bash
 PYTHONPATH=python python3 -m unittest discover -s python/tests -v
