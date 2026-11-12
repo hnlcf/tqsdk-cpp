@@ -15,7 +15,14 @@
 - SimNow CTP 验收、24h SimTd soak、CTP session monitor；
 - 订单价格归一化、平今/平昨、命令幂等、故障恢复；
 - 本轮模块重构：WsEntityFilter、SnapshotService、GatewaySubscriptionBook、
-  CommandAckCache、DiffMerge/CTP/gateway/http 分文件。
+  CommandAckCache、DiffMerge/CTP/gateway/http 分文件；
+- Python `tqsdk_py` 策略抽象层、registry/manager、增量 EMA/ATR/Donchian；
+- DEB/RPM/TGZ 的 runtime/libs/dev 拆分、podman/docker image archive、
+  Python wheel；`v0.1.0` GitHub Release 已发布 12 个 assets；
+- `release.yml` 支持 `v*` tag 自动构建并上传 Release（CTP ON，使用 vendored
+  `third_party/ctp`）；
+- GitHub Actions cpp/python/web 三个 job 已通过，clang 18 + libstdc++ 14
+  的 WS JSON 序列化兼容问题已修复。
 
 ## 1.1 当前剩余优先级
 
@@ -24,7 +31,8 @@
 3. ✅ **账户级 task/risk**：`/task/*`、`/risk/*` 支持 `?account=`，任务按账户过滤，风控使用对应 TqApi。
 4. ✅ **进程级双账户验收**：两个独立 Sim gw + node 的 `/accounts`、下单、持仓、task/risk、`/stream?account=` 已通过；真实 CTP/SimNow 双账户仍待执行，见 [MULTI_ACCOUNT_ACCEPTANCE.md](MULTI_ACCOUNT_ACCEPTANCE.md)。
 5. **前端 E2E/视觉回归**：已覆盖搜索选合约、切换合约/周期、K 线缩放、基础画线；账户切换、断线重连和视觉基线仍待补。
-6. ✅ **IPC/WS fuzz 冒烟 + 24h-72h soak 脚本 + GitHub Actions workflow**；远程 runner 尚未实际执行，真实 72h 尚未跑。
+6. ✅ **IPC/WS fuzz 冒烟 + 24h-72h soak 脚本 + GitHub Actions**；CI 已实际通过；
+   真实 72h soak 仍需专用环境执行；release workflow 尚待新 tag 首次端到端触发。
 7. **CTP 连续 5 个交易日 soak 与交易日矩阵**；真实交易日不可压缩。
 8. ✅ **生产化代码入口**：token 认证、日志脱敏、JSONL 审计、systemd 单元、Caddy/nginx TLS 反向代理模板；真实证书/主机部署仍待执行。
 9. **性能/协议**：基线见 [PERFORMANCE_BASELINE.md](PERFORMANCE_BASELINE.md)；WS binary/MessagePack/虚拟列表按 profile 决策。
