@@ -431,3 +431,23 @@ out: artifacts/ctp_week/ctp_week_20261112_165323.jsonl
 
 启动时 `phase=settlement`、`expected_disconnect=true`、MD/TD connected，采样正常；
 真实 5 个交易日结论仍需等待完整周期。
+
+### 2026-11-12 结算后重启的第二次恢复
+
+16:53 启动的 soak 在 19:53 遇到 CTP 前置 `reason=4097` 断线，随后网关停在
+`authenticate failed: CTP:前置不活跃`，TD 回调未再恢复；该段没有 ready 采样，
+不能作为交易时段结论，已在 21:34 停止并重新启动。
+
+21:34 重启结果：
+
+```text
+start: 2026-11-12 21:34:40
+initial_ready: true
+initial_phase: open
+md_connected: true
+td_connected: true
+out: artifacts/ctp_week/ctp_week_20261112_213440.jsonl
+```
+
+账户/持仓快照正常（DCE.i2701 -30、DCE.jm2701 -15、DCE.v2701 -40），soak 按 15s
+继续采样；这是当前有效的周 soak，完整结论仍需等待 7 个自然日。
