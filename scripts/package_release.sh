@@ -47,6 +47,9 @@ aarch64|arm64) DEB_ARCH=arm64; RPM_ARCH=aarch64 ;;
 esac
 
 mkdir -p "$OUT"
+# rpmbuild %install runs from a temporary directory; make every path passed to
+# stages/specs absolute so a relative TQSDK_PACKAGE_OUTPUT_DIR works in CI.
+OUT=$(cd "$OUT" && pwd)
 VERSION=$VERSION_OVERRIDE
 if [[ -z "$VERSION" ]]; then
     VERSION=$(sed -n 's/.*kVersionString.*"\([^"]*\)".*/\1/p' \
