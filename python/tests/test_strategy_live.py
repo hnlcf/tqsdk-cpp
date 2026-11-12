@@ -116,6 +116,31 @@ class StrategySignalTest(unittest.TestCase):
         self.assertIs(resolve_spec(specs, "SHFE.rb2701"), self.spec)
         self.assertIsNone(resolve_spec(specs, "DCE.jm2701"))
 
+    def test_incremental_matches_one_shot(self) -> None:
+        bars = breakout_bars()
+        one_shot = EmaDonchianStrategy(spec=self.spec, symbol="X", allocation=0.30)
+        incremental = EmaDonchianStrategy(
+            spec=self.spec, symbol="X", allocation=0.30
+        )
+        for end in range(60, len(bars)):
+            expected = one_shot.decide(
+                bars[:end + 1], 0, 1_000_000, price=bars[end].close
+            )
+            signal = incremental.on_bar(
+                StrategyContext(
+                    "X",
+                    tuple(bars[: end + 1]),
+                    0,
+                    1_000_000,
+                    self.spec,
+                    price=bars[end].close,
+                )
+            )
+            if signal is not None:
+                incremental.ack(signal)
+            self.assertEqual(incremental.current_target, expected.target)
+            self.assertEqual(incremental.last_signal, expected.signal)
+
     def test_manager_registers_and_creates_strategy(self) -> None:
         manager = StrategyManager()
         self.assertIn("ema_donchian", manager.names())

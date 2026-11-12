@@ -3,11 +3,17 @@
 This module contains strategy logic only: no CLI, node client, file I/O,
 notifier, or execution code. The framework creates and runs it through the
 strategy registry.
+
+`on_bar()` keeps incremental EMA/ATR/Donchian state and only consumes newly
+appended bars. The strategy interface remains a list/Sequence of Bar objects;
+no numpy/pandas dependency is required. `decide()` is retained as a one-shot
+stateless-from-the-caller API for tests/research callers and recomputes arrays.
 """
 
 from __future__ import annotations
 
 import math
+from collections import deque
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -40,7 +46,7 @@ class Decision:
     description="EMA60 + Donchian22 breakout with 2*ATR14 stop",
 )
 class EmaDonchianStrategy(Strategy):
-    """Stateful implementation; decisions use only closed bars supplied by caller."""
+    """EMA/Donchian/ATR strategy with incremental indicator state."""
 
     def __init__(
         self,
@@ -69,6 +75,17 @@ class EmaDonchianStrategy(Strategy):
         self.last_signal = "flat"
         self._pending_entry = False
         self._last_emitted_target = 0
+        self._reset_incremental()
+
+    def _reset_incremental(self) -> None:
+        self._inc_bars: list[Bar] = []
+        self._inc_ema: float = math.nan
+        self._inc_trs: deque[float] = deque(maxlen=max(1, self.atr_period))
+        self._inc_atr: float = math.nan
+        self._inc_highs: deque[float] = deque(maxlen=max(1, self.donchian_period))
+        self._inc_lows: deque[float] = deque(maxlen=max(1, self.donchian_period))
+        self._inc_upper: float = math.nan
+        self._inc_lower: float = math.nan
 
     @property
     def current_target(self) -> int:
@@ -80,30 +97,82 @@ class EmaDonchianStrategy(Strategy):
         self.last_signal = "flat"
         self._pending_entry = False
         self._last_emitted_target = 0
+        self._reset_incremental()
 
     def ack(self, signal: Signal) -> None:
         self._last_emitted_target = signal.target_volume
 
-    def decide(
+    @staticmethod
+    def _as_bars(bars: Iterable[Bar]) -> list[Bar]:
+        # Runners pass a list; keep the common path allocation-free.
+        if isinstance(bars, list) and (not bars or isinstance(bars[-1], Bar)):
+            return bars
+        return [Bar.from_value(item) for item in bars]
+
+    def _push_bar(self, bar: Bar) -> None:
+        if self._inc_bars:
+            prev_close = self._inc_bars[-1].close
+            tr = max(
+                bar.high - bar.low,
+                abs(bar.high - prev_close),
+                abs(bar.low - prev_close),
+            )
+        else:
+            tr = bar.high - bar.low
+
+        # Donchian upper/lower use the *previous* N bars, matching indicators.donchian.
+        if len(self._inc_highs) >= self.donchian_period:
+            self._inc_upper = max(self._inc_highs)
+            self._inc_lower = min(self._inc_lows)
+        else:
+            self._inc_upper = math.nan
+            self._inc_lower = math.nan
+        self._inc_highs.append(bar.high)
+        self._inc_lows.append(bar.low)
+
+        alpha = 2.0 / (self.ema_period + 1.0)
+        if not self._inc_bars:
+            self._inc_ema = bar.close
+        else:
+            self._inc_ema += alpha * (bar.close - self._inc_ema)
+
+        self._inc_trs.append(tr)
+        if len(self._inc_trs) >= self.atr_period:
+            self._inc_atr = sum(self._inc_trs) / self.atr_period
+        else:
+            self._inc_atr = math.nan
+
+        self._inc_bars.append(bar)
+
+    def _ingest(self, bars: list[Bar]) -> None:
+        if not self._inc_bars:
+            start = 0
+        elif (
+            len(bars) < len(self._inc_bars)
+            or bars[0].datetime != self._inc_bars[0].datetime
+            or bars[len(self._inc_bars) - 1].datetime != self._inc_bars[-1].datetime
+        ):
+            # A new series, a sliding window, or a different history stream.
+            self._reset_incremental()
+            start = 0
+        else:
+            start = len(self._inc_bars)
+        for index in range(start, len(bars)):
+            self._push_bar(bars[index])
+
+    def _decide_from_values(
         self,
-        bars: Iterable[Bar],
+        last: Bar,
+        ema_value: float,
+        upper: float,
+        lower: float,
+        atr_value: float,
         position: int,
         equity: float,
         *,
-        price: float | None = None,
-        entry_price: float | None = None,
+        price: float | None,
+        entry_price: float | None,
     ) -> Decision:
-        bars = [Bar.from_value(item) for item in bars]
-        warmup = max(self.ema_period, self.donchian_period, self.atr_period) + 1
-        if len(bars) < warmup:
-            return Decision(position, "insufficient bars", "flat")
-
-        closes = [bar.close for bar in bars]
-        ema_values = ema(closes, self.ema_period)
-        upper, lower = donchian(bars, self.donchian_period)
-        atr_values = atr(bars, self.atr_period)
-        last = bars[-1]
-        atr_value = atr_values[-1]
         if not math.isfinite(atr_value) or atr_value <= 0:
             return Decision(position, "ATR unavailable", "flat")
 
@@ -126,9 +195,9 @@ class EmaDonchianStrategy(Strategy):
                     return Decision(0, "atr_stop", "flat")
 
             exit_signal = (
-                side > 0 and (last.close < ema_values[-1] or last.close < lower[-1])
+                side > 0 and (last.close < ema_value or last.close < lower)
             ) or (
-                side < 0 and (last.close > ema_values[-1] or last.close > upper[-1])
+                side < 0 and (last.close > ema_value or last.close > upper)
             )
             if exit_signal:
                 self.stop_price = None
@@ -144,8 +213,8 @@ class EmaDonchianStrategy(Strategy):
                 0,
             )
 
-        long_signal = last.close > ema_values[-1] and last.close > upper[-1]
-        short_signal = last.close < ema_values[-1] and last.close < lower[-1]
+        long_signal = last.close > ema_value and last.close > upper
+        short_signal = last.close < ema_value and last.close < lower
         if not long_signal and not short_signal:
             self.stop_price = None
             self.last_position = 0
@@ -165,9 +234,68 @@ class EmaDonchianStrategy(Strategy):
         self.last_signal = "long" if side > 0 else "short"
         return Decision(side * lots, "breakout", self.last_signal, self.stop_price, lots)
 
+    def _incremental_decide(
+        self,
+        bars: list[Bar],
+        position: int,
+        equity: float,
+        *,
+        price: float | None = None,
+        entry_price: float | None = None,
+    ) -> Decision:
+        self._ingest(bars)
+        warmup = max(self.ema_period, self.donchian_period, self.atr_period) + 1
+        if len(bars) < warmup:
+            return Decision(position, "insufficient bars", "flat")
+        return self._decide_from_values(
+            bars[-1],
+            self._inc_ema,
+            self._inc_upper,
+            self._inc_lower,
+            self._inc_atr,
+            position,
+            equity,
+            price=price,
+            entry_price=entry_price,
+        )
+
+    def decide(
+        self,
+        bars: Iterable[Bar],
+        position: int,
+        equity: float,
+        *,
+        price: float | None = None,
+        entry_price: float | None = None,
+    ) -> Decision:
+        """One-shot calculation API (recomputes arrays; runners use on_bar)."""
+        bars = [Bar.from_value(item) for item in bars]
+        warmup = max(self.ema_period, self.donchian_period, self.atr_period) + 1
+        if len(bars) < warmup:
+            return Decision(position, "insufficient bars", "flat")
+
+        closes = [bar.close for bar in bars]
+        ema_values = ema(closes, self.ema_period)
+        upper, lower = donchian(bars, self.donchian_period)
+        atr_values = atr(bars, self.atr_period)
+        return self._decide_from_values(
+            bars[-1],
+            ema_values[-1],
+            upper[-1],
+            lower[-1],
+            atr_values[-1],
+            position,
+            equity,
+            price=price,
+            entry_price=entry_price,
+        )
+
     def on_bar(self, context: StrategyContext) -> Signal | None:
-        decision = self.decide(
-            context.bars,
+        bars = self._as_bars(context.bars)
+        if not bars:
+            return None
+        decision = self._incremental_decide(
+            bars,
             context.position,
             context.equity,
             price=context.price,
@@ -182,7 +310,7 @@ class EmaDonchianStrategy(Strategy):
             signal=decision.signal,
             stop_price=decision.stop_price,
             lots=decision.lots,
-            timestamp_ns=context.now_ns or (context.bars[-1].datetime if context.bars else 0),
+            timestamp_ns=context.now_ns or bars[-1].datetime,
             strategy_id=type(self).__name__,
             metadata={"allocation": self.allocation, "stop_atr": self.stop_atr},
         )

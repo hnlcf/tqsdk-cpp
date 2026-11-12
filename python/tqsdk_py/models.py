@@ -90,7 +90,7 @@ class Signal:
 @dataclass(frozen=True)
 class StrategyContext:
     symbol: str
-    bars: tuple[Bar, ...]
+    bars: Sequence[Bar]
     position: int
     equity: float
     spec: ContractSpec

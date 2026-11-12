@@ -11,12 +11,17 @@
 - 信号在 closed bar 上计算，5 秒级轮询；
 - `Bar` 列表的生命周期短，转换到 numpy/pandas 的收益很小。
 
-真正需要关注的是**不要每根 bar 重新扫描全部历史**。如果后续做大规模参数扫描，
-优先做：
+真正需要关注的是**不要每根 bar 重新扫描全部历史**。现在
+`EmaDonchianStrategy.on_bar()` 已使用增量 EMA/ATR/Donchian 状态，保留
+`Bar` 列表接口，不需要 numpy/pandas。一次本地合成数据基准（2000 根）：
 
-1. 增量 EMA/ATR/Donchian 状态；
-2. C++ `BacktestEngine` 批量回测；
-3. 最后才是可选 NumPy 向量化研究脚本。
+```text
+decide()  约 3.3s
+on_bar()  约 0.012s
+```
+
+如果后续做更大规模参数扫描，优先用 C++ `BacktestEngine`，最后才考虑
+可选 NumPy 向量化研究脚本。
 
 不建议把 pandas DataFrame 直接传入 `Strategy.on_bar()`：
 

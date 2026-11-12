@@ -118,7 +118,7 @@ class LiveRunner:
         quote_price = self._quote_price()
         context = StrategyContext(
             symbol=self.config.symbol,
-            bars=tuple(bars),
+            bars=bars,
             position=position,
             equity=equity,
             spec=self.spec,

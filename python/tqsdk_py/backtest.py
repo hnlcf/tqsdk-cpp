@@ -104,7 +104,7 @@ class BacktestRunner:
             history.append(bar)
             strategy_context = StrategyContext(
                 symbol=symbol,
-                bars=tuple(history),
+                bars=history,
                 position=int(context_cpp.position()),
                 equity=float(context_cpp.equity()),
                 spec=self.spec,
