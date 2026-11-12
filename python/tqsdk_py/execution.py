@@ -58,10 +58,21 @@ class NodeTargetExecutor(TargetExecutor):
         self.client = client
         self.mode = mode
         self.max_volume = max_volume
+        self._task_id = ""
 
     def execute(
         self, signal: Signal, context: StrategyContext | None = None
     ) -> ExecutionResult:
+        # A TargetPosTask remains active until cancelled. Cancel the previous
+        # task before creating a task for the new desired net position,
+        # otherwise an old +N task can re-open a position after a later flat
+        # task has closed it.
+        if self._task_id:
+            try:
+                self.client.cancel_target(self._task_id)
+            except Exception:
+                pass
+            self._task_id = ""
         response = self.client.target_position(
             signal.symbol,
             signal.target_volume,
@@ -69,6 +80,8 @@ class NodeTargetExecutor(TargetExecutor):
             max_volume=self.max_volume,
         )
         accepted = bool(response.get("success", True))
+        if accepted:
+            self._task_id = str(response.get("task_id", ""))
         return ExecutionResult(
             accepted=accepted,
             target_volume=signal.target_volume,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import signal as system_signal
 import time
+import traceback
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -189,7 +190,12 @@ class LiveRunner:
                     self.step()
                 except Exception as exc:  # noqa: BLE001 - daemon loop must continue
                     self.stats.errors += 1
-                    self.log(json.dumps({"error": str(exc)}, ensure_ascii=False))
+                    self.log(
+                        json.dumps(
+                            {"error": str(exc), "traceback": traceback.format_exc()},
+                            ensure_ascii=False,
+                        )
+                    )
                 if self.config.max_cycles is not None and self.stats.cycles >= self.config.max_cycles:
                     break
                 time.sleep(max(0.1, self.config.poll_interval))

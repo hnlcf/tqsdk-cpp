@@ -66,6 +66,22 @@ class RecordingExecutor(TargetExecutor):
         return ExecutionResult(accepted=True, target_volume=signal.target_volume, task_id="t1")
 
 
+class FakeTargetClient:
+    def __init__(self):
+        self.cancelled: list[str] = []
+        self.targets: list[int] = []
+        self.seq = 0
+
+    def target_position(self, symbol, target_volume, mode="ACTIVE", max_volume=0):
+        self.seq += 1
+        self.targets.append(target_volume)
+        return {"success": True, "task_id": f"task-{self.seq}"}
+
+    def cancel_target(self, task_id):
+        self.cancelled.append(task_id)
+        return {"success": True}
+
+
 class FailingConsumer(SignalConsumer):
     def consume(self, signal: Signal, context=None) -> None:
         raise RuntimeError("notification down")
@@ -222,6 +238,16 @@ class SignalConsumerTest(unittest.TestCase):
         self.assertEqual(len(memory.signals), 1)
         self.assertEqual(len(executor.executed), 1)
         self.assertTrue(result.execution.accepted)
+
+    def test_node_executor_cancels_previous_task(self) -> None:
+        from tqsdk_py.execution import NodeTargetExecutor
+
+        client = FakeTargetClient()
+        executor = NodeTargetExecutor(client, max_volume=1)
+        executor.execute(Signal("X", 1, "open"))
+        executor.execute(Signal("X", 0, "close"))
+        self.assertEqual(client.cancelled, ["task-1"])
+        self.assertEqual(client.targets, [1, 0])
 
     def test_wecom_payload(self) -> None:
         class Response:

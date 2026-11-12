@@ -30,7 +30,8 @@ class NodeClient:
         timeout: float = 15.0,
     ):
         self.base_url = base_url.rstrip("/")
-        self.account = account
+        # Keep the account id separate from the account() REST method.
+        self.account_id = account
         self.token = token or os.environ.get("TQSDK_SERVE_TOKEN", "")
         self.timeout = timeout
 
@@ -39,7 +40,7 @@ class NodeClient:
             path = "/" + path
         if account and "account=" not in path:
             sep = "&" if "?" in path else "?"
-            path = f"{path}{sep}account={urllib.parse.quote(self.account)}"
+            path = f"{path}{sep}account={urllib.parse.quote(self.account_id)}"
         return self.base_url + path
 
     def _request(
