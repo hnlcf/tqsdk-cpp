@@ -55,6 +55,18 @@ inline void from_json(const Json& j, KlineSubscription& k) {
     k.view_width  = j.value("view_width", 200);
 }
 
+/// Build the JSON array explicitly. Passing std::vector<KlineSubscription>
+/// straight into nlohmann's implicit constructor triggers a clang 18 +
+/// libstdc++ 14 recursive exception-specification diagnostic.
+inline Json klines_to_json(const std::vector<KlineSubscription>& klines) {
+    Json out = Json::array();
+    for (const auto& k : klines) {
+        out.push_back(Json{
+            {"symbol", k.symbol}, {"duration_ns", k.duration_ns}, {"view_width", k.view_width}});
+    }
+    return out;
+}
+
 /// {"op":"subscribe","symbols":[...],"klines":[...],"topics":[...]}
 struct WsSubscribe {
     std::vector<std::string>       symbols;
@@ -75,8 +87,10 @@ struct WsUnsubscribe {
 struct WsPing {};
 
 inline void to_json(Json& j, const WsSubscribe& m) {
-    j = Json{
-        {"op", "subscribe"}, {"symbols", m.symbols}, {"klines", m.klines}, {"topics", m.topics}};
+    j = Json{{"op", "subscribe"},
+             {"symbols", m.symbols},
+             {"klines", klines_to_json(m.klines)},
+             {"topics", m.topics}};
 }
 inline void from_json(const Json& j, WsSubscribe& m) {
     if (j.value("op", std::string{}) != "subscribe") {
@@ -108,7 +122,7 @@ inline void from_json(const Json& j, WsSubscribe& m) {
 }
 
 inline void to_json(Json& j, const WsUnsubscribe& m) {
-    j = Json{{"op", "unsubscribe"}, {"symbols", m.symbols}, {"klines", m.klines}};
+    j = Json{{"op", "unsubscribe"}, {"symbols", m.symbols}, {"klines", klines_to_json(m.klines)}};
 }
 inline void from_json(const Json& j, WsUnsubscribe& m) {
     if (j.value("op", std::string{}) != "unsubscribe") {
@@ -233,8 +247,10 @@ inline void from_json(const Json& j, WsWelcome& m) {
 }
 
 inline void to_json(Json& j, const WsSubscribed& m) {
-    j = Json{
-        {"type", "subscribed"}, {"symbols", m.symbols}, {"klines", m.klines}, {"topics", m.topics}};
+    j = Json{{"type", "subscribed"},
+             {"symbols", m.symbols},
+             {"klines", klines_to_json(m.klines)},
+             {"topics", m.topics}};
 }
 inline void from_json(const Json& j, WsSubscribed& m) {
     if (j.value("type", std::string{}) != "subscribed") {
@@ -246,7 +262,8 @@ inline void from_json(const Json& j, WsSubscribed& m) {
 }
 
 inline void to_json(Json& j, const WsUnsubscribed& m) {
-    j = Json{{"type", "unsubscribed"}, {"symbols", m.symbols}, {"klines", m.klines}};
+    j = Json{
+        {"type", "unsubscribed"}, {"symbols", m.symbols}, {"klines", klines_to_json(m.klines)}};
 }
 inline void from_json(const Json& j, WsUnsubscribed& m) {
     if (j.value("type", std::string{}) != "unsubscribed") {
@@ -436,7 +453,9 @@ inline WsServerMessage parse_ws_server_message(const Text& text) {
 /// 任意协议结构 / variant -> 文本帧。
 template <typename Message>
 std::string serialize_ws_message(const Message& msg) {
-    return Json(msg).dump();
+    Json j;
+    to_json(j, msg);
+    return j.dump();
 }
 
 } // namespace serve
