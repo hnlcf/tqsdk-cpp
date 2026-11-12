@@ -148,8 +148,21 @@ class Runner:
         deadline = time.monotonic() + self.args.startup_timeout
         while time.monotonic() < deadline and not self.stop:
             status, body = http_json(self.args.node_url, "/readyz", 2.0)
-            if status == 200 and body.get("ready"):
-                print(json.dumps({"initial_ready": True, "body": body}), flush=True)
+            td = body.get("td", {}) if isinstance(body, dict) else {}
+            # A soak may be restarted after the day session, during CTP
+            # settlement/closed.  That is an expected disconnect, not a
+            # startup failure: keep sampling and let the night session
+            # transition be recorded as the first ready period.
+            expected = bool(td.get("expected_disconnect"))
+            # /readyz deliberately returns 503 while not ready; an expected
+            # settlement/closed disconnect is still a valid soak start state.
+            if status in (200, 503) and (body.get("ready") or expected):
+                print(json.dumps({
+                    "initial_ready": bool(body.get("ready")),
+                    "initial_phase": td.get("phase", "unknown"),
+                    "initial_expected_disconnect": expected,
+                    "body": body,
+                }), flush=True)
                 return True
             if self.node is not None and self.node.poll() is not None:
                 print("node exited during startup", file=sys.stderr)
