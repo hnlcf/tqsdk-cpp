@@ -409,3 +409,25 @@ fatal:          ""
 
 本次同时验证了 `MultiAccountManager` 在关闭/移除账户后不会提前析构仍有排队回调的
 `TqApi`；双 Sim gw 进程级验收和 ASan 版本验收均通过。60s 仍不是 24h/72h 长稳结论。
+
+## 2026-11-12 机器重启后的 CTP soak 恢复
+
+首次 CTP 周 soak 在宿主机意外重启前运行到 15:32，未形成完整报告；旧采样保留在
+`artifacts/ctp_week/ctp_week_20261112_133918.jsonl`，不能作为完整五日结论。
+
+重启后修复了 soak 启动器的一个边界：收盘/结算阶段 `/readyz` 返回 503 且
+`td.expected_disconnect=true` 属于预期状态，不应被当成启动超时。现在
+`ctp_session_soak.py` 接受该状态作为初始采样点，夜间/次日开盘后继续记录 ready
+区间。
+
+重启后的 soak：
+
+```text
+start: 2026-11-12 16:53:23
+duration: 7 个自然日（覆盖 5 个交易日）
+interval: 15s
+out: artifacts/ctp_week/ctp_week_20261112_165323.jsonl
+```
+
+启动时 `phase=settlement`、`expected_disconnect=true`、MD/TD connected，采样正常；
+真实 5 个交易日结论仍需等待完整周期。
