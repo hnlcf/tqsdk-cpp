@@ -67,3 +67,6 @@ dist/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
+
+# node continuous-contract runtime snapshot
+continuous_table.json

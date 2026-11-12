@@ -374,3 +374,47 @@ after position: 0
 
 10:30 重试按预期检测不到历史测试仓，没有再次报单。测试仓已清理，用户原有
 SA/SR 仓位未修改。
+
+## 9. 2026-11-12 实测记录
+
+### 9.1 Python live / 企业微信
+
+- `tqsdk_live.py` dry-run 已连接 18081 node，读取 `/readyz`、`/kline`、
+  `/account`、`/positions`、`/quote`，策略输出 `signal=null`（当前无入场信号）；
+- `.env` 自动加载 `TQSDK_WECOM_WEBHOOK` 成功；
+- 企业微信测试消息发送成功（`wecom_notification=ok`）；
+- `NodeClient` 账户查询方法/实例字段冲突已修复；
+- `NodeTargetExecutor` 现在在新目标前取消旧 TargetPosTask，避免旧 +1 任务
+  在平仓后重新开仓。
+
+### 9.2 单笔试单
+
+- `SHFE.rb2701` 目标 1 手被 CTP 拒绝：
+  `CTP 31: 资金不足，约缺少资金[827.21]`，未产生持仓；随后已取消 target task；
+- 为保证真实成交且不改变已有 DCE 持仓，改用 `CZCE.SA701`：
+  - open target=1 成交，`volume_long=1`，成交价约 978；
+  - close target=0 成交，最终 `volume_long=volume_short=0`；
+  - 两个 target task 已取消，`/tasks` 为空；
+  - 测试后账户 available 约 3909，未留下测试持仓。
+- 该测试是 `SignalDispatcher -> NodeTargetExecutor -> node -> CTP` 的真实链路；
+  原先 SHFE 资金不足的失败也按真实拒绝记录，不做 PASS 伪装。
+
+### 9.3 CTP session soak
+
+已启动：
+
+```bash
+python3 scripts/ctp_week_soak.py \
+  --days 7 --interval 15 --execute \
+  --out-dir artifacts/ctp_week
+```
+
+选择 7 个自然日是为了覆盖 5 个交易日（含周末）；监控以
+`expected_disconnect` 区分结算/闭市断线和交易时段 unexpected gap。
+启动时 `/readyz=true`，采样已写入：
+
+```text
+artifacts/ctp_week/ctp_week_20261112_133918.jsonl
+```
+
+真实 5 个交易日结论必须等待完整周期，不能压缩。
