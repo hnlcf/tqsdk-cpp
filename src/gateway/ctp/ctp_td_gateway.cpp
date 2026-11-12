@@ -31,7 +31,8 @@ CtpTdGateway::CtpTdGateway(asio::any_io_executor ex, CtpConfig cfg)
           },
           std::chrono::seconds(10)),
       order_mutex_(ex_),
-      order_timer_(ex_) {}
+      order_timer_(ex_),
+      watchdog_timer_(ex_) {}
 
 CtpTdGateway::~CtpTdGateway() {
     stop_impl();
@@ -129,10 +130,105 @@ asio::awaitable<void> CtpTdGateway::start() {
     api_->RegisterSpi(spi_.get());
     api_->SubscribePrivateTopic(THOST_TERT_QUICK);
     api_->SubscribePublicTopic(THOST_TERT_QUICK);
+    front_connected_      = false;
+    settlement_confirmed_ = false;
     api_->RegisterFront(const_cast<char*>(cfg_.td_front.c_str()));
     api_->Init();
+    arm_watchdog();
     SPDLOG_INFO("[CtpTd] connecting to {}", cfg_.td_front);
     co_return;
+}
+
+void CtpTdGateway::arm_watchdog() {
+    if (stopped_ || cfg_.front_timeout.count() <= 0) {
+        return;
+    }
+    const auto generation = ++watchdog_generation_;
+    watchdog_timer_.expires_after(cfg_.front_timeout);
+    auto alive = watchdog_alive_;
+    watchdog_timer_.async_wait([this, generation, alive](const boost::system::error_code& ec) {
+        if (ec || !alive || !alive->load(std::memory_order_acquire) || stopped_ ||
+            generation != watchdog_generation_) {
+            return;
+        }
+        handle_watchdog();
+    });
+}
+
+void CtpTdGateway::disarm_watchdog() {
+    ++watchdog_generation_;
+    watchdog_timer_.cancel();
+}
+
+void CtpTdGateway::handle_watchdog() {
+    if (stopped_ || (logged_in_.load(std::memory_order_relaxed) && settlement_confirmed_)) {
+        return;
+    }
+    const auto phase = calendar_.phase_at(std::chrono::system_clock::now());
+    if (phase == TradingCalendar::Phase::Closed || phase == TradingCalendar::Phase::Settlement) {
+        SPDLOG_DEBUG("[CtpTd] watchdog skipped during {} (expected off-hours)",
+                     TradingCalendar::name(phase));
+        arm_watchdog();
+        return;
+    }
+    SPDLOG_WARN("[CtpTd] front/auth/login watchdog fired after {}ms (front_connected={}, "
+                "authenticated={}, logged_in={}, settled={}); rebuilding CTP API",
+                cfg_.front_timeout.count(),
+                front_connected_,
+                authenticated_,
+                logged_in_.load(std::memory_order_relaxed),
+                settlement_confirmed_);
+    restart_api();
+}
+
+void CtpTdGateway::restart_api() {
+    if (stopped_) {
+        return;
+    }
+    disarm_watchdog();
+    front_connected_      = false;
+    settlement_confirmed_ = false;
+    authenticated_        = false;
+    logged_in_            = false;
+    initial_loaded_       = false;
+    query_pipeline_.force_snapshot_ready(false);
+    query_pipeline_.reset();
+
+    if (state_) {
+        state_->alive.store(false, std::memory_order_release);
+        {
+            std::lock_guard<std::mutex> lock(state_->cb_mu);
+            state_->callbacks.reset();
+        }
+        state_->queue->stop();
+    }
+    if (api_ != nullptr) {
+        api_->RegisterSpi(nullptr);
+        api_->Release();
+        api_ = nullptr;
+    }
+    spi_.reset();
+
+    state_ = std::make_shared<TdState>(ex_);
+    install_callbacks();
+    state_->alive.store(true, std::memory_order_release);
+    spi_ = std::make_unique<CtpTdSpi>(state_);
+    api_ = CThostFtdcTraderApi::CreateFtdcTraderApi(cfg_.flow_path.c_str());
+    if (api_ == nullptr) {
+        emit(TradeEvent{TradeEvent::Kind::Error,
+                        nlohmann::json{},
+                        {},
+                        "CTP CreateFtdcTraderApi failed during watchdog restart"});
+        arm_watchdog();
+        return;
+    }
+    api_->RegisterSpi(spi_.get());
+    api_->SubscribePrivateTopic(THOST_TERT_QUICK);
+    api_->SubscribePublicTopic(THOST_TERT_QUICK);
+    api_->RegisterFront(const_cast<char*>(cfg_.td_front.c_str()));
+    api_->Init();
+    arm_watchdog();
+    SPDLOG_WARN("[CtpTd] CTP API rebuilt; reconnect scheduled");
 }
 
 void CtpTdGateway::stop_impl() noexcept {
@@ -140,6 +236,10 @@ void CtpTdGateway::stop_impl() noexcept {
         return;
     }
     stopped_ = true;
+    if (watchdog_alive_) {
+        watchdog_alive_->store(false, std::memory_order_release);
+    }
+    disarm_watchdog();
     query_pipeline_.force_snapshot_ready(false);
     state_->alive.store(false, std::memory_order_release);
     {
@@ -216,8 +316,11 @@ void CtpTdGateway::handle_front_connected() {
         return;
     }
     SPDLOG_INFO("[CtpTd] front connected");
-    logged_in_     = false;
-    authenticated_ = false;
+    front_connected_      = true;
+    settlement_confirmed_ = false;
+    logged_in_            = false;
+    authenticated_        = false;
+    arm_watchdog();
     if (!cfg_.app_id.empty() && !cfg_.auth_code.empty()) {
         CThostFtdcReqAuthenticateField req{};
         set_field(req.BrokerID, sizeof(req.BrokerID), cfg_.broker_id);
@@ -237,8 +340,13 @@ void CtpTdGateway::handle_front_connected() {
 }
 
 void CtpTdGateway::handle_front_disconnected(int reason) {
-    logged_in_     = false;
-    authenticated_ = false;
+    front_connected_      = false;
+    settlement_confirmed_ = false;
+    logged_in_            = false;
+    authenticated_        = false;
+    // CTP SDK usually reconnects by itself; the watchdog is the fallback for
+    // the "front connected but no auth/login callback" case.
+    arm_watchdog();
     query_pipeline_.force_snapshot_ready(false);
     query_pipeline_.reset();
     if (stopped_) {
@@ -266,9 +374,11 @@ void CtpTdGateway::handle_authenticate(const CThostFtdcRspAuthenticateField* rsp
                         nlohmann::json{},
                         {},
                         "CTP authenticate failed: " + cstr(info->ErrorMsg)});
+        arm_watchdog();
         return;
     }
     authenticated_ = true;
+    arm_watchdog();
     do_login();
 }
 
@@ -286,12 +396,15 @@ void CtpTdGateway::handle_login(const CThostFtdcRspUserLoginField& rsp,
                         nlohmann::json{},
                         {},
                         "CTP login failed: " + cstr(info->ErrorMsg)});
+        arm_watchdog();
         return;
     }
-    front_id_    = rsp.FrontID;
-    session_id_  = rsp.SessionID;
-    trading_day_ = cstr(rsp.TradingDay);
-    logged_in_   = true;
+    front_id_             = rsp.FrontID;
+    session_id_           = rsp.SessionID;
+    trading_day_          = cstr(rsp.TradingDay);
+    logged_in_            = true;
+    settlement_confirmed_ = false;
+    arm_watchdog();
     query_pipeline_.force_snapshot_ready(false);
     load_persisted_orders();
     SPDLOG_INFO("[CtpTd] login ok front={} session={} trading_day={}",
@@ -318,6 +431,8 @@ void CtpTdGateway::handle_settlement(const CThostFtdcSettlementInfoConfirmField*
                         "CTP settlement confirm failed: " + cstr(info->ErrorMsg)});
         return;
     }
+    settlement_confirmed_ = true;
+    disarm_watchdog();
     SPDLOG_INFO("[CtpTd] settlement confirmed");
     query_pipeline_.reset();
     start_queries(true);

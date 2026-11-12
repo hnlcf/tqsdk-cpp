@@ -451,3 +451,13 @@ out: artifacts/ctp_week/ctp_week_20261112_213440.jsonl
 
 账户/持仓快照正常（DCE.i2701 -30、DCE.jm2701 -15、DCE.v2701 -40），soak 按 15s
 继续采样；这是当前有效的周 soak，完整结论仍需等待 7 个自然日。
+
+### 2026-11-12 watchdog 加固
+
+CTP 前置断线后认证回调丢失会让 gw 永久停在 reconnecting。已为
+`CtpTdGateway` / `CtpMdGateway` 增加 `front_timeout_ms` watchdog：超时后在进程
+内重建 CTP API，不依赖 gw/node 进程重启。
+
+本地假前置验证：TCP 连接建立但不返回认证/登录回调，2s 后连续触发
+`front/auth/login watchdog fired` 和 `CTP API rebuilt`，gw 进程保持存活。
+当前有效 soak 已切换到包含该 watchdog 的 0.2.2 构建。

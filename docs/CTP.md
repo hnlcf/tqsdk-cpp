@@ -96,10 +96,31 @@ td_front = "tcp://180.168.146.187:10130"
 md_front = "tcp://180.168.146.187:10131"
 flow_path = "/tmp/tqsdk_ctp"
 order_interval_ms = 100
+front_timeout_ms = 30000
 ```
 
 `flow_path` 必须是可写目录；CTP 会写流文件/私有流恢复数据。不同 broker 的前置地址
 不同，以经纪商提供的为准。
+
+### 2.1 前台/认证/登录 watchdog
+
+CTP SDK 偶尔会出现 TCP 前置已连上、但 `OnRspAuthenticate` / `OnRspUserLogin`
+或结算确认回调不再返回的情况。仅依赖 SDK 自带重连不够，gw 会永久停在
+`reconnecting`。
+
+`CtpTdGateway` / `CtpMdGateway` 现在各自带一个 Asio timer watchdog：
+
+- `front_timeout_ms` 默认 30000ms；设为 0 可关闭；
+- 超时条件包括：未连接、已连接但未认证、已登录但未确认结算；
+- 超时后在 **同一 gw 进程内**释放旧 CTP API，重新 `Create/RegisterSpi/Init`；
+- 旧 `TdState/MdState` 先标记 dead 并停止回调队列，避免旧 SPI 回调访问新状态；
+- MD 重连后保留 `desired_` 订阅，登录成功后自动重放；
+- TD 保留持久化订单缓存，重新登录后重新查询账户/持仓/订单/成交；
+- 收盘/结算阶段属于 expected disconnect，TD watchdog 不反复重建，等下一交易阶段；
+- 日志关键字：`front/auth/login watchdog fired`、`CTP API rebuilt`。
+
+已用本地假前置（接受 TCP 但不返回 CTP 回调）验证 2s watchdog 会连续重建 API，
+而正常 SimNow 登录期间不会误触发。
 
 ## 3. 线程桥接
 

@@ -129,6 +129,8 @@ CtpConfig parse_ctp_config(const toml::table& root) {
         ctp.flow_path = get_str(t, "flow_path", ctp.flow_path);
         ctp.order_interval =
             std::chrono::milliseconds(get_int(t, "order_interval_ms", ctp.order_interval.count()));
+        ctp.front_timeout = std::chrono::milliseconds(
+            std::max<int64_t>(0, get_int(t, "front_timeout_ms", ctp.front_timeout.count())));
     }
     return ctp;
 }

@@ -8,6 +8,8 @@
 #include "tqsdk/gateway/trading_gateway.h"
 #include "tqsdk/util/async_mutex.h"
 
+#include <boost/asio/steady_timer.hpp>
+
 class CtpFaultInjectionTest;
 
 namespace tqsdk {
@@ -104,6 +106,10 @@ private:
 
     void                  install_callbacks();
     void                  stop_impl() noexcept;
+    void                  arm_watchdog();
+    void                  disarm_watchdog();
+    void                  handle_watchdog();
+    void                  restart_api();
     void                  do_login();
     void                  do_settlement();
     void                  emit(TradeEvent ev);
@@ -167,6 +173,14 @@ private:
     AsyncMutex                            order_mutex_;
     boost::asio::steady_timer             order_timer_;
     std::chrono::steady_clock::time_point next_order_at_;
+
+    // CTP SDK 在部分前置断线场景下会停在“已连接但认证/登录回调不再返回”。
+    // watchdog 超时后在进程内重建 CTP API，避免 gw 永久卡在 reconnecting。
+    boost::asio::steady_timer          watchdog_timer_;
+    std::shared_ptr<std::atomic<bool>> watchdog_alive_ = std::make_shared<std::atomic<bool>>(true);
+    std::uint64_t                      watchdog_generation_  = 0;
+    bool                               front_connected_      = false;
+    bool                               settlement_confirmed_ = false;
 
     friend class ::CtpFaultInjectionTest;
 };

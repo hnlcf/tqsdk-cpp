@@ -4,6 +4,8 @@
 #include "tqsdk/gateway/ctp/ctp_spi_impl.h"
 #include "tqsdk/gateway/market_data_gateway.h"
 
+#include <boost/asio/steady_timer.hpp>
+
 namespace tqsdk {
 
 /// CTP 行情网关。
@@ -43,17 +45,27 @@ private:
     void emit(MarketDataEvent ev);
     void stop_impl() noexcept;
     void resubscribe_desired();
+    void arm_watchdog();
+    void disarm_watchdog();
+    void handle_watchdog();
+    void restart_api();
 
     boost::asio::any_io_executor   ex_;
     CtpConfig                      cfg_;
     Channel<MarketDataEvent>       ch_;
     std::shared_ptr<ctp::MdState>  state_;
     std::unique_ptr<ctp::CtpMdSpi> spi_;
-    CThostFtdcMdApi*               api_       = nullptr;
-    bool                           started_   = false;
-    bool                           stopped_   = false;
-    bool                           logged_in_ = false;
+    CThostFtdcMdApi*               api_             = nullptr;
+    bool                           started_         = false;
+    bool                           stopped_         = false;
+    bool                           logged_in_       = false;
+    bool                           front_connected_ = false;
     std::map<std::string, int>     desired_;
+
+    // CTP MD 同样可能在“front connected 后登录回调不返回”时永久卡住。
+    boost::asio::steady_timer          watchdog_timer_;
+    std::shared_ptr<std::atomic<bool>> watchdog_alive_ = std::make_shared<std::atomic<bool>>(true);
+    std::uint64_t                      watchdog_generation_ = 0;
 };
 
 } // namespace tqsdk

@@ -15,10 +15,86 @@ CtpMdGateway::CtpMdGateway(asio::any_io_executor ex, CtpConfig cfg)
     : ex_(std::move(ex)),
       cfg_(std::move(cfg)),
       ch_(ex_),
-      state_(std::make_shared<MdState>(ex_)) {}
+      state_(std::make_shared<MdState>(ex_)),
+      watchdog_timer_(ex_) {}
 
 CtpMdGateway::~CtpMdGateway() {
     stop_impl();
+}
+
+void CtpMdGateway::arm_watchdog() {
+    if (stopped_ || cfg_.front_timeout.count() <= 0) {
+        return;
+    }
+    const auto generation = ++watchdog_generation_;
+    watchdog_timer_.expires_after(cfg_.front_timeout);
+    auto alive = watchdog_alive_;
+    watchdog_timer_.async_wait([this, generation, alive](const boost::system::error_code& ec) {
+        if (ec || !alive || !alive->load(std::memory_order_acquire) || stopped_ ||
+            generation != watchdog_generation_) {
+            return;
+        }
+        handle_watchdog();
+    });
+}
+
+void CtpMdGateway::disarm_watchdog() {
+    ++watchdog_generation_;
+    watchdog_timer_.cancel();
+}
+
+void CtpMdGateway::handle_watchdog() {
+    if (stopped_ || logged_in_) {
+        return;
+    }
+    SPDLOG_WARN("[CtpMd] front/login watchdog fired after {}ms (front_connected={}, logged_in={}); "
+                "rebuilding CTP MD API",
+                cfg_.front_timeout.count(),
+                front_connected_,
+                logged_in_);
+    restart_api();
+}
+
+void CtpMdGateway::restart_api() {
+    if (stopped_) {
+        return;
+    }
+    disarm_watchdog();
+    front_connected_ = false;
+    logged_in_       = false;
+
+    if (state_) {
+        state_->alive.store(false, std::memory_order_release);
+        {
+            std::lock_guard<std::mutex> lock(state_->cb_mu);
+            state_->callbacks.reset();
+        }
+        state_->queue->stop();
+    }
+    if (api_ != nullptr) {
+        api_->RegisterSpi(nullptr);
+        api_->Release();
+        api_ = nullptr;
+    }
+    spi_.reset();
+
+    state_ = std::make_shared<MdState>(ex_);
+    install_callbacks();
+    state_->alive.store(true, std::memory_order_release);
+    spi_ = std::make_unique<CtpMdSpi>(state_);
+    api_ = CThostFtdcMdApi::CreateFtdcMdApi(cfg_.flow_path.c_str());
+    if (api_ == nullptr) {
+        emit(MarketDataEvent{MarketDataEvent::Kind::Error,
+                             nlohmann::json{},
+                             "CTP CreateFtdcMdApi failed during watchdog restart"});
+        arm_watchdog();
+        return;
+    }
+    api_->RegisterSpi(spi_.get());
+    api_->RegisterFront(const_cast<char*>(cfg_.md_front.c_str()));
+    api_->Init();
+    arm_watchdog();
+    SPDLOG_WARN("[CtpMd] CTP MD API rebuilt; reconnect scheduled");
 }
 
 void CtpMdGateway::install_callbacks() {
@@ -59,8 +135,10 @@ asio::awaitable<void> CtpMdGateway::start() {
         throw std::runtime_error("CreateFtdcMdApi failed");
     }
     api_->RegisterSpi(spi_.get());
+    front_connected_ = false;
     api_->RegisterFront(const_cast<char*>(cfg_.md_front.c_str()));
     api_->Init();
+    arm_watchdog();
     SPDLOG_INFO("[CtpMd] connecting to {}", cfg_.md_front);
     co_return;
 }
@@ -70,6 +148,10 @@ void CtpMdGateway::stop_impl() noexcept {
         return;
     }
     stopped_ = true;
+    if (watchdog_alive_) {
+        watchdog_alive_->store(false, std::memory_order_release);
+    }
+    disarm_watchdog();
     state_->alive.store(false, std::memory_order_release);
     {
         std::lock_guard<std::mutex> lock(state_->cb_mu);
@@ -139,6 +221,9 @@ void CtpMdGateway::handle_front_connected() {
         return;
     }
     SPDLOG_INFO("[CtpMd] front connected, login as {}", cfg_.user_id);
+    front_connected_ = true;
+    logged_in_       = false;
+    arm_watchdog();
     CThostFtdcReqUserLoginField req{};
     set_field(req.BrokerID, sizeof(req.BrokerID), cfg_.broker_id);
     set_field(req.UserID, sizeof(req.UserID), cfg_.user_id);
@@ -152,7 +237,9 @@ void CtpMdGateway::handle_front_connected() {
 }
 
 void CtpMdGateway::handle_front_disconnected(int reason) {
-    logged_in_ = false;
+    front_connected_ = false;
+    logged_in_       = false;
+    arm_watchdog();
     if (stopped_) {
         return;
     }
@@ -177,9 +264,11 @@ void CtpMdGateway::handle_login(const CThostFtdcRspUserLoginField& rsp,
         emit(MarketDataEvent{MarketDataEvent::Kind::Error,
                              nlohmann::json{},
                              "CTP md login failed: " + cstr(info->ErrorMsg)});
+        arm_watchdog();
         return;
     }
     logged_in_ = true;
+    disarm_watchdog();
     SPDLOG_INFO("[CtpMd] login ok");
     resubscribe_desired();
 }

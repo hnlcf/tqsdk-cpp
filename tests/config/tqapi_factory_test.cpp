@@ -464,6 +464,7 @@ td_front = "tcp://127.0.0.1:41205"
 md_front = "tcp://127.0.0.1:41213"
 flow_path = "/tmp/ctp-flow"
 order_interval_ms = 37
+front_timeout_ms = 12345
 )";
     auto        cfg  = parse_tqapi_config(toml);
     EXPECT_EQ(cfg.md.kind, MdKind::Ctp);
@@ -477,6 +478,7 @@ order_interval_ms = 37
     EXPECT_EQ(cfg.ctp.md_front, "tcp://127.0.0.1:41213");
     EXPECT_EQ(cfg.ctp.flow_path, "/tmp/ctp-flow");
     EXPECT_EQ(cfg.ctp.order_interval.count(), 37);
+    EXPECT_EQ(cfg.ctp.front_timeout.count(), 12345);
 
     auto gw = parse_gw_config(toml);
     EXPECT_EQ(gw.ctp.broker_id, "9999");
