@@ -15,10 +15,10 @@
 | `ipc` | `ipc::IpcFailure` / `IpcErrorCode` | 建连/握手边界；帧内部仍使用 IpcError 适配 |
 | `gateway` | `gateway::GatewayError` / `GatewayErrorCode` | TqApi 建连/握手、网关构造边界 |
 | `auth` | `auth::AuthError` / `AuthErrorCode` | 快期账户登录边界 |
-| `data` | `data::DataError`（待添加） | 缓存、持久化、反序列化、数据一致性 |
-| `serve` | `serve::ServeError`（待添加） | 参数提取、路由、HTTP 映射 |
-| `backtest` | `backtest::BacktestError`（待添加） | C ABI 参数、回测引擎输入 |
-| `app` | `app::AppError`（待添加） | 进程入口的最终错误汇总 |
+| `data` | `bool ready()` / status JSON | 缓存打开失败降级；数据读写不在公共 API 抛异常 |
+| `serve` | `serve::ServeError` | 参数提取、路由、HTTP 映射 |
+| `backtest` | `tq_bt_stats::status` | C ABI 内部 catch，返回 status/error 字符串 |
+| `app` | exit code + ERROR 日志 | 进程入口的最终汇总，不向调用方抛异常 |
 
 禁止把 `HttpError` 直接暴露到 IPC/gateway 上层；上层应记录该错误并转换为本层
 错误码。错误载荷应该小而稳定：错误码 + 必要上下文，不携带异常对象、连接对象
