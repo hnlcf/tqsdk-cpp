@@ -84,7 +84,7 @@ asio::awaitable<void> TqMdGateway::subscribe(const std::vector<std::string>& sym
 }
 
 std::string TqMdGateway::kline_key(const std::string& symbol, int64_t duration_ns) {
-    return symbol + "|" + std::to_string(duration_ns);
+    return fmt::format("{}|{}", symbol, duration_ns);
 }
 
 bool TqMdGateway::has_any_subscription() const noexcept {

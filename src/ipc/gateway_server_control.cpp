@@ -196,13 +196,13 @@ asio::awaitable<void> GatewayIpcServer::handle_subscribe(const ReceivedFrame& fr
                 std::set<std::string> existing_klines;
                 for (const auto& k : body.klines) {
                     if (subscriptions_.has_kline(k.symbol, k.duration_ns)) {
-                        existing_klines.insert(k.symbol + "|" + std::to_string(k.duration_ns));
+                        existing_klines.insert(fmt::format("{}|{}", k.symbol, k.duration_ns));
                     }
                 }
                 const auto            delta = subscriptions_.subscribe(body.symbols, requests);
                 std::vector<KlineSub> new_klines;
                 for (const auto& k : body.klines) {
-                    const auto key = k.symbol + "|" + std::to_string(k.duration_ns);
+                    const auto key = fmt::format("{}|{}", k.symbol, k.duration_ns);
                     if (!existing_klines.contains(key)) {
                         new_klines.push_back(k);
                     }
@@ -261,7 +261,7 @@ asio::awaitable<void> GatewayIpcServer::handle_command(const ReceivedFrame& fram
 
     std::string cmd_key;
     if (decode_ok && !body.rid.empty()) {
-        cmd_key = std::string(1, static_cast<char>(body.op)) + ":" + body.rid;
+        cmd_key = fmt::format("{}:{}", static_cast<char>(body.op), body.rid);
     }
 
     if (decode_ok) {

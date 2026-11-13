@@ -153,7 +153,7 @@ std::string peer_string(tcp::socket& socket) {
     boost::system::error_code ec;
     const auto                endpoint = socket.remote_endpoint(ec);
     return ec ? std::string{}
-              : endpoint.address().to_string() + ":" + std::to_string(endpoint.port());
+              : fmt::format("{}:{}", endpoint.address().to_string(), endpoint.port());
 }
 
 bool has_bearer_token(std::string_view header, std::string_view token) {
@@ -201,8 +201,7 @@ void HttpServer::listen(const std::string& address, uint16_t port) {
     acceptor_.set_option(net::socket_base::reuse_address(true), ec);
     acceptor_.bind(ep, ec);
     if (ec) {
-        throw boost::system::system_error(
-            ec, "HttpServer: bind " + address + ":" + std::to_string(port));
+        throw boost::system::system_error(ec, fmt::format("HttpServer: bind {}:{}", address, port));
     }
     acceptor_.listen(net::socket_base::max_listen_connections, ec);
     if (ec) {

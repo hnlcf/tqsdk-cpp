@@ -292,7 +292,7 @@ void CtpTdGateway::do_login() {
         emit(TradeEvent{TradeEvent::Kind::Error,
                         nlohmann::json{},
                         {},
-                        "CTP ReqUserLogin ret=" + std::to_string(ret)});
+                        fmt::format("CTP ReqUserLogin ret={}", ret)});
     }
 }
 
@@ -308,7 +308,7 @@ void CtpTdGateway::do_settlement() {
         emit(TradeEvent{TradeEvent::Kind::Error,
                         nlohmann::json{},
                         {},
-                        "CTP ReqSettlementInfoConfirm ret=" + std::to_string(ret)});
+                        fmt::format("CTP ReqSettlementInfoConfirm ret={}", ret)});
     }
 }
 
@@ -333,7 +333,7 @@ void CtpTdGateway::handle_front_connected() {
             emit(TradeEvent{TradeEvent::Kind::Error,
                             nlohmann::json{},
                             {},
-                            "CTP ReqAuthenticate ret=" + std::to_string(ret)});
+                            fmt::format("CTP ReqAuthenticate ret={}", ret)});
         }
     } else {
         do_login();
@@ -357,7 +357,7 @@ void CtpTdGateway::handle_front_disconnected(int reason) {
     emit(TradeEvent{TradeEvent::Kind::Disconnected,
                     nlohmann::json{},
                     {},
-                    "CTP td disconnected reason=" + std::to_string(reason)});
+                    fmt::format("CTP td disconnected reason={}", reason)});
 }
 
 void CtpTdGateway::handle_authenticate(const CThostFtdcRspAuthenticateField* rsp,
@@ -374,7 +374,7 @@ void CtpTdGateway::handle_authenticate(const CThostFtdcRspAuthenticateField* rsp
         emit(TradeEvent{TradeEvent::Kind::Error,
                         nlohmann::json{},
                         {},
-                        "CTP authenticate failed: " + cstr(info->ErrorMsg)});
+                        fmt::format("CTP authenticate failed: {}", cstr(info->ErrorMsg))});
         arm_watchdog();
         return;
     }
@@ -396,7 +396,7 @@ void CtpTdGateway::handle_login(const CThostFtdcRspUserLoginField& rsp,
         emit(TradeEvent{TradeEvent::Kind::Error,
                         nlohmann::json{},
                         {},
-                        "CTP login failed: " + cstr(info->ErrorMsg)});
+                        fmt::format("CTP login failed: {}", cstr(info->ErrorMsg))});
         arm_watchdog();
         return;
     }
@@ -429,7 +429,7 @@ void CtpTdGateway::handle_settlement(const CThostFtdcSettlementInfoConfirmField*
         emit(TradeEvent{TradeEvent::Kind::Error,
                         nlohmann::json{},
                         {},
-                        "CTP settlement confirm failed: " + cstr(info->ErrorMsg)});
+                        fmt::format("CTP settlement confirm failed: {}", cstr(info->ErrorMsg))});
         return;
     }
     settlement_confirmed_ = true;

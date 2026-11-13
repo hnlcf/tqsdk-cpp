@@ -95,7 +95,7 @@ private:
                                  {"offset", magic_enum::enum_name(req.offset)},
                                  {"volume", req.volume},
                                  {"price", req.limit_price}};
-            user["trades"] = {{rid + "_t1", trade}};
+            user["trades"] = {{fmt::format("{}_t1", rid), trade}};
         }
 
         return nlohmann::json{{"trade", {{"", {{"user", user}}}}}};

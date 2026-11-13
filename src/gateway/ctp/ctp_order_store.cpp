@@ -124,7 +124,7 @@ void CtpOrderStore::save() const {
         j["orders"][rid] = to_json(order);
     }
 
-    const auto tmp = path_ + ".tmp";
+    const auto tmp = fmt::format("{}.tmp", path_);
     {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
         if (!out.is_open()) {

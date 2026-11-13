@@ -152,8 +152,9 @@ HttpServer::RouteHandlers::option_analytics(std::string                 underlyi
         if (std::isfinite(quote.last_price) && quote.last_price > 0) {
             market_prices[contract.instrument_id] = quote.last_price;
         }
-        by_strike_right[std::to_string(static_cast<int64_t>(std::llround(contract.strike_price))) +
-                        "|" + contract.option_class] = &contract;
+        by_strike_right[fmt::format("{}|{}",
+                                    static_cast<int64_t>(std::llround(contract.strike_price)),
+                                    contract.option_class)] = &contract;
     }
     std::sort(strikes.begin(), strikes.end());
     strikes.erase(std::unique(strikes.begin(), strikes.end()), strikes.end());
@@ -161,8 +162,9 @@ HttpServer::RouteHandlers::option_analytics(std::string                 underlyi
         spot, strikes, t, rate, dividend, vol, market_prices, underlying, window);
     json out_rows = json::array();
     for (auto& row : rows) {
-        const auto key = std::to_string(static_cast<int64_t>(std::llround(row.strike))) + "|" +
-                         (row.right == OptionRight::CALL ? "CALL" : "PUT");
+        const auto key = fmt::format("{}|{}",
+                                     static_cast<int64_t>(std::llround(row.strike)),
+                                     row.right == OptionRight::CALL ? "CALL" : "PUT");
         if (auto it = by_strike_right.find(key); it != by_strike_right.end()) {
             row.instrument_id = it->second->instrument_id;
         }

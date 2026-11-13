@@ -242,7 +242,7 @@ ContinuousTable::adjust_daily(const std::vector<KlineBar>&                      
         const auto old_it = contract_bars.find(roll.from);
         const auto new_it = contract_bars.find(roll.to);
         if (old_it == contract_bars.end() || new_it == contract_bars.end()) {
-            result.warnings.push_back("missing contract bars for roll " + roll.date);
+            result.warnings.push_back(fmt::format("missing contract bars for roll {}", roll.date));
             continue;
         }
         const KlineBar* old_bar = nullptr;
@@ -262,7 +262,7 @@ ContinuousTable::adjust_daily(const std::vector<KlineBar>&                      
         }
         if (old_bar == nullptr || new_bar == nullptr || !std::isfinite(old_bar->close) ||
             !std::isfinite(new_bar->close) || old_bar->close <= 0.0 || new_bar->close <= 0.0) {
-            result.warnings.push_back("no usable prices for roll " + roll.date);
+            result.warnings.push_back(fmt::format("no usable prices for roll {}", roll.date));
             continue;
         }
         ratios.emplace_back(roll.date, new_bar->close / old_bar->close);

@@ -13,8 +13,7 @@ inline std::string make_stream_epoch(std::string_view prefix = "ipc") {
     const auto                   ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                                           std::chrono::system_clock::now().time_since_epoch())
                                           .count();
-    return std::string(prefix) + "-" + std::to_string(ns) + "-" +
-           std::to_string(counter.fetch_add(1, std::memory_order_relaxed));
+    return fmt::format("{}-{}-{}", prefix, ns, counter.fetch_add(1, std::memory_order_relaxed));
 }
 
 /// 一次 gap 的描述，交给上层决定 md resync / td reconcile。

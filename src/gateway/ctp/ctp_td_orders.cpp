@@ -336,8 +336,7 @@ void CtpTdGateway::handle_order_insert(const CThostFtdcInputOrderField& input,
     (void)request_id;
     (void)is_last;
     if (info != nullptr && info->ErrorID != 0) {
-        const std::string message =
-            "CTP " + std::to_string(info->ErrorID) + ": " + cstr(info->ErrorMsg);
+        const std::string message = fmt::format("CTP {}: {}", info->ErrorID, cstr(info->ErrorMsg));
         SPDLOG_WARN("[CtpTd] insert rejected ref={} err={}", cstr(input.OrderRef), message);
         reject_order(cstr(input.OrderRef), message);
     }

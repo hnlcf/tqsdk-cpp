@@ -30,7 +30,7 @@ Message get_or_throw(const Json& j, const char* name) {
     } catch (const WsProtocolError&) {
         throw;
     } catch (const std::exception& e) {
-        throw WsProtocolError(std::string(name) + ": " + e.what());
+        throw WsProtocolError(fmt::format("{}: {}", name, e.what()));
     }
 }
 
@@ -387,7 +387,7 @@ inline WsClientMessage parse_ws_client_message(const Json& j) {
     if (op.empty()) {
         throw WsProtocolError("missing op");
     }
-    throw WsProtocolError("unknown op: " + op);
+    throw WsProtocolError(fmt::format("unknown op: {}", op));
 }
 
 template <typename Text, std::enable_if_t<kWsTextLike<Text>, int>>
@@ -437,7 +437,7 @@ inline WsServerMessage parse_ws_server_message(const Json& j) {
     if (type.empty()) {
         throw WsProtocolError("missing type");
     }
-    throw WsProtocolError("unknown type: " + type);
+    throw WsProtocolError(fmt::format("unknown type: {}", type));
 }
 
 template <typename Text, std::enable_if_t<kWsTextLike<Text>, int>>

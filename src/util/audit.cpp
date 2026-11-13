@@ -23,7 +23,7 @@ Log::Log(Options options)
     if (!enabled_) {
         return;
     }
-    name_ = "tqsdk.audit." + std::to_string(reinterpret_cast<std::uintptr_t>(this));
+    name_ = fmt::format("tqsdk.audit.{}", reinterpret_cast<std::uintptr_t>(this));
     if (options.file.empty()) {
         auto sink = std::make_shared<spdlog::sinks::stdout_sink_mt>();
         sink->set_pattern("%v");

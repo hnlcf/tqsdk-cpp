@@ -56,7 +56,7 @@ void from_json_fields(const json& j, Msg& m, const Tuple& t, std::index_sequence
 template <typename Msg>
 void message_from_json(const json& j, Msg& m) {
     if (!j.is_object()) {
-        throw std::invalid_argument(std::string(Msg::aid) + ": message must be object");
+        throw std::invalid_argument(fmt::format("{}: message must be object", Msg::aid));
     }
 
     auto it = j.find("aid");
@@ -65,8 +65,8 @@ void message_from_json(const json& j, Msg& m) {
     }
     if (it->get<std::string>() != Msg::aid) // 防止类型错配
     {
-        throw std::invalid_argument(std::string("aid mismatch: expected ") + Msg::aid + ", got " +
-                                    it->get<std::string>());
+        throw std::invalid_argument(
+            fmt::format("aid mismatch: expected {}, got {}", Msg::aid, it->get<std::string>()));
     }
 
     auto t = Msg::fields();

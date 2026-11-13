@@ -26,7 +26,7 @@ struct AccountScope {
 class AccountNotFound : public std::runtime_error {
 public:
     explicit AccountNotFound(std::string account_id)
-        : std::runtime_error("account not found: " + account_id),
+        : std::runtime_error(fmt::format("account not found: {}", account_id)),
           account_id(std::move(account_id)) {}
 
     std::string account_id;

@@ -223,7 +223,7 @@ T parse_path_number(std::string_view s) {
         auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), value);
         if (ec != std::errc{} || ptr != s.data() + s.size()) {
             throw HttpError{http::status::bad_request,
-                            json{{"error", "invalid path parameter: " + std::string(s)}}};
+                            json{{"error", fmt::format("invalid path parameter: {}", s)}}};
         }
         return value;
     } else {
@@ -233,7 +233,7 @@ T parse_path_number(std::string_view s) {
         double v        = std::strtod(tmp.c_str(), &end);
         if (end != tmp.c_str() + tmp.size() || errno == ERANGE) {
             throw HttpError{http::status::bad_request,
-                            json{{"error", "invalid path parameter: " + tmp}}};
+                            json{{"error", fmt::format("invalid path parameter: {}", tmp)}}};
         }
         return static_cast<T>(v);
     }

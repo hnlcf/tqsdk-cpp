@@ -565,9 +565,9 @@ Body decode_body(const ReceivedFrame& frame) {
 template <FrameType T>
 typename BodyFor<T>::type decode_as(const ReceivedFrame& frame) {
     if (frame.type != T) {
-        throw IpcError(std::string("decode_as: frame type mismatch (expected ") +
-                       std::to_string(static_cast<int>(T)) + ", got " +
-                       std::to_string(static_cast<int>(frame.type)) + ")");
+        throw IpcError(fmt::format("decode_as: frame type mismatch (expected {}, got {})",
+                                   static_cast<int>(T),
+                                   static_cast<int>(frame.type)));
     }
     return decode_body<typename BodyFor<T>::type>(frame);
 }
