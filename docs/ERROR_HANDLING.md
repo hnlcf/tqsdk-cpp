@@ -14,6 +14,7 @@
 | `config` | `config::ConfigError` / `ConfigErrorCode` | TOML 文件、语法、字段校验 |
 | `ipc` | `ipc::IpcFailure` / `IpcErrorCode` | 建连/握手边界；帧内部仍使用 IpcError 适配 |
 | `gateway` | `gateway::GatewayError` / `GatewayErrorCode` | TqApi 建连/握手、网关构造边界 |
+| `auth` | `auth::AuthError` / `AuthErrorCode` | 快期账户登录边界 |
 | `data` | `data::DataError`（待添加） | 缓存、持久化、反序列化、数据一致性 |
 | `serve` | `serve::ServeError`（待添加） | 参数提取、路由、HTTP 映射 |
 | `backtest` | `backtest::BacktestError`（待添加） | C ABI 参数、回测引擎输入 |

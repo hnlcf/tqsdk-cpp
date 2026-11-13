@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tqsdk/pch.h"
+#include "tqsdk/serve/serve_error.h"
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -61,11 +62,8 @@ struct Response {
     std::vector<std::pair<std::string, std::string>> headers;
 };
 
-/// 在 handler 内抛出以返回错误响应（携带状态码与 JSON body）。
-struct HttpError {
-    http::status status;
-    json         body;
-};
+/// 兼容旧调用的路由错误别名；新代码可直接使用 ServeError。
+using HttpError = ServeError;
 
 /// 查询字符串提取器：形参写 Query<MyStruct> 即可把 ?a=1&b=x 映射成结构体。
 template <typename T>
