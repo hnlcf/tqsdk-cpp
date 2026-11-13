@@ -231,66 +231,82 @@ bool IpcClient::observe_stream(StreamTracker&    tracker,
     return true;
 }
 
-asio::awaitable<CommandAck> IpcClient::send_command_and_wait(const CommandBody&        body,
-                                                             std::chrono::milliseconds timeout,
-                                                             int max_attempts) {
-    if (!session_ || !session_->is_open()) {
-        throw IpcError("IpcClient::send_command_and_wait: session closed");
-    }
-
-    // 以 body.rid 作为关联键（调用方必须填写；撤单通常用 order_id）。
-    const OrderId rid      = body.rid;
-    const int     attempts = std::max(1, max_attempts);
-
-    for (int attempt = 1; attempt <= attempts; ++attempt) {
+asio::awaitable<IpcResult<CommandAck>> IpcClient::send_command_and_wait(
+    const CommandBody& body, std::chrono::milliseconds timeout, int max_attempts) noexcept {
+    try {
         if (!session_ || !session_->is_open()) {
-            throw IpcError("IpcClient::send_command_and_wait: session closed");
+            co_return std::unexpected(IpcFailure{
+                IpcErrorCode::closed, "IpcClient::send_command_and_wait: session closed"});
         }
 
-        AckWaiter w(ex_);
+        // 以 body.rid 作为关联键（调用方必须填写；撤单通常用 order_id）。
+        const OrderId rid      = body.rid;
+        const int     attempts = std::max(1, max_attempts);
 
-        // 关键：必须**先登记等待者、再发送**。发送是 co_await，会在本协程挂起期间
-        // 让出 io 线程；若对端处理极快，CommandAck 可能在登记之前就被 read_loop
-        // 收下并派发，此时若无等待者则会被丢弃，导致本协程永远等不到 ack。
-        {
-            std::lock_guard<std::mutex> lk(ack_mutex_);
-            pending_acks_[rid] = &w;
-        }
-
-        // RAII：退出本轮（ack/超时/异常）时一定从表里摘除。
-        struct EraseGuard {
-            std::unordered_map<OrderId, AckWaiter*>& m;
-            std::mutex&                              mu;
-            OrderId                                  rid;
-            ~EraseGuard() {
-                std::lock_guard<std::mutex> lk(mu);
-                m.erase(rid);
+        for (int attempt = 1; attempt <= attempts; ++attempt) {
+            if (!session_ || !session_->is_open()) {
+                co_return std::unexpected(IpcFailure{
+                    IpcErrorCode::closed, "IpcClient::send_command_and_wait: session closed"});
             }
-        } guard{pending_acks_, ack_mutex_, rid};
 
-        auto bytes = encode_body(body, encoding_);
-        co_await send_bytes(FrameType::Command, bytes);
+            AckWaiter w(ex_);
 
-        // 超时 timer：同时充当"被 ack 唤醒"的信号（complete_ack 会 cancel 它）。
-        w.timer.expires_after(timeout);
-        boost::system::error_code ec;
-        co_await w.timer.async_wait(asio::redirect_error(asio::use_awaitable, ec));
+            // 关键：必须**先登记等待者、再发送**。发送是 co_await，会在本协程挂起期间
+            // 让出 io 线程；若对端处理极快，CommandAck 可能在登记之前就被 read_loop
+            // 收下并派发，此时若无等待者则会被丢弃，导致本协程永远等不到 ack。
+            {
+                std::lock_guard<std::mutex> lk(ack_mutex_);
+                pending_acks_[rid] = &w;
+            }
 
-        if (w.result.has_value()) {
-            co_return *w.result;
+            // RAII：退出本轮（ack/超时/异常）时一定从表里摘除。
+            struct EraseGuard {
+                std::unordered_map<OrderId, AckWaiter*>& m;
+                std::mutex&                              mu;
+                OrderId                                  rid;
+                ~EraseGuard() {
+                    std::lock_guard<std::mutex> lk(mu);
+                    m.erase(rid);
+                }
+            } guard{pending_acks_, ack_mutex_, rid};
+
+            auto bytes = encode_body(body, encoding_);
+            co_await send_bytes(FrameType::Command, bytes);
+
+            // 超时 timer：同时充当"被 ack 唤醒"的信号（complete_ack 会 cancel 它）。
+            w.timer.expires_after(timeout);
+            boost::system::error_code ec;
+            co_await w.timer.async_wait(asio::redirect_error(asio::use_awaitable, ec));
+
+            if (w.result.has_value()) {
+                co_return *w.result;
+            }
+            if (ec == asio::error::operation_aborted) {
+                // 被 stop()/关闭唤醒；不重试，避免在已关闭会话上继续发命令。
+                co_return std::unexpected(IpcFailure{
+                    IpcErrorCode::closed,
+                    "IpcClient::send_command_and_wait: session closed while waiting ack"});
+            }
+            if (attempt < attempts) {
+                SPDLOG_WARN("[IpcClient] command rid='{}' ack timeout, retry {}/{}",
+                            rid,
+                            attempt + 1,
+                            attempts);
+            }
         }
-        if (ec == asio::error::operation_aborted) {
-            // 被 stop()/关闭唤醒；不重试，避免在已关闭会话上继续发命令。
-            throw IpcError("IpcClient::send_command_and_wait: session closed while waiting ack");
-        }
-        if (attempt < attempts) {
-            SPDLOG_WARN("[IpcClient] command rid='{}' ack timeout, retry {}/{}",
-                        rid,
-                        attempt + 1,
-                        attempts);
-        }
+        co_return std::unexpected(IpcFailure{
+            IpcErrorCode::timeout, "IpcClient::send_command_and_wait: command ack timeout"});
+    } catch (const std::exception& e) {
+        co_return std::unexpected(IpcFailure{
+            IpcErrorCode::protocol,
+            fmt::format("IpcClient::send_command_and_wait failed: {}", e.what()),
+        });
+    } catch (...) {
+        co_return std::unexpected(IpcFailure{
+            IpcErrorCode::unknown,
+            "IpcClient::send_command_and_wait failed: unknown error",
+        });
     }
-    throw IpcError("IpcClient::send_command_and_wait: command ack timeout");
 }
 
 void IpcClient::complete_ack(const OrderId& rid, const CommandAck& ack) noexcept {

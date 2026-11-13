@@ -77,7 +77,15 @@ asio::awaitable<CommandAck> RemoteTdGateway::insert_order(const InsertOrderReq& 
     body.op     = CommandOp::InsertOrder;
     body.rid    = rid;
     body.insert = req;
-    co_return co_await client_.send_command_and_wait(body, ack_timeout_, 2);
+    auto result = co_await client_.send_command_and_wait(body, ack_timeout_, 2);
+    if (!result) {
+        co_return CommandAck{false,
+                             rid,
+                             fmt::format("{} ({})",
+                                         result.error().detail,
+                                         ipc::ipc_error_name(result.error().code))};
+    }
+    co_return *result;
 }
 
 asio::awaitable<CommandAck> RemoteTdGateway::cancel_order(const CancelOrderReq& req) {
@@ -86,7 +94,15 @@ asio::awaitable<CommandAck> RemoteTdGateway::cancel_order(const CancelOrderReq& 
     // 关联键：撤单以被撤单的 order_id 作为 rid（回执据此匹配等待者）。
     body.rid    = req.order_id;
     body.cancel = req;
-    co_return co_await client_.send_command_and_wait(body, ack_timeout_, 2);
+    auto result = co_await client_.send_command_and_wait(body, ack_timeout_, 2);
+    if (!result) {
+        co_return CommandAck{false,
+                             req.order_id,
+                             fmt::format("{} ({})",
+                                         result.error().detail,
+                                         ipc::ipc_error_name(result.error().code))};
+    }
+    co_return *result;
 }
 
 void RemoteTdGateway::push(TradeEvent ev) {

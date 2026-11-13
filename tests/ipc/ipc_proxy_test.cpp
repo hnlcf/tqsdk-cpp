@@ -401,18 +401,15 @@ TEST(IpcProxyTest, CommandAckTimeout) {
 
     bool timed_out = false;
     auto inserter  = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
-        try {
-            InsertOrderReq req;
-            req.instrument_id = "SHFE.rb2610";
-            req.direction     = Direction::BUY;
-            req.offset        = Offset::OPEN;
-            req.price_type    = PriceType::LIMIT;
-            req.limit_price   = 3800.0;
-            req.volume        = 1;
-            (void)co_await g.td->insert_order(req, "rid_tmo");
-        } catch (const IpcError&) {
-            timed_out = true;
-        }
+        InsertOrderReq req;
+        req.instrument_id = "SHFE.rb2610";
+        req.direction     = Direction::BUY;
+        req.offset        = Offset::OPEN;
+        req.price_type    = PriceType::LIMIT;
+        req.limit_price   = 3800.0;
+        req.volume        = 1;
+        const auto ack    = co_await g.td->insert_order(req, "rid_tmo");
+        timed_out         = !ack.success;
     });
 
     test::wait_all(io, std::chrono::seconds(2), node_reader, inserter);

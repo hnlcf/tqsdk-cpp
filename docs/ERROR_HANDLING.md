@@ -118,17 +118,26 @@ C ABI（`backtest_c_api.cpp`）例外：异常绝不允许跨 C ABI，必须在�
   `try_parse_*` → `ConfigResult<T>`；
 - `gw_main/node_main` 不再用异常捕获配置错误，改为 expected 分支；
 - 新增 `try_make_tqapi()`，把 gateway 初始化异常隔离为 `GatewayError`；
-- `IpcClient::connect()` 返回 `expected<void, IpcFailure>`；
+- `IpcClient::connect()` / `send_command_and_wait()` 返回 `expected<..., IpcFailure>`；
 - `TqAuth::login_result()` 返回 `expected<void, AuthError>`；
+- HTTP route handler 返回 `ServeResult<json>`，router 在边界解包为 Response；
 - `node` 主账户和附加账户均使用 expected 边界；
 - HTTP 调用方（holiday/catalog/continuous/auth）已在本层处理错误；
 - 新增 `util::panic` 及 HTTP/config 独立错误类型；
 - 新增错误路径测试。
 
-后续迁移：
+### 6.1 内部异常白名单
 
-- `ipc::IpcError` 从 `runtime_error` 改为帧/会话 expected；
-- `serve::HttpError` 从 throw 改为 handler `expected<Response, ServeError>`；
-- gateway 内部 TQ/CTP/Sim 异步操作继续向 GatewayError 细化；
-- `data` 的 SQLite/JSON 适配器统一 expected；
-- `backtest_c_api` 增加 C 错误码并清理所有 catch。
+公共边界已改为 expected/错误码后，以下内部路径仍允许异常，但它们必须在模块边界
+被捕获，不允许穿透到 app/HTTP/IPC 对端：
+
+- Boost.Asio 协程的 `operation_aborted`/取消异常：作为协程控制流保留；
+- nlohmann JSON、toml++、SQLiteCpp、OpenSSL 的适配器异常：在 codec/config/store/http
+  适配层捕获并转换；
+- `WsProtocolError`、`IpcError`：在 WebSocket/IPC session 边界转换为错误事件或关闭连接；
+- `config` 的旧 `parse_*` 兼容 API：内部统一由 `try_parse_*`/`load_*` 包装；
+- CTP/SIM 网关的异步内部路径：由 `try_make_tqapi`/事件循环边界转换为 GatewayError。
+
+这些内部异常不再跨进程或跨公共 API。后续如要把这些路径也完全改成
+`std::expected`，应逐模块替换 Asio `use_awaitable` 的异常接口，而不是继续增加
+跨层 throw。
