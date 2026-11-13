@@ -72,8 +72,7 @@ if (( ! SKIP_BUILD )); then
         }
         cmake -S "$ROOT" -B "$BUILD" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_CXX_FLAGS="${TQSDK_GCC_INSTALL_DIR:+--gcc-install-dir=$TQSDK_GCC_INSTALL_DIR}" \
+            -DCMAKE_CXX_COMPILER="${TQSDK_CXX_COMPILER:-g++-14}" \
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
             -DTQSDK_ENABLE_CTP=ON \
             -DTQSDK_BUILD_TESTS=OFF \

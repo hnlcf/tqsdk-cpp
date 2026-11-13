@@ -70,8 +70,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_MANIFEST_DIR="$VCPKG_MANIFEST_DIR" \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_CXX_FLAGS="--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/14" \
+            -DCMAKE_CXX_COMPILER=g++-14 \
             -DTQSDK_BUILD_TESTS=OFF \
             -DTQSDK_ENABLE_CTP=ON \
             -DTQSDK_BUILD_APPS=ON \

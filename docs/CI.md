@@ -44,12 +44,14 @@ artifacts/tsan/tsan.log
 
 `.github/workflows/ci.yml` 提供两条独立流水线：
 
-- `cpp`：Ubuntu + vcpkg（`ci/vcpkg.json` 只装核心依赖，不拉 Qt）构建并跑 CTest；
+- `cpp`：Ubuntu 24.04 + GCC 14 + vcpkg（`ci/vcpkg.json` 只装核心依赖，不拉 Qt）
+  构建并跑 CTest；GCC 14 直接提供 C++23 `std::expected`，避免 clang 18 与
+  libstdc++ 头文件混用导致 `std::expected` 缺失；
 - `web`：pnpm/typecheck/test/build + WASM ABI 脚本。
 
 `ci/vcpkg.json` 是 CI 专用 manifest，避免 CI 为了核心测试安装完整 Qt/UI 依赖；
-UI/桌面构建仍在本地/发布环境执行。GitHub 流水线尚未在本机实际触发，不能把“workflow
-文件已存在”写成“远程 CI 已通过”。
+UI/桌面构建仍在本地/发布环境执行。本地已用 GCC 16.2.1 以相同 C++23 配置构建并跑完 365 项 CTest；
+远程 CI 是否通过以 GitHub Actions 实际结果为准。
 
 ## 3. 短 soak
 
