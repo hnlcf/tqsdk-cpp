@@ -27,7 +27,7 @@ struct AccountScope {
 /// Before multi-account was introduced, `account_api()` simply returned the
 /// primary TqApi for any request. Keep that compatibility when no manager is
 /// configured; with a manager, an empty query selects the default account and
-/// an unknown id raises AccountNotFound instead of silently reading the wrong
+/// an unknown id returns nullopt instead of silently reading the wrong
 /// account.
 class AccountRouter {
 public:
