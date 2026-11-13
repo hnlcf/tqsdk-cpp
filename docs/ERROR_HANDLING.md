@@ -11,8 +11,8 @@
 | 模块 | 错误类型 | 适用范围 |
 |---|---|---|
 | `util/http_*` | `util::HttpError` / `HttpErrorCode` | URL、DNS、连接、TLS、HTTP 状态、读写 |
-| `config` | `config::ConfigError` / `ConfigErrorCode` | TOML 文件、语法、字段校验 |
-| `ipc` | `ipc::IpcFailure` / `IpcErrorCode` | 建连/握手边界；帧内部仍使用 IpcError 适配 |
+| `config` | `config::ConfigError` / `ConfigErrorCode` | TOML 文件、语法、字段校验、枚举/类型错误 |
+| `ipc` | `ipc::IpcFailure` / `IpcErrorCode` | 建连、握手、通道、会话、命令 ack |
 | `gateway` | `gateway::GatewayError` / `GatewayErrorCode` | TqApi 建连/握手、网关构造边界 |
 | `auth` | `auth::AuthError` / `AuthErrorCode` | 快期账户登录边界 |
 | `data` | `bool ready()` / status JSON | 缓存打开失败降级；数据读写不在公共 API 抛异常 |
@@ -128,6 +128,8 @@ C ABI（`backtest_c_api.cpp`）例外：异常绝不允许跨 C ABI，必须在�
 - account 解析改为 `optional`，删除 `AccountNotFound`；
 - WS 解析改为 `WsParseResult`，删除 `WsProtocolError`；
 - CTP 停机和 gateway 启动失败改为日志/CommandAck，不再 throw；
+- HTTP route 参数提取改为 `ServeResult`，router 不再 throw；
+- `make_tqapi()` 改为 `GatewayResult`，配置/建连失败日志化；
 - 新增错误路径测试。
 
 ### 6.1 内部异常白名单
@@ -138,8 +140,9 @@ C ABI（`backtest_c_api.cpp`）例外：异常绝不允许跨 C ABI，必须在�
 - Boost.Asio 协程的 `operation_aborted`/取消异常：作为协程控制流保留；
 - nlohmann JSON、toml++、SQLiteCpp、OpenSSL 的适配器异常：在 codec/config/store/http
   适配层捕获并转换；
-- `IpcError`：在 IPC session 边界转换为错误事件或关闭连接；WS 解析已改为 `WsParseResult`；
-- `config` 的旧 `parse_*` 兼容 API：内部统一由 `try_parse_*`/`load_*` 包装；
+- IPC 通道/会话已改为 `IpcResult`，不再有自建 `IpcError` 异常类；
+- config parser 已使用内部 `ConfigParseState` 汇总错误，不再主动 throw；
+- `nlohmann::json` 的 `from_json`/`get` 适配器仍会抛标准异常，公共解析入口统一捕获为模块错误；
 - CTP/SIM 网关的异步内部路径：由 `try_make_tqapi`/事件循环边界转换为 GatewayError。
 
 这些内部异常不再跨进程或跨公共 API。后续如要把这些路径也完全改成
