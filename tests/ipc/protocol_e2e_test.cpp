@@ -32,7 +32,7 @@ TEST(ProtocolE2E, UdsJsonFullHandshakeAndCommand) {
         UdsChannel ch(std::move(sock));
 
         // 1) 收 Hello
-        auto f1 = co_await ch.async_recv();
+        auto f1 = (co_await ch.async_recv()).value();
         if (!f1.has_value()) {
             ADD_FAILURE() << "srv: no Hello";
             co_return;
@@ -44,7 +44,7 @@ TEST(ProtocolE2E, UdsJsonFullHandshakeAndCommand) {
         co_await ch.async_send(FrameType::HelloAck, enc1, ConstSlice{p1});
 
         // 2) 收 Subscribe
-        auto f2 = co_await ch.async_recv();
+        auto f2 = (co_await ch.async_recv()).value();
         if (!f2.has_value()) {
             ADD_FAILURE() << "srv: no Subscribe";
             co_return;
@@ -62,7 +62,7 @@ TEST(ProtocolE2E, UdsJsonFullHandshakeAndCommand) {
         co_await ch.async_send(FrameType::MarketDataPush, enc3, ConstSlice{p3});
 
         // 4) 收 Command（下单）
-        auto f4 = co_await ch.async_recv();
+        auto f4 = (co_await ch.async_recv()).value();
         if (!f4.has_value()) {
             ADD_FAILURE() << "srv: no Command";
             co_return;
@@ -86,7 +86,7 @@ TEST(ProtocolE2E, UdsJsonFullHandshakeAndCommand) {
 
         auto [e1, b1] = encode_frame<FrameType::Hello>(HelloBody{1, IpcRole::Gateway, "gw"});
         co_await ch->async_send(FrameType::Hello, e1, ConstSlice{b1});
-        auto r1 = co_await ch->async_recv();
+        auto r1 = (co_await ch->async_recv()).value();
         if (!r1.has_value()) {
             ADD_FAILURE() << "cli: no HelloAck";
             co_return;
@@ -97,14 +97,14 @@ TEST(ProtocolE2E, UdsJsonFullHandshakeAndCommand) {
         sub.symbols   = {"SHFE.rb2610"};
         auto [e2, b2] = encode_frame<FrameType::Subscribe>(sub);
         co_await ch->async_send(FrameType::Subscribe, e2, ConstSlice{b2});
-        auto r2 = co_await ch->async_recv();
+        auto r2 = (co_await ch->async_recv()).value();
         if (!r2.has_value()) {
             ADD_FAILURE() << "cli: no SubscribeAck";
             co_return;
         }
         EXPECT_TRUE(decode_as<FrameType::SubscribeAck>(*r2).ok);
 
-        auto r3 = co_await ch->async_recv();
+        auto r3 = (co_await ch->async_recv()).value();
         if (!r3.has_value()) {
             ADD_FAILURE() << "cli: no MarketDataPush";
             co_return;
@@ -123,7 +123,7 @@ TEST(ProtocolE2E, UdsJsonFullHandshakeAndCommand) {
         cmd.insert.volume        = 3;
         auto [e4, b4]            = encode_frame<FrameType::Command>(cmd);
         co_await ch->async_send(FrameType::Command, e4, ConstSlice{b4});
-        auto r4 = co_await ch->async_recv();
+        auto r4 = (co_await ch->async_recv()).value();
         if (!r4.has_value()) {
             ADD_FAILURE() << "cli: no CommandAck";
             co_return;
@@ -166,7 +166,7 @@ TEST(ProtocolE2E, TcpMsgpackHandshake) {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);
         TcpChannel ch(std::move(sock));
 
-        auto f = co_await ch.async_recv();
+        auto f = (co_await ch.async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "srv: no Hello";
             co_return;
@@ -176,7 +176,7 @@ TEST(ProtocolE2E, TcpMsgpackHandshake) {
         auto [e, b] = encode_frame<FrameType::HelloAck>(HelloAckBody{true, ""}, kEnc);
         co_await ch.async_send(FrameType::HelloAck, e, ConstSlice{b});
 
-        auto f2 = co_await ch.async_recv();
+        auto f2 = (co_await ch.async_recv()).value();
         if (!f2.has_value()) {
             ADD_FAILURE() << "srv: no Subscribe";
             co_return;
@@ -195,7 +195,7 @@ TEST(ProtocolE2E, TcpMsgpackHandshake) {
         auto [e, b] =
             encode_frame<FrameType::Hello>(HelloBody{1, IpcRole::Gateway, "tcp-gw"}, kEnc);
         co_await ch->async_send(FrameType::Hello, e, ConstSlice{b});
-        auto r = co_await ch->async_recv();
+        auto r = (co_await ch->async_recv()).value();
         if (!r.has_value()) {
             ADD_FAILURE() << "cli: no HelloAck";
             co_return;
@@ -206,7 +206,7 @@ TEST(ProtocolE2E, TcpMsgpackHandshake) {
         sub.klines    = {{"DCE.i2601", 60'000'000'000LL, 100}};
         auto [e2, b2] = encode_frame<FrameType::Subscribe>(sub, kEnc);
         co_await ch->async_send(FrameType::Subscribe, e2, ConstSlice{b2});
-        auto r2 = co_await ch->async_recv();
+        auto r2 = (co_await ch->async_recv()).value();
         if (!r2.has_value()) {
             ADD_FAILURE() << "cli: no SubscribeAck";
             co_return;
@@ -242,7 +242,7 @@ TEST(ProtocolE2E, UdsManyFramesStream) {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);
         UdsChannel ch(std::move(sock));
         for (int i = 0; i < kCount; ++i) {
-            auto f = co_await ch.async_recv();
+            auto f = (co_await ch.async_recv()).value();
             if (!f.has_value()) {
                 ADD_FAILURE() << "srv: eof at " << i;
                 co_return;

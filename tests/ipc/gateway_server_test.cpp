@@ -724,12 +724,15 @@ TEST(IpcClientTest, ReconnectsAndResumes) {
         },
         asio::detached);
 
-    IpcClient::SessionFactory factory = [&io,
-                                         port]() -> asio::awaitable<std::unique_ptr<IpcSession>> {
+    IpcClient::SessionFactory factory =
+        [&io, port]() -> asio::awaitable<IpcResult<std::unique_ptr<IpcSession>>> {
         auto channel = TcpChannel::connect(io, "127.0.0.1", port);
         auto session = std::make_unique<IpcSession>(
             std::move(channel), io.get_executor(), opt(IpcRole::Node, "node"));
-        co_await session->start();
+        auto started = co_await session->start();
+        if (!started) {
+            co_return std::unexpected(started.error());
+        }
         co_return session;
     };
 

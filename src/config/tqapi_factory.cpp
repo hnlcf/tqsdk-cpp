@@ -348,10 +348,13 @@ asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context&           c
         auto ipc_cfg         = cfg.ipc;
         auto endpoint        = ep;
         auto session_factory = [&ctx, ex, ipc_cfg, endpoint, opts]()
-            -> asio::awaitable<std::unique_ptr<ipc::IpcSession>> {
+            -> asio::awaitable<ipc::IpcResult<std::unique_ptr<ipc::IpcSession>>> {
             auto channel = connect_channel(ctx, ipc_cfg, endpoint);
             auto session = std::make_unique<ipc::IpcSession>(std::move(channel), ex, opts);
-            co_await session->start(); // 握手；失败抛异常
+            auto started = co_await session->start();
+            if (!started) {
+                co_return std::unexpected(started.error());
+            }
             co_return session;
         };
 

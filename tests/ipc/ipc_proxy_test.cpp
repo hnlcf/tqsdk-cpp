@@ -374,7 +374,7 @@ TEST(IpcProxyTest, GatewayEventDelivered) {
 }
 
 // ---------------------------------------------------------------------------
-// 6) 命令 ack 超时：node 不回 ack -> 代理 insert_order 抛 IpcError
+// 6) 命令 ack 超时：node 不回 ack -> 代理 insert_order 抛 std::runtime_error
 // ---------------------------------------------------------------------------
 TEST(IpcProxyTest, CommandAckTimeout) {
     std::string      path = make_uds_path("tmo");

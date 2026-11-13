@@ -3,7 +3,7 @@
 #include "tqsdk/pch.h"
 
 #include "frame.h"
-#include "ipc_channle.h" // IpcError
+#include "ipc_channle.h" // std::runtime_error
 
 namespace tqsdk {
 namespace ipc {
@@ -25,10 +25,10 @@ public:
     /// 该 codec 对应的帧编码标识。
     virtual FrameEncoding encoding() const noexcept = 0;
 
-    /// DOM -> 线上字节。失败抛 IpcError。
+    /// DOM -> 线上字节。失败抛 std::runtime_error。
     virtual std::vector<uint8_t> encode(const nlohmann::json& dom) const = 0;
 
-    /// 线上字节 -> DOM。失败（非法输入）抛 IpcError。
+    /// 线上字节 -> DOM。失败（非法输入）抛 std::runtime_error。
     virtual nlohmann::json decode(std::span<const uint8_t> bytes) const = 0;
 };
 
@@ -46,7 +46,7 @@ public:
         try {
             return nlohmann::json::parse(bytes.begin(), bytes.end());
         } catch (const nlohmann::json::exception& e) {
-            throw IpcError(std::string("json decode failed: ") + e.what());
+            throw std::runtime_error(std::string("json decode failed: ") + e.what());
         }
     }
 };
@@ -60,7 +60,7 @@ public:
         try {
             return nlohmann::json::to_msgpack(dom);
         } catch (const nlohmann::json::exception& e) {
-            throw IpcError(std::string("msgpack encode failed: ") + e.what());
+            throw std::runtime_error(std::string("msgpack encode failed: ") + e.what());
         }
     }
 
@@ -68,12 +68,12 @@ public:
         try {
             return nlohmann::json::from_msgpack(bytes.begin(), bytes.end());
         } catch (const nlohmann::json::exception& e) {
-            throw IpcError(std::string("msgpack decode failed: ") + e.what());
+            throw std::runtime_error(std::string("msgpack decode failed: ") + e.what());
         }
     }
 };
 
-/// 取编码对应的 codec 单例。未知编码抛 IpcError。
+/// 取编码对应的 codec 单例。未知编码抛 std::runtime_error。
 inline const ICodec& codec_for(FrameEncoding enc) {
     static const JsonCodec    json_codec;
     static const MsgpackCodec msgpack_codec;
@@ -83,7 +83,7 @@ inline const ICodec& codec_for(FrameEncoding enc) {
     case FrameEncoding::MessagePack:
         return msgpack_codec;
     }
-    throw IpcError("codec_for: unknown FrameEncoding");
+    throw std::runtime_error("codec_for: unknown FrameEncoding");
 }
 
 /// 默认编码（一期用 JSON）。

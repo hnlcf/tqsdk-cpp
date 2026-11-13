@@ -171,18 +171,12 @@ TEST(IpcSessionTest, RoleConflictFailsHandshake) {
     bool srv_failed = false;
     bool cli_failed = false;
     auto srv_start  = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
-        try {
-            co_await srv_sess.start();
-        } catch (const IpcError&) {
-            srv_failed = true;
-        }
+        const auto result = co_await srv_sess.start();
+        srv_failed        = !result;
     });
     auto cli_start  = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
-        try {
-            co_await cli_sess.start();
-        } catch (const IpcError&) {
-            cli_failed = true;
-        }
+        const auto result = co_await cli_sess.start();
+        cli_failed        = !result;
     });
     test::wait_all(io, std::chrono::seconds(2), srv_start, cli_start);
     srv_start.rethrow_if_error();
@@ -310,7 +304,7 @@ TEST(IpcSessionTest, HeartbeatTimeoutCloses) {
         auto hello_bytes = encode_body(HelloBody{kIpcProtocolVersion, IpcRole::Gateway, "silent"},
                                        srv_opt.encoding);
         co_await peer->async_send(FrameType::Hello, srv_opt.encoding, ConstSlice{hello_bytes});
-        auto ack = co_await peer->async_recv(); // 读掉 HelloAck
+        auto ack = (co_await peer->async_recv()).value(); // 读掉 HelloAck
         (void)ack;
     });
 

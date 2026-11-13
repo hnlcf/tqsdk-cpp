@@ -21,15 +21,19 @@ IpcSession::~IpcSession() {
     close();
 }
 
-asio::awaitable<void> IpcSession::start() {
+asio::awaitable<IpcResult<void>> IpcSession::start() noexcept {
     if (started_) {
-        throw IpcError("IpcSession::start called twice");
+        co_return std::unexpected(
+            IpcFailure{IpcErrorCode::protocol, "IpcSession::start called twice"});
     }
     started_ = true;
 
     // 1) 主动发 Hello
-    co_await send_body<FrameType::Hello>(
+    auto hello_result = co_await send_body<FrameType::Hello>(
         HelloBody{kIpcProtocolVersion, opts_.local_role, opts_.local_name});
+    if (!hello_result) {
+        co_return hello_result;
+    }
 
     // 2) 启动读循环 / 心跳 / 看门狗（后台运行）。
     // loops_running_ 记录仍在收尾的协程数：start() 失败时先 close，再等它们
@@ -84,22 +88,29 @@ asio::awaitable<void> IpcSession::start() {
             boost::system::error_code wait_ec;
             co_await wait_timer.async_wait(asio::redirect_error(asio::use_awaitable, wait_ec));
         }
-        throw IpcError("IpcSession: handshake timeout / failed");
+        co_return std::unexpected(
+            IpcFailure{IpcErrorCode::handshake, "IpcSession: handshake timeout / failed"});
     }
-    co_return;
+    co_return IpcResult<void>{};
 }
 
-asio::awaitable<void> IpcSession::send(FrameType type, ConstSlice payload) {
+asio::awaitable<IpcResult<void>> IpcSession::send(FrameType type, ConstSlice payload) noexcept {
     if (closed_) {
-        throw IpcError("IpcSession::send on closed session");
+        co_return std::unexpected(
+            IpcFailure{IpcErrorCode::closed, "IpcSession::send on closed session"});
     }
     // 串行化写：socket 不允许并发 async_write。锁内重新检查 closed_（可能在排队期间关闭）。
     auto guard = co_await AsyncMutex::acquire(write_mutex_);
     if (closed_) {
-        throw IpcError("IpcSession::send on closed session");
+        co_return std::unexpected(
+            IpcFailure{IpcErrorCode::closed, "IpcSession::send on closed session"});
     }
-    co_await channel_->async_send(type, opts_.encoding, payload);
+    auto result = co_await channel_->async_send(type, opts_.encoding, payload);
+    if (!result) {
+        co_return result;
+    }
     ++tx_frames_;
+    co_return IpcResult<void>{};
 }
 
 asio::awaitable<bool> IpcSession::dispatch_frame(ReceivedFrame frame) {
@@ -191,7 +202,15 @@ asio::awaitable<bool> IpcSession::dispatch_frame(ReceivedFrame frame) {
 asio::awaitable<void> IpcSession::read_loop() {
     try {
         while (!closed_) {
-            auto f = co_await channel_->async_recv();
+            auto recv = co_await channel_->async_recv();
+            if (!recv) {
+                SPDLOG_WARN("IpcSession[{}]: read error: {} ({})",
+                            opts_.local_name,
+                            recv.error().detail,
+                            ipc_error_name(recv.error().code));
+                break;
+            }
+            auto f = std::move(*recv);
             if (!f.has_value()) {
                 SPDLOG_INFO("IpcSession[{}]: peer closed channel", opts_.local_name);
                 break;

@@ -21,10 +21,11 @@ public:
     explicit StreamChannel(Socket sock)
         : sock_(std::move(sock)) {}
 
-    asio::awaitable<void>
+    asio::awaitable<IpcResult<void>>
     async_send(FrameType type, FrameEncoding encoding, ConstSlice payload) override {
         if (payload.size() > kMaxPayload) {
-            throw IpcError("payload exceeds kMaxPayload");
+            co_return std::unexpected(
+                IpcFailure{IpcErrorCode::protocol, "payload exceeds kMaxPayload"});
         }
 
         // 帧头：4B BE length + 1B type + 1B encoding
@@ -40,10 +41,15 @@ public:
         std::array<asio::const_buffer, 2> bufs{asio::buffer(hdr),
                                                asio::buffer(payload.data(), payload.size())};
 
-        co_await asio::async_write(sock_, bufs, asio::use_awaitable);
+        boost::system::error_code ec;
+        co_await asio::async_write(sock_, bufs, asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) {
+            co_return std::unexpected(IpcFailure{IpcErrorCode::closed, ec.message()});
+        }
+        co_return IpcResult<void>{};
     }
 
-    asio::awaitable<std::optional<ReceivedFrame>> async_recv() override {
+    asio::awaitable<IpcResult<std::optional<ReceivedFrame>>> async_recv() override {
         // ---- 1) 读 4 字节长度头 ----
         std::array<uint8_t, kLenHdr> len_buf{};
         boost::system::error_code    ec;
@@ -51,10 +57,10 @@ public:
             sock_, asio::buffer(len_buf), asio::redirect_error(asio::use_awaitable, ec));
 
         if (ec == asio::error::eof || ec == asio::error::connection_reset) {
-            co_return std::nullopt;
+            co_return std::optional<ReceivedFrame>{};
         }
         if (ec) {
-            throw IpcError(ec.message());
+            co_return std::unexpected(IpcFailure{IpcErrorCode::closed, ec.message()});
         }
 
         uint32_t len_be = 0;
@@ -63,10 +69,12 @@ public:
 
         // ---- 2) 校验 length ----
         if (length < kMeta) {
-            throw IpcError("frame length < 2 (malformed)");
+            co_return std::unexpected(
+                IpcFailure{IpcErrorCode::protocol, "frame length < 2 (malformed)"});
         }
         if (length - kMeta > kMaxPayload) {
-            throw IpcError("frame payload exceeds kMaxPayload");
+            co_return std::unexpected(
+                IpcFailure{IpcErrorCode::protocol, "frame payload exceeds kMaxPayload"});
         }
 
         // ---- 3) 一次 async_read 读 [type | encoding | payload] ----
@@ -79,12 +87,12 @@ public:
 
         co_await asio::async_read(sock_, bufs, asio::redirect_error(asio::use_awaitable, ec));
         if (ec) {
-            throw IpcError(ec.message());
+            co_return std::unexpected(IpcFailure{IpcErrorCode::closed, ec.message()});
         }
 
         frame.type     = static_cast<FrameType>(meta[0]);
         frame.encoding = static_cast<FrameEncoding>(meta[1]);
-        co_return frame;
+        co_return std::optional<ReceivedFrame>{std::move(frame)};
     }
 
     void close() noexcept override {

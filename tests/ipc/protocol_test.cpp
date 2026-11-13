@@ -308,7 +308,7 @@ TEST(ProtocolCodec, DecodeAsTypeMismatchThrows) {
     auto          bytes = encode_body(HeartbeatBody{});
     ReceivedFrame f{FrameType::Heartbeat, FrameEncoding::Json, bytes};
     // 用 Goodbye 去解 Heartbeat 帧 → 应抛
-    EXPECT_THROW(decode_as<FrameType::Goodbye>(f), IpcError);
+    EXPECT_THROW(decode_as<FrameType::Goodbye>(f), std::runtime_error);
 }
 
 TEST(ProtocolCodec, DecodeAsOk) {
@@ -323,7 +323,7 @@ TEST(ProtocolCodec, DecodeAsOk) {
 TEST(ProtocolCodec, DecodeMalformedJsonThrows) {
     std::vector<uint8_t> bad = {'{', 'n', 'o', 't', ' ', 'j'}; // 不完整 JSON
     ReceivedFrame        f{FrameType::Hello, FrameEncoding::Json, bad};
-    EXPECT_THROW(decode_body<HelloBody>(f), IpcError);
+    EXPECT_THROW(decode_body<HelloBody>(f), std::runtime_error);
 }
 
 TEST(ProtocolCodec, DecodeMissingFieldThrows) {
@@ -332,13 +332,13 @@ TEST(ProtocolCodec, DecodeMissingFieldThrows) {
     std::string    s   = dom.dump();
     ReceivedFrame  f{
         FrameType::Hello, FrameEncoding::Json, std::vector<uint8_t>(s.begin(), s.end())};
-    EXPECT_THROW(decode_body<HelloBody>(f), IpcError);
+    EXPECT_THROW(decode_body<HelloBody>(f), std::runtime_error);
 }
 
 TEST(ProtocolCodec, DecodeBytesMalformedMsgpackThrows) {
     std::vector<uint8_t> bad = {0xff, 0xff, 0xff}; // 非法 msgpack
     ReceivedFrame        f{FrameType::Hello, FrameEncoding::MessagePack, bad};
-    EXPECT_THROW(decode_body<HelloBody>(f), IpcError);
+    EXPECT_THROW(decode_body<HelloBody>(f), std::runtime_error);
 }
 
 // ---------------- encode_frame：Type 与 Body 不匹配应编译期报错（正向用例） ----------------

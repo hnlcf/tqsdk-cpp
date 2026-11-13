@@ -31,21 +31,13 @@ asio::awaitable<IpcResult<void>> IpcClient::connect() noexcept {
         co_return std::unexpected(
             IpcFailure{IpcErrorCode::no_factory, "IpcClient::connect: no session factory"});
     }
-    try {
-        session_  = co_await factory_();
-        encoding_ = session_ ? session_->encoding() : kDefaultEncoding;
-        co_return IpcResult<void>{};
-    } catch (const std::exception& e) {
-        co_return std::unexpected(IpcFailure{
-            IpcErrorCode::connect,
-            fmt::format("IpcClient::connect failed: {}", e.what()),
-        });
-    } catch (...) {
-        co_return std::unexpected(IpcFailure{
-            IpcErrorCode::connect,
-            "IpcClient::connect failed: unknown error",
-        });
+    auto result = co_await factory_();
+    if (!result) {
+        co_return std::unexpected(result.error());
     }
+    session_  = std::move(*result);
+    encoding_ = session_ ? session_->encoding() : kDefaultEncoding;
+    co_return IpcResult<void>{};
 }
 
 void IpcClient::start() {
@@ -83,7 +75,7 @@ void IpcClient::notify_disconnected() {
     }
 }
 
-asio::awaitable<void> IpcClient::send_resume_if_possible() {
+asio::awaitable<IpcResult<void>> IpcClient::send_resume_if_possible() noexcept {
     ResumeBody body;
     if (md_tracker_.initialized() && md_tracker_.expected_seq() > 1) {
         body.epoch       = md_tracker_.epoch();
@@ -104,7 +96,7 @@ asio::awaitable<void> IpcClient::send_resume_if_possible() {
                 body.epoch,
                 body.md_next_seq,
                 body.td_next_seq);
-    co_await send_resume(body);
+    co_return co_await send_resume(body);
 }
 
 asio::awaitable<void> IpcClient::run_loop() {
@@ -115,12 +107,15 @@ asio::awaitable<void> IpcClient::run_loop() {
     while (!stopped_) {
         if (!session_) {
             std::string connect_error;
-            try {
-                session_  = co_await factory_();
+            auto        factory_result = co_await factory_();
+            if (!factory_result) {
+                connect_error = fmt::format("{} ({})",
+                                            factory_result.error().detail,
+                                            ipc_error_name(factory_result.error().code));
+            } else {
+                session_  = std::move(*factory_result);
                 encoding_ = session_ ? session_->encoding() : kDefaultEncoding;
                 delay     = reconnect_opts_.initial_delay;
-            } catch (const std::exception& e) {
-                connect_error = e.what();
             }
             if (!connect_error.empty()) {
                 SPDLOG_WARN("[IpcClient] reconnect failed: {}; retry in {}ms",
@@ -141,10 +136,11 @@ asio::awaitable<void> IpcClient::run_loop() {
         // 否则 node 启动较晚时拿不到柜台已有账户/持仓/订单。
         // 注意 connect() 已经建立好 session 时也必须走这里。
         if (!resumed) {
-            try {
-                co_await send_resume_if_possible();
-            } catch (const std::exception& e) {
-                SPDLOG_WARN("[IpcClient] send Resume failed: {}", e.what());
+            auto resume_result = co_await send_resume_if_possible();
+            if (!resume_result) {
+                SPDLOG_WARN("[IpcClient] send Resume failed: {} ({})",
+                            resume_result.error().detail,
+                            ipc_error_name(resume_result.error().code));
             }
             resumed = true;
         }
@@ -168,21 +164,33 @@ asio::awaitable<void> IpcClient::run_loop() {
     co_return;
 }
 
-asio::awaitable<void> IpcClient::send_bytes(FrameType type, const std::vector<uint8_t>& payload) {
+asio::awaitable<IpcResult<void>>
+IpcClient::send_bytes(FrameType type, const std::vector<uint8_t>& payload) noexcept {
     if (!session_ || !session_->is_open()) {
-        throw IpcError("IpcClient::send_bytes: session closed");
+        co_return std::unexpected(
+            IpcFailure{IpcErrorCode::closed, "IpcClient::send_bytes: session closed"});
     }
-    co_await session_->send(type, ConstSlice{payload});
+    co_return co_await session_->send(type, ConstSlice{payload});
 }
 
-asio::awaitable<void> IpcClient::subscribe(const SubscribeBody& body) {
-    auto bytes = encode_body(body, encoding_);
-    co_await send_bytes(FrameType::Subscribe, bytes);
+asio::awaitable<IpcResult<void>> IpcClient::subscribe(const SubscribeBody& body) noexcept {
+    try {
+        auto bytes = encode_body(body, encoding_);
+        co_return co_await send_bytes(FrameType::Subscribe, bytes);
+    } catch (const std::exception& e) {
+        co_return std::unexpected(
+            IpcFailure{IpcErrorCode::encoding, fmt::format("encode subscribe: {}", e.what())});
+    }
 }
 
-asio::awaitable<void> IpcClient::send_resume(const ResumeBody& body) {
-    auto bytes = encode_body(body, encoding_);
-    co_await send_bytes(FrameType::Resume, bytes);
+asio::awaitable<IpcResult<void>> IpcClient::send_resume(const ResumeBody& body) noexcept {
+    try {
+        auto bytes = encode_body(body, encoding_);
+        co_return co_await send_bytes(FrameType::Resume, bytes);
+    } catch (const std::exception& e) {
+        co_return std::unexpected(
+            IpcFailure{IpcErrorCode::encoding, fmt::format("encode resume: {}", e.what())});
+    }
 }
 
 bool IpcClient::observe_stream(StreamTracker&    tracker,
@@ -271,7 +279,10 @@ asio::awaitable<IpcResult<CommandAck>> IpcClient::send_command_and_wait(
             } guard{pending_acks_, ack_mutex_, rid};
 
             auto bytes = encode_body(body, encoding_);
-            co_await send_bytes(FrameType::Command, bytes);
+            auto sent  = co_await send_bytes(FrameType::Command, bytes);
+            if (!sent) {
+                co_return std::unexpected(sent.error());
+            }
 
             // 超时 timer：同时充当"被 ack 唤醒"的信号（complete_ack 会 cancel 它）。
             w.timer.expires_after(timeout);

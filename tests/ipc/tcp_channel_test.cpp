@@ -34,7 +34,7 @@ TEST_F(TcpChannelTest, RoundTripEmptyPayload) {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);
         TcpChannel ch(std::move(sock));
 
-        auto f = co_await ch.async_recv();
+        auto f = (co_await ch.async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "srv: no Hello";
             co_return;
@@ -50,7 +50,7 @@ TEST_F(TcpChannelTest, RoundTripEmptyPayload) {
     auto cli = test::spawn_joined(io_, [&]() -> asio::awaitable<void> {
         auto ch = TcpChannel::connect(io_, "127.0.0.1", port);
         co_await ch->async_send(FrameType::Hello, FrameEncoding::Json, {});
-        auto f = co_await ch->async_recv();
+        auto f = (co_await ch->async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "cli: no HelloAck";
             co_return;
@@ -86,7 +86,7 @@ TEST_F(TcpChannelTest, RoundTripWithPayload) {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);
         TcpChannel ch(std::move(sock));
 
-        auto f = co_await ch.async_recv();
+        auto f = (co_await ch.async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "srv: no frame";
             co_return;
@@ -101,7 +101,7 @@ TEST_F(TcpChannelTest, RoundTripWithPayload) {
     auto cli = test::spawn_joined(io_, [&, req, rsp]() -> asio::awaitable<void> {
         auto ch = TcpChannel::connect(io_, "127.0.0.1", port);
         co_await ch->async_send(FrameType::Command, FrameEncoding::MessagePack, ConstSlice{req});
-        auto f = co_await ch->async_recv();
+        auto f = (co_await ch->async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "cli: no ack";
             co_return;
@@ -140,7 +140,7 @@ TEST_F(TcpChannelTest, LargePayloadRoundTrip) {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);
         TcpChannel ch(std::move(sock));
 
-        auto f = co_await ch.async_recv();
+        auto f = (co_await ch.async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "srv: no frame";
             co_return;
@@ -158,7 +158,7 @@ TEST_F(TcpChannelTest, LargePayloadRoundTrip) {
     auto cli = test::spawn_joined(io_, [&, big]() -> asio::awaitable<void> {
         auto ch = TcpChannel::connect(io_, "127.0.0.1", port);
         co_await ch->async_send(FrameType::Diff, FrameEncoding::MessagePack, ConstSlice{big});
-        auto f = co_await ch->async_recv();
+        auto f = (co_await ch->async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "cli: no frame";
             co_return;
@@ -197,7 +197,7 @@ TEST_F(TcpChannelTest, RecvReturnsNulloptOnPeerClose) {
 
     auto cli = test::spawn_joined(io_, [&]() -> asio::awaitable<void> {
         auto ch = TcpChannel::connect(io_, "127.0.0.1", port);
-        auto f  = co_await ch->async_recv();
+        auto f  = (co_await ch->async_recv()).value();
         EXPECT_FALSE(f.has_value());
     });
 
@@ -214,7 +214,7 @@ TEST_F(TcpChannelTest, RecvReturnsNulloptOnPeerClose) {
     }
 }
 
-// 5) 超限发送 → 抛 IpcError
+// 5) 超限发送 → 抛 std::runtime_error
 TEST_F(TcpChannelTest, SendTooLargePayloadThrows) {
     tcp::acceptor acc(io_);
     uint16_t      port = bind_ephemeral(acc, io_);
@@ -232,13 +232,9 @@ TEST_F(TcpChannelTest, SendTooLargePayloadThrows) {
         constexpr std::size_t kTooBig = 4u << 20;
         std::vector<uint8_t>  huge(kTooBig);
 
-        bool threw = false;
-        try {
+        const auto result =
             co_await ch->async_send(FrameType::Diff, FrameEncoding::MessagePack, ConstSlice{huge});
-        } catch (const IpcError&) {
-            threw = true;
-        }
-        EXPECT_TRUE(threw);
+        EXPECT_FALSE(result);
         ch->close();
     });
 
@@ -264,14 +260,11 @@ TEST_F(TcpChannelTest, MalformedFrameTooShortThrows) {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);
         TcpChannel ch(std::move(sock));
 
-        bool threw = false;
-        try {
-            co_await ch.async_recv();
-        } catch (const IpcError& e) {
-            threw = true;
-            EXPECT_NE(std::string(e.what()).find("length"), std::string::npos);
+        const auto result = co_await ch.async_recv();
+        EXPECT_FALSE(result);
+        if (!result) {
+            EXPECT_NE(result.error().detail.find("length"), std::string::npos);
         }
-        EXPECT_TRUE(threw);
         ch.close();
     });
 
@@ -304,14 +297,11 @@ TEST_F(TcpChannelTest, MalformedFrameTooLongThrows) {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);
         TcpChannel ch(std::move(sock));
 
-        bool threw = false;
-        try {
-            co_await ch.async_recv();
-        } catch (const IpcError& e) {
-            threw = true;
-            EXPECT_NE(std::string(e.what()).find("payload"), std::string::npos);
+        const auto result = co_await ch.async_recv();
+        EXPECT_FALSE(result);
+        if (!result) {
+            EXPECT_NE(result.error().detail.find("payload"), std::string::npos);
         }
-        EXPECT_TRUE(threw);
         ch.close();
     });
 
@@ -399,7 +389,7 @@ TEST_F(TcpChannelTest, CloseIsIdempotent) {
     EXPECT_TRUE(cli_ok);
 }
 
-// 10) 关闭后 recv 抛 IpcError
+// 10) 关闭后 recv 抛 std::runtime_error
 TEST_F(TcpChannelTest, RecvAfterCloseThrows) {
     tcp::acceptor acc(io_);
     uint16_t      port = bind_ephemeral(acc, io_);
@@ -407,13 +397,8 @@ TEST_F(TcpChannelTest, RecvAfterCloseThrows) {
     auto cli = test::spawn_joined(io_, [&]() -> asio::awaitable<void> {
         auto ch = TcpChannel::connect(io_, "127.0.0.1", port);
         ch->close();
-        bool threw = false;
-        try {
-            co_await ch->async_recv();
-        } catch (const IpcError&) {
-            threw = true;
-        }
-        EXPECT_TRUE(threw);
+        const auto result = co_await ch->async_recv();
+        EXPECT_FALSE(result);
     });
 
     io_.run();
@@ -436,7 +421,7 @@ TEST_F(TcpChannelTest, BidirectionalConcurrent) {
         TcpChannel ch(std::move(sock));
 
         for (int i = 0; i < kCount; ++i) {
-            auto f = co_await ch.async_recv();
+            auto f = (co_await ch.async_recv()).value();
             if (!f.has_value()) {
                 ADD_FAILURE() << "srv: eof at " << i;
                 co_return;
@@ -451,7 +436,7 @@ TEST_F(TcpChannelTest, BidirectionalConcurrent) {
             co_await ch.async_send(f->type, f->encoding, ConstSlice{f->payload});
         }
 
-        auto eof = co_await ch.async_recv();
+        auto eof = (co_await ch.async_recv()).value();
         EXPECT_FALSE(eof.has_value());
         ch.close();
     });
@@ -462,7 +447,7 @@ TEST_F(TcpChannelTest, BidirectionalConcurrent) {
             std::array<uint8_t, sizeof(int)> buf{};
             std::memcpy(buf.data(), &i, sizeof(int));
             co_await ch->async_send(FrameType::Command, FrameEncoding::Json, ConstSlice{buf});
-            auto f = co_await ch->async_recv();
+            auto f = (co_await ch->async_recv()).value();
             if (!f.has_value()) {
                 ADD_FAILURE() << "cli: eof at " << i;
                 co_return;

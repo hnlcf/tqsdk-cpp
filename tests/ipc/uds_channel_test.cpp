@@ -37,7 +37,7 @@ TEST_F(UdsChannelTest, RoundTripEmptyPayload) {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);
         UdsChannel ch(std::move(sock));
 
-        auto f = co_await ch.async_recv();
+        auto f = (co_await ch.async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "srv: no Hello";
             co_return;
@@ -53,7 +53,7 @@ TEST_F(UdsChannelTest, RoundTripEmptyPayload) {
     auto cli = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
         auto ch = UdsChannel::connect(io, path_);
         co_await ch->async_send(FrameType::Hello, FrameEncoding::Json, {});
-        auto f = co_await ch->async_recv();
+        auto f = (co_await ch->async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "cli: no HelloAck";
             co_return;
@@ -89,7 +89,7 @@ TEST_F(UdsChannelTest, RoundTripWithPayload) {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);
         UdsChannel ch(std::move(sock));
 
-        auto f = co_await ch.async_recv();
+        auto f = (co_await ch.async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "srv: no frame";
             co_return;
@@ -104,7 +104,7 @@ TEST_F(UdsChannelTest, RoundTripWithPayload) {
     auto cli = test::spawn_joined(io, [&, req, rsp]() -> asio::awaitable<void> {
         auto ch = UdsChannel::connect(io, path_);
         co_await ch->async_send(FrameType::Command, FrameEncoding::MessagePack, ConstSlice{req});
-        auto f = co_await ch->async_recv();
+        auto f = (co_await ch->async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "cli: no ack";
             co_return;
@@ -143,7 +143,7 @@ TEST_F(UdsChannelTest, LargePayloadRoundTrip) {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);
         UdsChannel ch(std::move(sock));
 
-        auto f = co_await ch.async_recv();
+        auto f = (co_await ch.async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "srv: no frame";
             co_return;
@@ -161,7 +161,7 @@ TEST_F(UdsChannelTest, LargePayloadRoundTrip) {
     auto cli = test::spawn_joined(io, [&, big]() -> asio::awaitable<void> {
         auto ch = UdsChannel::connect(io, path_);
         co_await ch->async_send(FrameType::Diff, FrameEncoding::MessagePack, ConstSlice{big});
-        auto f = co_await ch->async_recv();
+        auto f = (co_await ch->async_recv()).value();
         if (!f.has_value()) {
             ADD_FAILURE() << "cli: no frame";
             co_return;
@@ -200,7 +200,7 @@ TEST_F(UdsChannelTest, RecvReturnsNulloptOnPeerClose) {
 
     auto cli = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
         auto ch = UdsChannel::connect(io, path_);
-        auto f  = co_await ch->async_recv();
+        auto f  = (co_await ch->async_recv()).value();
         EXPECT_FALSE(f.has_value());
     });
 
@@ -217,7 +217,7 @@ TEST_F(UdsChannelTest, RecvReturnsNulloptOnPeerClose) {
     }
 }
 
-// ---------------- 5) 超限发送 → 抛 IpcError ----------------
+// ---------------- 5) 超限发送 → 抛 std::runtime_error ----------------
 TEST_F(UdsChannelTest, SendTooLargePayloadThrows) {
     asio::io_context                       io;
     asio::local::stream_protocol::acceptor acc(io, {path_});
@@ -236,13 +236,9 @@ TEST_F(UdsChannelTest, SendTooLargePayloadThrows) {
         constexpr std::size_t kTooBig = 4u << 20; // 4MB > kMaxPayload(2MB)
         std::vector<uint8_t>  huge(kTooBig);
 
-        bool threw = false;
-        try {
+        const auto result =
             co_await ch->async_send(FrameType::Diff, FrameEncoding::MessagePack, ConstSlice{huge});
-        } catch (const IpcError&) {
-            threw = true;
-        }
-        EXPECT_TRUE(threw);
+        EXPECT_FALSE(result);
         ch->close();
     });
 
@@ -268,14 +264,11 @@ TEST_F(UdsChannelTest, MalformedFrameTooShortThrows) {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);
         UdsChannel ch(std::move(sock));
 
-        bool threw = false;
-        try {
-            co_await ch.async_recv();
-        } catch (const IpcError& e) {
-            threw = true;
-            EXPECT_NE(std::string(e.what()).find("length"), std::string::npos);
+        const auto result = co_await ch.async_recv();
+        EXPECT_FALSE(result);
+        if (!result) {
+            EXPECT_NE(result.error().detail.find("length"), std::string::npos);
         }
-        EXPECT_TRUE(threw);
         ch.close();
     });
 
@@ -309,14 +302,11 @@ TEST_F(UdsChannelTest, MalformedFrameTooLongThrows) {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);
         UdsChannel ch(std::move(sock));
 
-        bool threw = false;
-        try {
-            co_await ch.async_recv();
-        } catch (const IpcError& e) {
-            threw = true;
-            EXPECT_NE(std::string(e.what()).find("payload"), std::string::npos);
+        const auto result = co_await ch.async_recv();
+        EXPECT_FALSE(result);
+        if (!result) {
+            EXPECT_NE(result.error().detail.find("payload"), std::string::npos);
         }
-        EXPECT_TRUE(threw);
         ch.close();
     });
 
@@ -407,7 +397,7 @@ TEST_F(UdsChannelTest, CloseIsIdempotent) {
     EXPECT_TRUE(cli_second_close_ok);
 }
 
-// ---------------- 10) 关闭后 recv 应抛 IpcError ----------------
+// ---------------- 10) 关闭后 recv 应抛 std::runtime_error ----------------
 TEST_F(UdsChannelTest, RecvAfterCloseThrows) {
     asio::io_context                       io;
     asio::local::stream_protocol::acceptor acc(io, {path_});
@@ -416,13 +406,8 @@ TEST_F(UdsChannelTest, RecvAfterCloseThrows) {
     auto cli = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
         auto ch = UdsChannel::connect(io, path_);
         ch->close();
-        bool threw = false;
-        try {
-            co_await ch->async_recv();
-        } catch (const IpcError&) {
-            threw = true;
-        }
-        EXPECT_TRUE(threw);
+        const auto result = co_await ch->async_recv();
+        EXPECT_FALSE(result);
     });
 
     io.run();
@@ -445,7 +430,7 @@ TEST_F(UdsChannelTest, BidirectionalConcurrent) {
         UdsChannel ch(std::move(sock));
 
         for (int i = 0; i < kCount; ++i) {
-            auto f = co_await ch.async_recv();
+            auto f = (co_await ch.async_recv()).value();
             if (!f.has_value()) {
                 ADD_FAILURE() << "srv: eof at " << i;
                 co_return;
@@ -461,7 +446,7 @@ TEST_F(UdsChannelTest, BidirectionalConcurrent) {
         }
 
         // 等 client 关闭
-        auto eof = co_await ch.async_recv();
+        auto eof = (co_await ch.async_recv()).value();
         EXPECT_FALSE(eof.has_value());
         ch.close();
     });
@@ -472,7 +457,7 @@ TEST_F(UdsChannelTest, BidirectionalConcurrent) {
             std::array<uint8_t, sizeof(int)> buf{};
             std::memcpy(buf.data(), &i, sizeof(int));
             co_await ch->async_send(FrameType::Command, FrameEncoding::Json, ConstSlice{buf});
-            auto f = co_await ch->async_recv();
+            auto f = (co_await ch->async_recv()).value();
             if (!f.has_value()) {
                 ADD_FAILURE() << "cli: eof at " << i;
                 co_return;

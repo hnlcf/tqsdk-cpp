@@ -198,7 +198,7 @@ struct RouteContext {
     std::size_t                             cursor = 0;  // 下一个待消费的路径参数
     std::optional<json>                     parsed_body; // 惰性解析缓存
 
-    const json& body() {
+    ServeResult<const json*> body() noexcept {
         if (!parsed_body) {
             if (req->body().empty()) {
                 parsed_body = json::object();
@@ -206,24 +206,30 @@ struct RouteContext {
                 try {
                     parsed_body = json::parse(req->body());
                 } catch (const std::exception& e) {
-                    throw HttpError{http::status::bad_request,
-                                    json{{"error", std::string("invalid json: ") + e.what()}}};
+                    return std::unexpected(ServeError{
+                        http::status::bad_request,
+                        json{{"error", fmt::format("invalid json: {}", e.what())}},
+                        ServeErrorCode::invalid_json,
+                    });
                 }
             }
         }
-        return *parsed_body;
+        return &*parsed_body;
     }
 };
 
 // 从路径段解析一个算术类型。
 template <typename T>
-T parse_path_number(std::string_view s) {
+ServeResult<T> parse_path_number(std::string_view s) noexcept {
     if constexpr (std::is_integral_v<T>) {
         T value{};
         auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), value);
         if (ec != std::errc{} || ptr != s.data() + s.size()) {
-            throw HttpError{http::status::bad_request,
-                            json{{"error", fmt::format("invalid path parameter: {}", s)}}};
+            return std::unexpected(ServeError{
+                http::status::bad_request,
+                json{{"error", fmt::format("invalid path parameter: {}", s)}},
+                ServeErrorCode::invalid_path_param,
+            });
         }
         return value;
     } else {
@@ -232,16 +238,23 @@ T parse_path_number(std::string_view s) {
         errno           = 0;
         double v        = std::strtod(tmp.c_str(), &end);
         if (end != tmp.c_str() + tmp.size() || errno == ERANGE) {
-            throw HttpError{http::status::bad_request,
-                            json{{"error", fmt::format("invalid path parameter: {}", tmp)}}};
+            return std::unexpected(ServeError{
+                http::status::bad_request,
+                json{{"error", fmt::format("invalid path parameter: {}", tmp)}},
+                ServeErrorCode::invalid_path_param,
+            });
         }
         return static_cast<T>(v);
     }
 }
 
+inline ServeError bad_request(ServeErrorCode code, std::string detail) {
+    return ServeError{http::status::bad_request, json{{"error", std::move(detail)}}, code};
+}
+
 // 单个形参的提取器（按类型分派）。
 template <typename Arg>
-Arg extract_arg(RouteContext& ctx) {
+ServeResult<Arg> extract_arg(RouteContext& ctx) noexcept {
     if constexpr (is_query<std::remove_cvref_t<Arg>>::value) {
         using Inner    = typename std::remove_cvref_t<Arg>::value_type;
         json         q = parse_query(ctx.req->target());
@@ -249,30 +262,65 @@ Arg extract_arg(RouteContext& ctx) {
         try {
             out.value = q.get<Inner>();
         } catch (const std::exception& e) {
-            throw HttpError{http::status::bad_request,
-                            json{{"error", std::string("bad query: ") + e.what()}}};
+            return std::unexpected(
+                bad_request(ServeErrorCode::invalid_query, fmt::format("bad query: {}", e.what())));
         }
         return out;
     } else if constexpr (std::is_same_v<std::remove_cvref_t<Arg>, std::string>) {
         if (ctx.cursor >= ctx.path_params.size()) {
-            throw HttpError{http::status::bad_request, json{{"error", "missing path parameter"}}};
+            return std::unexpected(
+                bad_request(ServeErrorCode::invalid_path_param, "missing path parameter"));
         }
         return url_decode(ctx.path_params[ctx.cursor++]);
     } else if constexpr (std::is_arithmetic_v<std::remove_cvref_t<Arg>>) {
         if (ctx.cursor >= ctx.path_params.size()) {
-            throw HttpError{http::status::bad_request, json{{"error", "missing path parameter"}}};
+            return std::unexpected(
+                bad_request(ServeErrorCode::invalid_path_param, "missing path parameter"));
         }
         return parse_path_number<std::remove_cvref_t<Arg>>(ctx.path_params[ctx.cursor++]);
     } else {
+        auto body = ctx.body();
+        if (!body) {
+            return std::unexpected(body.error());
+        }
         try {
-            return ctx.body().get<std::remove_cvref_t<Arg>>();
-        } catch (const HttpError&) {
-            throw;
+            return (*body)->get<std::remove_cvref_t<Arg>>();
         } catch (const std::exception& e) {
-            throw HttpError{http::status::bad_request,
-                            json{{"error", std::string("bad request body: ") + e.what()}}};
+            return std::unexpected(bad_request(ServeErrorCode::invalid_body,
+                                               fmt::format("bad request body: {}", e.what())));
         }
     }
+}
+
+template <typename... Args, std::size_t... I>
+ServeResult<std::tuple<std::remove_cvref_t<Args>...>>
+extract_args_impl(RouteContext& ctx, std::index_sequence<I...>) noexcept {
+    std::tuple<std::remove_cvref_t<Args>...> out;
+    ServeError                               error;
+    bool                                     ok = true;
+    auto extract_one = [&]<std::size_t J>(std::integral_constant<std::size_t, J>) {
+        if (!ok) {
+            return;
+        }
+        auto result =
+            extract_arg<std::remove_cvref_t<std::tuple_element_t<J, std::tuple<Args...>>>>(ctx);
+        if (!result) {
+            ok    = false;
+            error = std::move(result.error());
+            return;
+        }
+        std::get<J>(out) = std::move(*result);
+    };
+    (extract_one(std::integral_constant<std::size_t, I>{}), ...);
+    if (!ok) {
+        return std::unexpected(std::move(error));
+    }
+    return out;
+}
+
+template <typename... Args>
+ServeResult<std::tuple<std::remove_cvref_t<Args>...>> extract_args(RouteContext& ctx) noexcept {
+    return extract_args_impl<Args...>(ctx, std::index_sequence_for<Args...>{});
 }
 
 // 把 handler 返回值转成 Response。
@@ -299,8 +347,15 @@ inline Response to_response() { // void -> 204
 template <typename F, typename... A, std::size_t... I>
 asio::awaitable<Response>
 call_extracted(F& f, RouteContext& ctx, std::tuple<A...>*, std::index_sequence<I...>) {
-    // 列表初始化保证从左到右求值，故路径参数按形参出现顺序消费。
-    std::tuple<std::remove_cvref_t<A>...> args{extract_arg<std::remove_cvref_t<A>>(ctx)...};
+    // 列表求值保证从左到右消费路径参数；失败直接返回 400 Response。
+    auto args_result = extract_args<A...>(ctx);
+    if (!args_result) {
+        Response out;
+        out.status = args_result.error().status;
+        out.body   = args_result.error().body;
+        co_return out;
+    }
+    auto args = std::move(*args_result);
     // handler 必须返回 asio::awaitable<R>；从其 value_type 取 R（避免在未求值上下
     // 文中使用 co_await，部分编译器不允许）。
     using Ret = decltype(std::apply(std::declval<F&>(), std::move(args)));

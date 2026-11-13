@@ -330,7 +330,8 @@ asio::awaitable<void> WebSocketHub::accept(asio::ip::tcp::socket            sock
     boost::system::error_code ec;
     co_await ws.async_accept(req, asio::redirect_error(asio::use_awaitable, ec));
     if (ec) {
-        throw boost::system::system_error(ec, "WebSocketHub: handshake failed");
+        SPDLOG_WARN("[WsHub] handshake failed: {}", ec.message());
+        co_return;
     }
 
     if (stopped_.load() || full()) {
@@ -389,7 +390,8 @@ asio::awaitable<void> WebSocketHub::push_loop() {
             if (e.code() == asio::error::operation_aborted) {
                 break;
             }
-            throw;
+            SPDLOG_WARN("[WsHub] push wait failed: {}", e.what());
+            break;
         }
         if (std::holds_alternative<std::monostate>(raced)) {
             break; // stop()

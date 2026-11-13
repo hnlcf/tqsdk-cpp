@@ -13,7 +13,7 @@ namespace ipc {
 ///
 /// 实现 TradingGateway 接口：
 ///   - insert_order() / cancel_order() -> 构造 Command 帧，发往远端并等待
-///     CommandAck（按 rid 关联，带超时）；超时抛 IpcError。
+///     CommandAck（按 rid 关联，带超时）；超时抛 std::runtime_error。
 ///   - 远端推来的 TradePush / GatewayEvent -> 解码为 TradeEvent 推入
 ///     event_output()，供 TqApi 的 td_loop 消费。
 ///

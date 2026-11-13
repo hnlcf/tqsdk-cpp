@@ -56,7 +56,7 @@ public:
 
     /// 建连工厂：返回一个已完成握手（ready）的新 session。
     /// 重连模式由 IpcClient 在连接断开后调用它重新建连并发送 Resume。
-    using SessionFactory = std::function<asio::awaitable<std::unique_ptr<IpcSession>>()>;
+    using SessionFactory = std::function<asio::awaitable<IpcResult<std::unique_ptr<IpcSession>>>()>;
 
     struct ReconnectOptions {
         bool                      enabled = true;
@@ -93,10 +93,10 @@ public:
     void set_reconnect_handler(ReconnectHandler h) { reconnect_handler_ = std::move(h); }
 
     /// 发送订阅（md 方向）。成功发出即返回；受理结果由 SubscribeAck 异步到达。
-    asio::awaitable<void> subscribe(const SubscribeBody& body);
+    asio::awaitable<IpcResult<void>> subscribe(const SubscribeBody& body) noexcept;
 
     /// 发送 Resume（重连后由上层调用）。
-    asio::awaitable<void> send_resume(const ResumeBody& body);
+    asio::awaitable<IpcResult<void>> send_resume(const ResumeBody& body) noexcept;
 
     const StreamTracker& md_tracker() const noexcept { return md_tracker_; }
     const StreamTracker& td_tracker() const noexcept { return td_tracker_; }
@@ -123,8 +123,9 @@ public:
 private:
     asio::awaitable<void> read_loop();
     asio::awaitable<void> run_loop();
-    asio::awaitable<void> send_bytes(FrameType type, const std::vector<uint8_t>& payload);
-    asio::awaitable<void> send_resume_if_possible();
+    asio::awaitable<IpcResult<void>> send_bytes(FrameType type,
+                                                const std::vector<uint8_t>& payload) noexcept;
+    asio::awaitable<IpcResult<void>> send_resume_if_possible() noexcept;
     void                  notify_disconnected();
     asio::awaitable<void> wait_backoff(std::chrono::milliseconds delay);
 

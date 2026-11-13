@@ -550,14 +550,14 @@ std::vector<uint8_t> encode_body(const Body& body, FrameEncoding encoding = kDef
 }
 
 /// 按 frame、用与 frame.encoding 一致的 codec 把 payload 还原成 DOM，再 get<Body>。
-/// payload 非法 / 字段缺失 / 类型不符 均抛 IpcError。
+/// payload 非法 / 字段缺失 / 类型不符 均抛 std::runtime_error。
 template <typename Body>
 Body decode_body(const ReceivedFrame& frame) {
     nlohmann::json dom = codec_for(frame.encoding).decode(frame.payload);
     try {
         return dom.get<Body>();
     } catch (const nlohmann::json::exception& e) {
-        throw IpcError(std::string("decode_body: field mismatch: ") + e.what());
+        throw std::runtime_error(std::string("decode_body: field mismatch: ") + e.what());
     }
 }
 
@@ -565,9 +565,9 @@ Body decode_body(const ReceivedFrame& frame) {
 template <FrameType T>
 typename BodyFor<T>::type decode_as(const ReceivedFrame& frame) {
     if (frame.type != T) {
-        throw IpcError(fmt::format("decode_as: frame type mismatch (expected {}, got {})",
-                                   static_cast<int>(T),
-                                   static_cast<int>(frame.type)));
+        throw std::runtime_error(fmt::format("decode_as: frame type mismatch (expected {}, got {})",
+                                             static_cast<int>(T),
+                                             static_cast<int>(frame.type)));
     }
     return decode_body<typename BodyFor<T>::type>(frame);
 }

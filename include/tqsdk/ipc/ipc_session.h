@@ -46,18 +46,22 @@ public:
     IpcSession(const IpcSession&)            = delete;
     IpcSession& operator=(const IpcSession&) = delete;
 
-    /// 发起握手并启动读循环/心跳。返回时握手已成功；失败抛异常（IpcError / system_error）。
-    /// 读循环与心跳在后台协程中运行，直到 close() 或连接断开。
-    asio::awaitable<void> start();
+    /// 发起握手并启动读循环/心跳。失败返回 IpcFailure，不抛异常。
+    asio::awaitable<IpcResult<void>> start() noexcept;
 
-    /// 发送一个业务帧。编码由 Options.encoding 决定。
-    asio::awaitable<void> send(FrameType type, ConstSlice payload);
+    /// 发送一个业务帧。编码由 Options.encoding 决定；失败返回 IpcFailure。
+    asio::awaitable<IpcResult<void>> send(FrameType type, ConstSlice payload) noexcept;
 
     /// 便捷：编码 body 并发送（encoding 用 Options.encoding）。
     template <FrameType T, typename Body>
-    asio::awaitable<void> send_body(const Body& body) {
-        auto bytes = encode_body(body, opts_.encoding);
-        co_await send(T, ConstSlice{bytes});
+    asio::awaitable<IpcResult<void>> send_body(const Body& body) noexcept {
+        try {
+            auto bytes = encode_body(body, opts_.encoding);
+            co_return co_await send(T, ConstSlice{bytes});
+        } catch (const std::exception& e) {
+            co_return std::unexpected(
+                IpcFailure{IpcErrorCode::encoding, fmt::format("encode body: {}", e.what())});
+        }
     }
 
     /// 业务帧入口（非控制帧）。close() 后 async_receive 返回 nullopt。
