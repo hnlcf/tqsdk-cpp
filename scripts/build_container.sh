@@ -4,9 +4,9 @@ set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 ENGINE=${TQSDK_CONTAINER_ENGINE:-}
-IMAGE=${TQSDK_IMAGE:-tqsdk:0.1.0}
+IMAGE=${TQSDK_IMAGE:-tqsdk:0.4.0}
 BASE_IMAGE=${TQSDK_BASE_IMAGE:-registry.fedoraproject.org/fedora:44}
-VERSION=${TQSDK_VERSION:-0.1.0}
+VERSION=${TQSDK_VERSION:-0.4.0}
 RELEASE_DIR=${TQSDK_RELEASE_DIR:-dist/stage/tqsdk-$VERSION}
 SMOKE=0
 PORT=${TQSDK_SMOKE_PORT:-18088}

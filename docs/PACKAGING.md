@@ -69,7 +69,7 @@ dist/
 指定版本：
 
 ```bash
-./scripts/package_release.sh --version 0.2.0
+./scripts/package_release.sh --version 0.4.0
 ```
 
 只复用已有 C++ 构建和 Web dist：
@@ -240,8 +240,8 @@ DEB/RPM 之外还提供 Docker/Podman 镜像入口：
 发版：
 
 ```bash
-git tag -a v0.2.0 -m "TQSDK 0.2.0"
-git push origin v0.2.0
+git tag -a v0.4.0 -m "TQSDK 0.4.0"
+git push origin v0.4.0
 ```
 
 不需要本机构建后再 `gh release upload`。如果仓库没有 `third_party/ctp`（例如 SDK 未随仓库分发），

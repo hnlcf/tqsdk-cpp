@@ -4,7 +4,7 @@
 ARG BASE_IMAGE=registry.fedoraproject.org/fedora:44
 FROM ${BASE_IMAGE}
 
-ARG TQSDK_VERSION=0.1.0
+ARG TQSDK_VERSION=0.4.0
 ARG RELEASE_DIR=dist/stage/tqsdk-0.1.0
 
 LABEL org.opencontainers.image.title="TQSDK Board"

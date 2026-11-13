@@ -23,7 +23,8 @@ C++23 期货数据与交易基础设施，目标是把 TqSdk 的“异步数据�
 - 高级报单 FAK/FOK、市价/对价/五档价、TargetPosTask/InsertOrderTask、RiskManager 风控；
 - Tick/DataSeries/DataDownloader、期权 ATM+Greeks、TradingStatus/动态 URL、多账户与回测；
 - 合约目录、节假日日历、统一市场 SQLite 缓存（K 线 + tick）；
-- CTP SimNow 验收、交易时段 soak、故障注入。
+- CTP SimNow 验收、交易时段 soak、故障注入；
+- 公共边界错误处理已迁移到 `std::expected`，项目自建异常类已删除；
 
 ## 快速开始
 
@@ -35,7 +36,7 @@ cmake --build --preset ui-dev
 ctest --test-dir build-ui --output-on-failure
 ```
 
-C++23 由 `CMAKE_CXX_STANDARD 23` + `CMAKE_CXX_EXTENSIONS OFF` 固定；需要支持 C++23 的编译器与标准库（`std::expected`；Ubuntu 24.04 使用 `g++-14/libstdc++-14-dev`，当前验证 Clang 23）。
+C++23 由 `CMAKE_CXX_STANDARD 23` + `CMAKE_CXX_EXTENSIONS OFF` 固定；需要支持 C++23 的编译器与标准库（`std::expected`；Ubuntu 24.04 使用 `g++-14/libstdc++-14-dev`，当前验证 Clang 23 与 GCC 16/14）。
 
 CTP 需要把 SDK 放在 `third_party/ctp/`。默认 `ui-dev` preset 会按项目当前配置
 启用核心测试；CTP 构建细节见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。
@@ -221,6 +222,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
   [docs/PERFORMANCE_BASELINE.md](docs/PERFORMANCE_BASELINE.md)；
 - SimNow CTP 写验收：15/15 PASS；
 - 平昨自动化：已完成；
+- 错误处理：公共 API 已使用 expected/noexcept，详见 docs/ERROR_HANDLING.md；
 - CTP session monitor：支持结算预期断线；
 - Windows CTP、连续 5 个交易日 CTP soak 仍待后续验证；
 - 已准备 `ctp_week_soak.py` / `ctp_daily_reconcile.py` / `ctp_week_preflight.sh`。
