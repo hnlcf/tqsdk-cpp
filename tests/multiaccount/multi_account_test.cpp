@@ -64,10 +64,12 @@ TEST(MultiAccount, RoutesOrdersByAccountAndAggregatesSnapshots) {
             auto* first  = co_await manager.insert_order("A", request);
             auto* second = co_await manager.insert_order("B", request);
             unknown      = co_await manager.insert_order("missing", request);
-            if (first)
+            if (first) {
                 a_order = first->order_id;
-            if (second)
+            }
+            if (second) {
                 b_order = second->order_id;
+            }
             co_await a.api->wait_update();
             co_await b.api->wait_update();
         },
@@ -81,8 +83,9 @@ TEST(MultiAccount, RoutesOrdersByAccountAndAggregatesSnapshots) {
         test::pump(io, 10);
     }
     ASSERT_TRUE(done);
-    if (error)
+    if (error) {
         std::rethrow_exception(error);
+    }
     EXPECT_FALSE(a_order.empty());
     EXPECT_FALSE(b_order.empty());
     EXPECT_EQ(unknown, nullptr);

@@ -8,8 +8,9 @@ namespace tqsdk {
 // 不抛异常:非字符串或不在枚举内 → nullopt
 template <typename E>
 std::optional<E> try_get_enum(const nlohmann::json& v) noexcept {
-    if (!v.is_string())
+    if (!v.is_string()) {
         return std::nullopt;
+    }
     return magic_enum::enum_cast<E>(v.get_ref<const std::string&>());
 }
 

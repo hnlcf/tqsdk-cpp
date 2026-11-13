@@ -40,38 +40,40 @@ void DiffMergeEngine::merge_one_position(Position& p, const nlohmann::json& diff
         case PositionField::order_volume_buy_close:
         case PositionField::order_volume_sell_open:
         case PositionField::order_volume_sell_close: {
-            if (!v.is_number_integer() || v.get<int64_t>() < 0)
+            if (!v.is_number_integer() || v.get<int64_t>() < 0) {
                 break;
+            }
             uint64_t n = static_cast<uint64_t>(v.get<int64_t>());
             // 按字段分派到具体成员(用 f 判定)
-            if (f == PositionField::volume_long)
+            if (f == PositionField::volume_long) {
                 p.volume_long = n;
-            else if (f == PositionField::volume_long_today)
+            } else if (f == PositionField::volume_long_today) {
                 p.volume_long_today = n;
-            else if (f == PositionField::volume_long_his)
+            } else if (f == PositionField::volume_long_his) {
                 p.volume_long_his = n;
-            else if (f == PositionField::volume_long_frozen_today)
+            } else if (f == PositionField::volume_long_frozen_today) {
                 p.volume_long_frozen_today = n;
-            else if (f == PositionField::volume_long_frozen_his)
+            } else if (f == PositionField::volume_long_frozen_his) {
                 p.volume_long_frozen_his = n;
-            else if (f == PositionField::volume_short)
+            } else if (f == PositionField::volume_short) {
                 p.volume_short = n;
-            else if (f == PositionField::volume_short_today)
+            } else if (f == PositionField::volume_short_today) {
                 p.volume_short_today = n;
-            else if (f == PositionField::volume_short_his)
+            } else if (f == PositionField::volume_short_his) {
                 p.volume_short_his = n;
-            else if (f == PositionField::volume_short_frozen_today)
+            } else if (f == PositionField::volume_short_frozen_today) {
                 p.volume_short_frozen_today = n;
-            else if (f == PositionField::volume_short_frozen_his)
+            } else if (f == PositionField::volume_short_frozen_his) {
                 p.volume_short_frozen_his = n;
-            else if (f == PositionField::order_volume_buy_open)
+            } else if (f == PositionField::order_volume_buy_open) {
                 p.order_volume_buy_open = n;
-            else if (f == PositionField::order_volume_buy_close)
+            } else if (f == PositionField::order_volume_buy_close) {
                 p.order_volume_buy_close = n;
-            else if (f == PositionField::order_volume_sell_open)
+            } else if (f == PositionField::order_volume_sell_open) {
                 p.order_volume_sell_open = n;
-            else if (f == PositionField::order_volume_sell_close)
+            } else if (f == PositionField::order_volume_sell_close) {
                 p.order_volume_sell_close = n;
+            }
             bits |= (uint64_t)f;
             break;
         }
@@ -95,45 +97,47 @@ void DiffMergeEngine::merge_one_position(Position& p, const nlohmann::json& diff
         case PositionField::margin_long:
         case PositionField::margin_short:
         case PositionField::margin: {
-            if (!v.is_number())
+            if (!v.is_number()) {
                 break;
+            }
             double d = v.get<double>();
-            if (f == PositionField::open_price_long)
+            if (f == PositionField::open_price_long) {
                 p.open_price_long = d;
-            else if (f == PositionField::open_price_short)
+            } else if (f == PositionField::open_price_short) {
                 p.open_price_short = d;
-            else if (f == PositionField::open_cost_long)
+            } else if (f == PositionField::open_cost_long) {
                 p.open_cost_long = d;
-            else if (f == PositionField::open_cost_short)
+            } else if (f == PositionField::open_cost_short) {
                 p.open_cost_short = d;
-            else if (f == PositionField::position_price_long)
+            } else if (f == PositionField::position_price_long) {
                 p.position_price_long = d;
-            else if (f == PositionField::position_price_short)
+            } else if (f == PositionField::position_price_short) {
                 p.position_price_short = d;
-            else if (f == PositionField::position_cost_long)
+            } else if (f == PositionField::position_cost_long) {
                 p.position_cost_long = d;
-            else if (f == PositionField::position_cost_short)
+            } else if (f == PositionField::position_cost_short) {
                 p.position_cost_short = d;
-            else if (f == PositionField::last_price)
+            } else if (f == PositionField::last_price) {
                 p.last_price = d;
-            else if (f == PositionField::float_profit_long)
+            } else if (f == PositionField::float_profit_long) {
                 p.float_profit_long = d;
-            else if (f == PositionField::float_profit_short)
+            } else if (f == PositionField::float_profit_short) {
                 p.float_profit_short = d;
-            else if (f == PositionField::float_profit)
+            } else if (f == PositionField::float_profit) {
                 p.float_profit = d;
-            else if (f == PositionField::position_profit_long)
+            } else if (f == PositionField::position_profit_long) {
                 p.position_profit_long = d;
-            else if (f == PositionField::position_profit_short)
+            } else if (f == PositionField::position_profit_short) {
                 p.position_profit_short = d;
-            else if (f == PositionField::position_profit)
+            } else if (f == PositionField::position_profit) {
                 p.position_profit = d;
-            else if (f == PositionField::margin_long)
+            } else if (f == PositionField::margin_long) {
                 p.margin_long = d;
-            else if (f == PositionField::margin_short)
+            } else if (f == PositionField::margin_short) {
                 p.margin_short = d;
-            else if (f == PositionField::margin)
+            } else if (f == PositionField::margin) {
                 p.margin = d;
+            }
             bits |= (uint64_t)f;
             break;
         }

@@ -20,8 +20,9 @@ std::int64_t now_ms() {
 
 Log::Log(Options options)
     : enabled_(options.enabled) {
-    if (!enabled_)
+    if (!enabled_) {
         return;
+    }
     name_ = "tqsdk.audit." + std::to_string(reinterpret_cast<std::uintptr_t>(this));
     if (options.file.empty()) {
         auto sink = std::make_shared<spdlog::sinks::stdout_sink_mt>();
@@ -41,8 +42,9 @@ Log::Log(Options options)
 
 Log::~Log() {
     if (!name_.empty()) {
-        if (logger_)
+        if (logger_) {
             logger_->flush();
+        }
         spdlog::drop(name_);
     }
 }
@@ -52,8 +54,9 @@ void Log::record(std::string_view event,
                  std::string_view target,
                  int              status,
                  std::string_view remote) {
-    if (!enabled_ || !logger_)
+    if (!enabled_ || !logger_) {
         return;
+    }
     const std::string safe_target = redact_secrets(target);
     nlohmann::json    row{
         {"ts", now_ms()},

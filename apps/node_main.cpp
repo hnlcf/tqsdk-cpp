@@ -60,18 +60,20 @@ int main(int argc, char** argv) {
     app.add_option("-l,--log-level", log_level, "Log level (overrides TQSDK_LOG_LEVEL)");
     app.add_option("-t,--threads", threads, "IO worker threads (overrides [runtime].threads)");
     app.set_version_flag("-v,--version",
-                         std::string(tqsdk::kPackageName) + " " + std::string(tqsdk::kVersion));
+                         fmt::format("{} {}", tqsdk::kPackageName, tqsdk::kVersion));
     CLI11_PARSE(app, argc, argv);
 
     tqsdk::setup_logging(tqsdk::LogOptions{log_level});
 
-    NodeConfig cfg;
-    try {
-        cfg = load_node_config(config_path);
-    } catch (const std::exception& e) {
-        SPDLOG_CRITICAL("failed to load config '{}': {}", config_path, e.what());
+    auto cfg_result = load_node_config(config_path);
+    if (!cfg_result) {
+        SPDLOG_CRITICAL("failed to load config '{}': {} ({})",
+                        config_path,
+                        cfg_result.error().detail,
+                        config::config_error_name(cfg_result.error().code));
         return 1;
     }
+    NodeConfig cfg = std::move(*cfg_result);
 
     if (threads > 0) {
         cfg.runtime.threads = normalize_worker_threads(threads);
@@ -179,8 +181,9 @@ int main(int argc, char** argv) {
         for (const auto& sym : cfg.symbols) {
             primary->get_quote(sym); // 触发订阅（不存在则创建占位并订阅）
             // tick sink 只对已创建的 TickSeries 生效；开启持久化时预创建窗口。
-            if (rt->tick_store)
+            if (rt->tick_store) {
                 primary->get_tick_serial(sym, 200);
+            }
             SPDLOG_INFO("[node] pre-subscribed quote {}", sym);
         }
 
@@ -191,7 +194,7 @@ int main(int argc, char** argv) {
                 continue;
             }
             auto account_cfg           = cfg.upstream;
-            account_cfg.ipc.local_name = "node-" + account.id;
+            account_cfg.ipc.local_name = fmt::format("node-{}", account.id);
             account_cfg.md.kind        = MdKind::Remote;
             account_cfg.td.kind        = TdKind::Remote;
             account_cfg.md.tcp_host    = account.gw_host;
@@ -202,8 +205,9 @@ int main(int argc, char** argv) {
                 auto extra =
                     std::shared_ptr<TqApi>(co_await make_tqapi(io, account_cfg, core_ex, nullptr));
                 rt->accounts->add_account(account.id, extra);
-                for (const auto& sym : cfg.symbols)
+                for (const auto& sym : cfg.symbols) {
                     extra->get_quote(sym);
+                }
                 SPDLOG_INFO("[node] account {} connected to gw {}:{}",
                             account.id,
                             account.gw_host,

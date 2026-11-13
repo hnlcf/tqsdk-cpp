@@ -38,8 +38,7 @@ std::optional<std::string> OpenCountsLimitRule::check_insert(const InsertOrderRe
     }
     const auto count = counts_[req.instrument_id];
     if (count >= limit_) {
-        return "触发风控：合约 " + req.instrument_id + " 交易日内开仓次数上限 " +
-               std::to_string(limit_);
+        return fmt::format("触发风控：合约 {} 交易日内开仓次数上限 {}", req.instrument_id, limit_);
     }
     return std::nullopt;
 }
@@ -64,8 +63,7 @@ std::optional<std::string> OpenVolumesLimitRule::check_insert(const InsertOrderR
     }
     const auto current = volumes_[req.instrument_id];
     if (current + req.volume > limit_) {
-        return "触发风控：合约 " + req.instrument_id + " 交易日内开仓手数上限 " +
-               std::to_string(limit_);
+        return fmt::format("触发风控：合约 {} 交易日内开仓手数上限 {}", req.instrument_id, limit_);
     }
     return std::nullopt;
 }
@@ -90,8 +88,7 @@ std::optional<std::string> OrderRateLimitRule::check_insert(const InsertOrderReq
         accepted_.pop_front();
     }
     if (accepted_.size() >= limit_) {
-        return "触发风控：报单频率超过 " + std::to_string(limit_) + " 笔/" +
-               std::to_string(window_.count()) + "ms";
+        return fmt::format("触发风控：报单频率超过 {} 笔/{}ms", limit_, window_.count());
     }
     return std::nullopt;
 }

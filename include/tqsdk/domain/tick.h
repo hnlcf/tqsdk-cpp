@@ -79,14 +79,16 @@ inline bool tick_is_valid(const Tick& t) {
 inline void to_json(nlohmann::json& j, const Tick& t) {
     auto prices = [](const double (&values)[5]) {
         nlohmann::json out = nlohmann::json::array();
-        for (double v : values)
+        for (double v : values) {
             out.push_back(std::isfinite(v) ? nlohmann::json(v) : nullptr);
+        }
         return out;
     };
     auto volumes = [](const uint64_t (&values)[5]) {
         nlohmann::json out = nlohmann::json::array();
-        for (auto v : values)
+        for (auto v : values) {
             out.push_back(v);
+        }
         return out;
     };
     auto num = [](double v) { return std::isfinite(v) ? nlohmann::json(v) : nullptr; };
@@ -114,20 +116,23 @@ inline void to_json(nlohmann::json& j, const Tick& t) {
 inline void from_json(const nlohmann::json& j, Tick& t) {
     auto num = [&](const char* key) -> double {
         auto it = j.find(key);
-        if (it == j.end() || it->is_null())
+        if (it == j.end() || it->is_null()) {
             return kUnknownDouble;
+        }
         return it->is_number() ? it->get<double>() : kUnknownDouble;
     };
     auto u64 = [&](const char* key) -> uint64_t {
         auto it = j.find(key);
-        if (it == j.end() || it->is_null())
+        if (it == j.end() || it->is_null()) {
             return 0;
+        }
         return it->is_number_unsigned() || it->is_number_integer() ? it->get<uint64_t>() : 0;
     };
     auto prices = [&](const char* key, double (&out)[5]) {
         auto it = j.find(key);
-        if (it == j.end() || !it->is_array())
+        if (it == j.end() || !it->is_array()) {
             return;
+        }
         for (std::size_t i = 0; i < 5 && i < it->size(); ++i) {
             const auto& v = (*it)[i];
             out[i]        = v.is_null() || !v.is_number() ? kUnknownDouble : v.get<double>();
@@ -135,8 +140,9 @@ inline void from_json(const nlohmann::json& j, Tick& t) {
     };
     auto volumes = [&](const char* key, uint64_t (&out)[5]) {
         auto it = j.find(key);
-        if (it == j.end() || !it->is_array())
+        if (it == j.end() || !it->is_array()) {
             return;
+        }
         for (std::size_t i = 0; i < 5 && i < it->size(); ++i) {
             const auto& v = (*it)[i];
             out[i]        = v.is_number_unsigned() || v.is_number_integer() ? v.get<uint64_t>() : 0;

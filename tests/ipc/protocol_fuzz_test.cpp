@@ -14,8 +14,9 @@ std::vector<uint8_t> random_bytes(std::mt19937& rng, std::size_t max_len) {
     std::uniform_int_distribution<std::size_t> len_dist(0, max_len);
     std::uniform_int_distribution<int>         byte_dist(0, 255);
     std::vector<uint8_t>                       out(len_dist(rng));
-    for (auto& byte : out)
+    for (auto& byte : out) {
         byte = static_cast<uint8_t>(byte_dist(rng));
+    }
     return out;
 }
 

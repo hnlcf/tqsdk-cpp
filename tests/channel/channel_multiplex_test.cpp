@@ -26,8 +26,9 @@ TEST(ChannelMux, ManyProducersManyConsumers) {
             [&]() -> asio::awaitable<void> {
                 while (true) {
                     auto v = co_await ch.async_receive();
-                    if (!v)
+                    if (!v) {
                         co_return;
+                    }
                     received.push_back(*v);
                 }
             },
@@ -42,8 +43,9 @@ TEST(ChannelMux, ManyProducersManyConsumers) {
                 for (int i = 0; i < kPerProducer; ++i) {
                     co_await ch.async_send(p * kPerProducer + i);
                 }
-                if (++producers_done == kProducers)
+                if (++producers_done == kProducers) {
                     ch.close();
+                }
                 co_return;
             },
             asio::detached);
@@ -59,6 +61,7 @@ TEST(ChannelMux, ManyProducersManyConsumers) {
 
     EXPECT_EQ(received.size(), (size_t)kTotal);
     std::sort(received.begin(), received.end());
-    for (int i = 0; i < kTotal; ++i)
+    for (int i = 0; i < kTotal; ++i) {
         EXPECT_EQ(received[i], i);
+    }
 }

@@ -485,3 +485,17 @@ front_timeout_ms = 12345
 }
 
 } // namespace
+
+TEST(ConfigErrors, TryParseReturnsConfigError) {
+    const auto result = try_parse_tqapi_config("[md]\nkind = \"bogus\"\n");
+    ASSERT_FALSE(result);
+    EXPECT_EQ(result.error().code, config::ConfigErrorCode::parse);
+    EXPECT_FALSE(result.error().detail.empty());
+}
+
+TEST(ConfigErrors, LoadMissingFileReturnsError) {
+    const auto result = load_node_config("/tmp/tqsdk-missing-config-for-test.toml");
+    ASSERT_FALSE(result);
+    EXPECT_EQ(result.error().code, config::ConfigErrorCode::parse);
+    EXPECT_FALSE(result.error().detail.empty());
+}

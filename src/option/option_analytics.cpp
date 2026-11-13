@@ -134,14 +134,16 @@ compute_option_chain(double                                         spot,
                      std::string_view                               underlying,
                      int                                            atm_window) {
     std::vector<OptionAnalyticsRow> out;
-    if (strikes.empty())
+    if (strikes.empty()) {
         return out;
+    }
 
     std::vector<double> sorted = strikes;
     std::sort(sorted.begin(), sorted.end());
     const auto atm = atm_strike(spot, sorted);
-    if (!atm.has_value())
+    if (!atm.has_value()) {
         return out;
+    }
 
     auto      center = std::lower_bound(sorted.begin(), sorted.end(), *atm);
     const int idx    = static_cast<int>(center - sorted.begin());

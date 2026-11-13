@@ -8,8 +8,9 @@ asio::awaitable<Order*> TqApi::insert_order(const InsertOrderReq&  req,
                                             std::optional<OrderId> order_id) {
     // 1) 本地造占位单，返回其指针（生命周期到 close 前，发单 ack 前即可见）。
     std::string rid = order_id.value_or("");
-    if (rid.empty())
+    if (rid.empty()) {
         rid = next_order_id();
+    }
     auto& o         = data_.orders.get_or_create(rid);
     o.order_id      = rid;
     o.instrument_id = req.instrument_id;

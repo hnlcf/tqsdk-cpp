@@ -50,7 +50,7 @@ std::string InstrumentCatalog::product_of(std::string_view underlying) {
     if (end == 0 || end == rest.size()) {
         return std::string{underlying};
     }
-    return std::string{underlying.substr(0, dot)} + "." + rest.substr(0, end);
+    return fmt::format("{}.{}", underlying.substr(0, dot), rest.substr(0, end));
 }
 
 nlohmann::json InstrumentCatalog::to_json(const Instrument& i) {
@@ -222,7 +222,7 @@ bool InstrumentCatalog::download_to_file() {
         SPDLOG_INFO("[Catalog] downloading {}", cfg_.url);
         util::HttpHeaders headers;
         std::string       user_agent =
-            std::string(constants::kDefaultNodeUserAgent) + " instrument-catalog";
+            fmt::format("{} instrument-catalog", constants::kDefaultNodeUserAgent);
         if (auth_) {
             user_agent               = auth_->user_agent();
             const auto authorization = auth_->authorization_header();
@@ -232,17 +232,25 @@ bool InstrumentCatalog::download_to_file() {
                 SPDLOG_WARN("[Catalog] TqAuth unavailable; downloading without bearer token");
             }
         }
-        std::string body = util::http_get(cfg_.url, user_agent, std::chrono::seconds(120), headers);
+        auto body_result = util::http_get(cfg_.url, user_agent, std::chrono::seconds(120), headers);
+        if (!body_result) {
+            SPDLOG_WARN("[Catalog] download failed: {} ({})",
+                        body_result.error().detail,
+                        util::http_error_name(body_result.error().code));
+            return false;
+        }
+        std::string body = std::move(*body_result);
         // 下载必须先在内存中完成 JSON 校验，再原子替换；否则网络截断会把
         // 旧的可用 symbol.json 覆盖成半截文件。
         if (body.empty()) {
-            throw std::runtime_error("empty response");
+            SPDLOG_WARN("[Catalog] download returned empty body");
+            return false;
         }
         const auto parsed = nlohmann::json::parse(body);
         if (!parsed.is_object() || parsed.empty()) {
             throw std::runtime_error("response is not a non-empty JSON object");
         }
-        const auto tmp = cfg_.file + ".tmp";
+        const auto tmp = fmt::format("{}.tmp", cfg_.file);
         {
             std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
             if (!out.is_open()) {
@@ -381,8 +389,8 @@ std::vector<InstrumentCatalog::Instrument> InstrumentCatalog::list(const ListFil
                 continue;
             }
             if (!query.empty()) {
-                const auto haystack = lower_ascii(i.instrument_id + " " + i.name + " " +
-                                                  i.product_short_name + " " + i.ins_id);
+                const auto haystack = lower_ascii(fmt::format(
+                    "{} {} {} {}", i.instrument_id, i.name, i.product_short_name, i.ins_id));
                 if (haystack.find(query) == std::string::npos) {
                     continue;
                 }
@@ -409,7 +417,7 @@ std::vector<InstrumentCatalog::OptionProduct> InstrumentCatalog::option_products
             continue;
         }
         const auto product = product_of(i.underlying_symbol);
-        const auto key     = i.exchange_id + "|" + product + "|" + i.underlying_symbol;
+        const auto key     = fmt::format("{}|{}|{}", i.exchange_id, product, i.underlying_symbol);
         auto&      p       = grouped[key];
         p.exchange         = i.exchange_id;
         p.product          = product;

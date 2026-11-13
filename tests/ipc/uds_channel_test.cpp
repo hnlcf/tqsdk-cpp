@@ -135,8 +135,9 @@ TEST_F(UdsChannelTest, LargePayloadRoundTrip) {
 
     constexpr std::size_t kBig = 1u << 20;
     std::vector<uint8_t>  big(kBig);
-    for (std::size_t i = 0; i < kBig; ++i)
+    for (std::size_t i = 0; i < kBig; ++i) {
         big[i] = static_cast<uint8_t>(i & 0xff);
+    }
 
     auto srv = test::spawn_joined(io, [&, big]() -> asio::awaitable<void> {
         auto       sock = co_await acc.async_accept(asio::use_awaitable);

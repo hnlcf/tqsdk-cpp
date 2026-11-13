@@ -68,8 +68,9 @@ HttpServer::~HttpServer() {
 std::shared_ptr<WebSocketHub> HttpServer::ensure_ws_hub(const AccountScope& scope) {
     std::lock_guard lock(ws_hubs_mu_);
     auto            it = ws_hubs_.find(scope.id);
-    if (it != ws_hubs_.end())
+    if (it != ws_hubs_.end()) {
         return it->second;
+    }
     if (scope.api == api_) {
         ws_hubs_[scope.id] = ws_;
         return ws_;
@@ -87,13 +88,15 @@ void HttpServer::drop_account_hub(std::string_view account_id) {
     {
         std::lock_guard lock(ws_hubs_mu_);
         auto            it = ws_hubs_.find(std::string(account_id));
-        if (it == ws_hubs_.end() || it->second == ws_)
+        if (it == ws_hubs_.end() || it->second == ws_) {
             return;
+        }
         retired = std::move(it->second);
         ws_hubs_.erase(it);
     }
-    if (retired)
+    if (retired) {
         retired->stop();
+    }
 }
 
 AccountScope HttpServer::account_scope(std::string_view account_id) {
@@ -119,11 +122,13 @@ std::string_view request_path(std::string_view target) {
 }
 
 bool secure_equal(std::string_view lhs, std::string_view rhs) {
-    if (lhs.size() != rhs.size())
+    if (lhs.size() != rhs.size()) {
         return false;
+    }
     unsigned char diff = 0;
-    for (std::size_t i = 0; i < lhs.size(); ++i)
+    for (std::size_t i = 0; i < lhs.size(); ++i) {
         diff |= static_cast<unsigned char>(lhs[i] ^ rhs[i]);
+    }
     return diff == 0;
 }
 
@@ -160,22 +165,28 @@ bool has_bearer_token(std::string_view header, std::string_view token) {
 } // namespace
 
 bool HttpServer::authorized(const http::request<http::string_body>& req) const {
-    if (!auth_.enabled)
+    if (!auth_.enabled) {
         return true;
+    }
     const auto path = request_path(req.target());
-    if (auth_.exempt_healthz && path == "/healthz")
+    if (auth_.exempt_healthz && path == "/healthz") {
         return true;
-    if (auth_.token.empty())
+    }
+    if (auth_.token.empty()) {
         return false;
+    }
 
-    if (has_bearer_token(req[http::field::authorization], auth_.token))
+    if (has_bearer_token(req[http::field::authorization], auth_.token)) {
         return true;
-    if (secure_equal(req["X-API-Key"], auth_.token))
+    }
+    if (secure_equal(req["X-API-Key"], auth_.token)) {
         return true;
+    }
     if (auth_.allow_query_token) {
         const auto query = detail::parse_query(req.target());
-        if (secure_equal(query.value("token", std::string{}), auth_.token))
+        if (secure_equal(query.value("token", std::string{}), auth_.token)) {
             return true;
+        }
     }
     return false;
 }
@@ -203,8 +214,9 @@ void HttpServer::listen(const std::string& address, uint16_t port) {
         io_ex_, [this]() -> asio::awaitable<void> { co_await accept_loop(); }, "Http.accept");
     ws_->start();
     for (const auto& [_, hub] : ws_hubs_) {
-        if (hub && hub != ws_)
+        if (hub && hub != ws_) {
             hub->start();
+        }
     }
     const auto account_count = accounts_ ? accounts_->account_ids().size() : std::size_t{1};
     SPDLOG_INFO("[HttpServer] listening on {}:{} (ws: {}, accounts: {}, lazy hubs)",
@@ -227,14 +239,16 @@ void HttpServer::stop() noexcept {
         std::lock_guard lock(ws_hubs_mu_);
         hubs.reserve(ws_hubs_.size());
         for (const auto& [_, hub] : ws_hubs_) {
-            if (hub && hub != ws_)
+            if (hub && hub != ws_) {
                 hubs.push_back(hub);
+            }
         }
         ws_hubs_.clear();
     }
     for (const auto& hub : hubs) {
-        if (hub)
+        if (hub) {
             hub->stop();
+        }
     }
     boost::system::error_code ec;
     auto                      _ = acceptor_.close(ec);
@@ -288,8 +302,9 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
             }
 
             if (!authorized(req)) {
-                if (audit_)
+                if (audit_) {
                     audit_->record("ws.auth", "GET", req.target(), 401, peer_string(sock));
+                }
                 auto res = make_json_response(
                     http::status::unauthorized, json{{"error", "unauthorized"}}, req.version());
                 res.set(http::field::www_authenticate, "Bearer");
@@ -321,8 +336,9 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
                                          json{{"error", "too many websocket clients"}},
                                          req.version());
             } else {
-                if (audit_)
+                if (audit_) {
                     audit_->record("ws.upgrade", "GET", req.target(), 101, peer_string(sock));
+                }
                 // 交给对应账户的 WebSocketHub 完成握手并接管 socket。
                 co_await hub->accept(std::move(sock), std::move(req));
                 co_return;
@@ -349,8 +365,9 @@ asio::awaitable<void> HttpServer::session(tcp::socket sock) {
             res = make_json_response(
                 http::status::internal_server_error, json{{"error", e.what()}}, 11);
         }
-        if (audit_ && (method != http::verb::get || res.result() == http::status::unauthorized))
+        if (audit_ && (method != http::verb::get || res.result() == http::status::unauthorized)) {
             audit_->record("http", method_name(method), target, res.result_int(), remote);
+        }
 
         if (close_conn) {
             res.keep_alive(false);

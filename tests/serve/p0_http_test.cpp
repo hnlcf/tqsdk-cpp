@@ -105,8 +105,9 @@ TEST(P0Http, RiskAndTaskRoutesAreWired) {
             co_return;
         },
         [&](std::exception_ptr ep) {
-            if (ep)
+            if (ep) {
                 std::rethrow_exception(ep);
+            }
             io.stop();
         });
     io.run();

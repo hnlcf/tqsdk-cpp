@@ -156,6 +156,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/FLOWS.md](docs/FLOWS.md) — 行情/交易/订阅/重连信息流
 - [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) — 进程、订单、连接、交易日状态机
 - [docs/PROTOCOLS.md](docs/PROTOCOLS.md) — IPC/REST/WS 协议
+- [docs/ERROR_HANDLING.md](docs/ERROR_HANDLING.md) — std::expected、模块错误与异常隔离
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — 构建、配置、运行、验收、诊断
 - [docs/ROADMAP.md](docs/ROADMAP.md) — 后续计划
 - [docs/PERFORMANCE_BASELINE.md](docs/PERFORMANCE_BASELINE.md) — WASM/HTTP/WS 性能基线
@@ -207,7 +208,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 ## 当前状态
 
 - `./scripts/package_release.sh`：生成 DEB/RPM/TGZ；详见 docs/PACKAGING.md；
-- `ctest`：361 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
+- `ctest`：365 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
 - Web：`pnpm typecheck`、`pnpm test`（28 项）、`pnpm build`、Playwright E2E 通过；
 - 日线回测 helper：`python3 scripts/test_backtest_daily.py`（4/4）；
 - Python 策略/绑定：`python3 -m unittest discover -s python/tests`（21/21）；

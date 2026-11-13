@@ -10,8 +10,9 @@ template <typename F>
 void co_spawn_logged(boost::asio::any_io_executor ex, F&& f, std::string_view tag) {
     boost::asio::co_spawn(
         ex, std::forward<F>(f), [tag = std::string(tag)](std::exception_ptr eptr) {
-            if (!eptr)
+            if (!eptr) {
                 return;
+            }
             try {
                 std::rethrow_exception(eptr);
             } catch (const boost::system::system_error& e) {

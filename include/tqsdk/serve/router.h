@@ -111,12 +111,15 @@ struct is_query<Query<T>> : std::true_type {};
 // URL 百分号解码（'+' -> 空格）。
 inline std::string url_decode(std::string_view s) {
     auto hex = [](char c) -> int {
-        if (c >= '0' && c <= '9')
+        if (c >= '0' && c <= '9') {
             return c - '0';
-        if (c >= 'a' && c <= 'f')
+        }
+        if (c >= 'a' && c <= 'f') {
             return c - 'a' + 10;
-        if (c >= 'A' && c <= 'F')
+        }
+        if (c >= 'A' && c <= 'F') {
             return c - 'A' + 10;
+        }
         return -1;
     };
     std::string out;
@@ -146,8 +149,9 @@ inline json parse_query(std::string_view target) {
     std::size_t      i  = 0;
     while (i < qs.size()) {
         std::size_t amp = qs.find('&', i);
-        if (amp == std::string_view::npos)
+        if (amp == std::string_view::npos) {
             amp = qs.size();
+        }
         std::string_view kv = qs.substr(i, amp - i);
         auto             eq = kv.find('=');
         if (eq != std::string_view::npos) {
@@ -163,18 +167,22 @@ inline json parse_query(std::string_view target) {
 // 路径分段（去查询串、忽略空段）。
 inline std::vector<std::string> split_path(std::string_view target) {
     auto q = target.find('?');
-    if (q != std::string_view::npos)
+    if (q != std::string_view::npos) {
         target = target.substr(0, q);
+    }
     std::vector<std::string> out;
     std::size_t              i = 0;
     while (i < target.size()) {
-        while (i < target.size() && target[i] == '/')
+        while (i < target.size() && target[i] == '/') {
             ++i;
+        }
         std::size_t j = i;
-        while (j < target.size() && target[j] != '/')
+        while (j < target.size() && target[j] != '/') {
             ++j;
-        if (j > i)
+        }
+        if (j > i) {
             out.emplace_back(target.substr(i, j - i));
+        }
         i = j;
     }
     return out;
@@ -377,10 +385,12 @@ public:
     asio::awaitable<Response> dispatch(const http::request<http::string_body>& req) {
         const auto segs = detail::split_path(req.target());
         for (auto& r : routes_) {
-            if (r.method != req.method())
+            if (r.method != req.method()) {
                 continue;
-            if (r.segments.size() != segs.size())
+            }
+            if (r.segments.size() != segs.size()) {
                 continue;
+            }
             std::vector<std::string> captured;
             bool                     ok = true;
             for (std::size_t i = 0; i < segs.size(); ++i) {
@@ -391,8 +401,9 @@ public:
                     break;
                 }
             }
-            if (!ok)
+            if (!ok) {
                 continue;
+            }
 
             detail::RouteContext ctx;
             ctx.req         = &req;

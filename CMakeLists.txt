@@ -30,6 +30,7 @@ find_package(magic_enum CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(tomlplusplus CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(SQLiteCpp CONFIG REQUIRED)
 
@@ -123,6 +124,7 @@ target_link_libraries(tqsdk_core PUBLIC
     nlohmann_json::nlohmann_json
     tomlplusplus::tomlplusplus
     spdlog::spdlog
+    fmt::fmt
     CLI11::CLI11
 )
 
@@ -330,6 +332,7 @@ if(TQSDK_BUILD_TESTS)
         tests/auth/tq_auth_test.cpp
         tests/auth/dynamic_endpoint_test.cpp
         tests/util/json_value_test.cpp
+        tests/util/http_download_test.cpp
         tests/util/serde_test.cpp
         tests/util/spawn_logged_test.cpp
         tests/util/log_test.cpp
@@ -480,7 +483,7 @@ install(FILES config/gw.toml config/node.toml config/p0_simnode.toml
 install(FILES README.md docs/README.md docs/ARCHITECTURE.md docs/MODULES.md
               docs/FLOWS.md docs/STATE_MACHINES.md docs/PROTOCOLS.md docs/OPERATIONS.md
               docs/CTP.md docs/SOAK_PERF.md docs/WEB_FRONTEND.md docs/WEB_INDICATORS.md docs/TQ_AUTH.md docs/INSTRUMENTS.md
-              docs/KLINE_CACHE.md docs/SIMNOW_ACCEPTANCE.md docs/P0_SIMNOW_TEST_PLAN.md docs/ORDER_TASKS.md docs/RISK_CONTROL.md docs/TICK_DATA.md docs/OPTION_ANALYTICS.md docs/TRADING_STATUS.md docs/MULTI_ACCOUNT_BACKTEST.md docs/PYTHON_BACKTEST.md docs/PYTHON_LIVE_TRADING.md docs/PYTHON_LIBRARY.md docs/PYTHON_PACKAGING.md docs/RELEASE_0.1.0.md docs/ROADMAP.md
+              docs/KLINE_CACHE.md docs/SIMNOW_ACCEPTANCE.md docs/P0_SIMNOW_TEST_PLAN.md docs/ORDER_TASKS.md docs/RISK_CONTROL.md docs/TICK_DATA.md docs/OPTION_ANALYTICS.md docs/TRADING_STATUS.md docs/MULTI_ACCOUNT_BACKTEST.md docs/PYTHON_BACKTEST.md docs/PYTHON_LIVE_TRADING.md docs/PYTHON_LIBRARY.md docs/PYTHON_PACKAGING.md docs/ERROR_HANDLING.md docs/RELEASE_0.1.0.md docs/ROADMAP.md
         DESTINATION share/doc/tqsdk)
 
 # ==========================================================

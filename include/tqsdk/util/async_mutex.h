@@ -37,8 +37,9 @@ public:
             try {
                 co_await t.async_wait(asio::use_awaitable);
             } catch (const boost::system::system_error& e) {
-                if (e.code() != asio::error::operation_aborted)
+                if (e.code() != asio::error::operation_aborted) {
                     throw;
+                }
                 // operation_aborted = 被 unlock 唤醒
             }
             // 唤醒后从等待队列摘除（若还在）

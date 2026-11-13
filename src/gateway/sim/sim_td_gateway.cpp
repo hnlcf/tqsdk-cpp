@@ -350,10 +350,12 @@ nlohmann::json SimTdGateway::position_json(const InstrumentId& symbol) const {
 
     double float_profit_long = 0.0, float_profit_short = 0.0;
     if (std::isfinite(last)) {
-        if (p.volume_long)
+        if (p.volume_long) {
             float_profit_long = (last - position_price_long) * p.volume_long * m;
-        if (p.volume_short)
+        }
+        if (p.volume_short) {
             float_profit_short = (position_price_short - last) * p.volume_short * m;
+        }
     }
 
     double margin_long =
@@ -388,8 +390,9 @@ void SimTdGateway::recompute_available() {
 
     for (auto& [symbol, p] : positions_) {
         auto sit = specs_.find(symbol);
-        if (sit == specs_.end())
+        if (sit == specs_.end()) {
             continue;
+        }
         const ContractSpec& spec = sit->second;
         double              m    = spec.volume_multiple;
         double              pl   = p.volume_long ? p.open_cost_long / p.volume_long : 0.0;
@@ -400,8 +403,9 @@ void SimTdGateway::recompute_available() {
     // 挂单冻结：按每笔挂单未成交手数的限价（市价用最新价）预估保证金。
     for (auto& [rid, order] : live_orders_) {
         auto sit = specs_.find(order.instrument_id);
-        if (sit == specs_.end())
+        if (sit == specs_.end()) {
             continue;
+        }
         const ContractSpec& spec = sit->second;
         double              px   = order.limit_price;
         if (!std::isfinite(px)) {
@@ -464,12 +468,15 @@ void SimTdGateway::emit(const FillBatch& batch) {
     }
 
     nlohmann::json user = nlohmann::json::object();
-    if (!batch.orders.empty())
+    if (!batch.orders.empty()) {
         user["orders"] = batch.orders;
-    if (!batch.trades.empty())
+    }
+    if (!batch.trades.empty()) {
         user["trades"] = batch.trades;
-    if (!batch.positions.empty())
+    }
+    if (!batch.positions.empty()) {
         user["positions"] = batch.positions;
+    }
     if (batch.account_dirty) {
         user["accounts"] = {{"CNY", account_json()}};
     }

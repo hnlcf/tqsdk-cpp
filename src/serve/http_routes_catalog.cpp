@@ -33,8 +33,9 @@ asio::awaitable<json> HttpServer::RouteHandlers::catalog_instruments(Query<Catal
     filter.offset          = query_size(query.value.offset, 0, 1'000'000);
     const auto items       = catalog_->list(filter);
     json       out         = json::array();
-    for (const auto& item : items)
+    for (const auto& item : items) {
         out.push_back(InstrumentCatalog::to_json(item));
+    }
     co_return json{{"instruments", std::move(out)},
                    {"count", items.size()},
                    {"catalog", catalog_->status_json()}};
@@ -137,8 +138,9 @@ HttpServer::RouteHandlers::option_analytics(std::string                 underlyi
     std::unordered_map<std::string, double>                               market_prices;
     std::unordered_map<std::string, const InstrumentCatalog::Instrument*> by_strike_right;
     for (const auto& contract : contracts) {
-        if (contract.strike_price <= 0)
+        if (contract.strike_price <= 0) {
             continue;
+        }
         strikes.push_back(contract.strike_price);
         const auto quote = api_->get_quote(contract.instrument_id);
         if (std::isfinite(quote.last_price) && quote.last_price > 0) {

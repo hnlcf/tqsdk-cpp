@@ -37,14 +37,17 @@ std::string url_encode(std::string_view value) {
 
 std::optional<json> jwt_claims(std::string_view token) {
     const auto first = token.find('.');
-    if (first == std::string_view::npos)
+    if (first == std::string_view::npos) {
         return std::nullopt;
+    }
     const auto second = token.find('.', first + 1);
-    if (second == std::string_view::npos)
+    if (second == std::string_view::npos) {
         return std::nullopt;
+    }
     const auto payload = base64url_decode(token.substr(first + 1, second - first - 1));
-    if (payload.empty())
+    if (payload.empty()) {
         return std::nullopt;
+    }
     try {
         return json::parse(payload);
     } catch (...) {
@@ -117,11 +120,13 @@ std::string base64url_decode(std::string_view input) {
     uint32_t value = 0;
     int      bits  = 0;
     for (unsigned char c : normalized) {
-        if (c == '=')
+        if (c == '=') {
             break;
+        }
         const int decoded = table[c];
-        if (decoded < 0)
+        if (decoded < 0) {
             return {};
+        }
         value = (value << 6) | static_cast<uint32_t>(decoded);
         bits += 6;
         if (bits >= 8) {
@@ -134,17 +139,21 @@ std::string base64url_decode(std::string_view input) {
 
 TqAuth::TqAuth(Config config)
     : cfg_(std::move(config)) {
-    if (cfg_.auth_url.empty())
+    if (cfg_.auth_url.empty()) {
         cfg_.auth_url = std::string(constants::kTqAuthUrl);
-    if (cfg_.ns_url.empty())
+    }
+    if (cfg_.ns_url.empty()) {
         cfg_.ns_url = std::string(constants::kTqNameServiceUrl);
-    if (cfg_.broker_url_prefix.empty())
+    }
+    if (cfg_.broker_url_prefix.empty()) {
         cfg_.broker_url_prefix = std::string(constants::kTqBrokerUrlPrefix);
+    }
     cfg_.auth_url          = trim_url(cfg_.auth_url);
     cfg_.ns_url            = trim_url(cfg_.ns_url);
     cfg_.broker_url_prefix = trim_url(cfg_.broker_url_prefix);
-    if (cfg_.mode != "bt")
+    if (cfg_.mode != "bt") {
         cfg_.mode = "real";
+    }
 }
 
 void TqAuth::init(std::string mode) {
@@ -158,23 +167,26 @@ std::string TqAuth::mode() const {
 }
 
 void TqAuth::set_error(std::string message) {
+    SPDLOG_WARN("[TqAuth] {}", message);
     last_error_ = std::move(message);
 }
 
 bool TqAuth::token_is_fresh() const {
-    if (access_token_.empty())
+    if (access_token_.empty()) {
         return false;
+    }
     return std::chrono::system_clock::now() + cfg_.refresh_margin < expires_at_;
 }
 
 std::string TqAuth::bearer_header_unlocked() const {
-    return access_token_.empty() ? std::string{} : "Bearer " + access_token_;
+    return access_token_.empty() ? std::string{} : fmt::format("Bearer {}", access_token_);
 }
 
 void TqAuth::apply_claims(std::string_view access_token) {
     const auto claims = jwt_claims(access_token);
-    if (!claims)
+    if (!claims) {
         return;
+    }
     auth_id_ = string_or(*claims, "sub", auth_id_);
     if (claims->contains("grants") && (*claims)["grants"].is_object()) {
         grants_json_ = (*claims)["grants"].dump();
@@ -186,7 +198,7 @@ bool TqAuth::apply_token_response(std::string_view body, std::string_view fallba
         const auto doc    = json::parse(body);
         const auto access = doc.value("access_token", std::string{});
         if (access.empty()) {
-            set_error(std::string{fallback_error} + ": no access_token");
+            set_error(fmt::format("{}: no access_token", fallback_error));
             return false;
         }
         access_token_  = access;
@@ -204,24 +216,26 @@ bool TqAuth::apply_token_response(std::string_view body, std::string_view fallba
         last_error_.clear();
         return true;
     } catch (const std::exception& e) {
-        set_error(std::string{fallback_error} + ": " + e.what());
+        set_error(fmt::format("{}: {}", fallback_error, e.what()));
         return false;
     }
 }
 
 bool TqAuth::post_token(std::string_view body) {
-    const std::string url = cfg_.auth_url + "/auth/realms/shinnytech/protocol/openid-connect/token";
-    try {
-        const std::string response = util::http_post_form(
-            url,
-            body,
-            cfg_.user_agent,
-            std::chrono::duration_cast<std::chrono::milliseconds>(cfg_.request_timeout));
-        return apply_token_response(response, "TqAuth token request failed");
-    } catch (const std::exception& e) {
-        set_error(std::string("TqAuth token request failed: ") + e.what());
+    const std::string url =
+        fmt::format("{}/auth/realms/shinnytech/protocol/openid-connect/token", cfg_.auth_url);
+    const auto response_result = util::http_post_form(
+        url,
+        body,
+        cfg_.user_agent,
+        std::chrono::duration_cast<std::chrono::milliseconds>(cfg_.request_timeout));
+    if (!response_result) {
+        set_error(fmt::format("TqAuth token request failed: {} ({})",
+                              response_result.error().detail,
+                              util::http_error_name(response_result.error().code)));
         return false;
     }
+    return apply_token_response(*response_result, "TqAuth token request failed");
 }
 
 bool TqAuth::login() {
@@ -237,13 +251,16 @@ bool TqAuth::login() {
     }
     std::lock_guard lock(mutex_);
     SPDLOG_INFO("[TqAuth] login user={}", cfg_.user_name);
-    const std::string body    = "grant_type=password&username=" + url_encode(cfg_.user_name) +
-                                "&password=" + url_encode(cfg_.password) +
-                                "&client_id=" + url_encode(cfg_.client_id) +
-                                "&client_secret=" + url_encode(cfg_.client_secret);
-    const bool        applied = post_token(body);
-    if (!applied)
+    const std::string body =
+        fmt::format("grant_type=password&username={}&password={}&client_id={}&client_secret={}",
+                    url_encode(cfg_.user_name),
+                    url_encode(cfg_.password),
+                    url_encode(cfg_.client_id),
+                    url_encode(cfg_.client_secret));
+    const bool applied = post_token(body);
+    if (!applied) {
         SPDLOG_WARN("[TqAuth] login failed: {}", last_error_);
+    }
     return applied;
 }
 
@@ -259,9 +276,10 @@ bool TqAuth::refresh() {
     }
     SPDLOG_DEBUG("[TqAuth] refreshing access token");
     const std::string body =
-        "grant_type=refresh_token&refresh_token=" + url_encode(refresh_token_) +
-        "&client_id=" + url_encode(cfg_.client_id) +
-        "&client_secret=" + url_encode(cfg_.client_secret);
+        fmt::format("grant_type=refresh_token&refresh_token={}&client_id={}&client_secret={}",
+                    url_encode(refresh_token_),
+                    url_encode(cfg_.client_id),
+                    url_encode(cfg_.client_secret));
     return post_token(body);
 }
 
@@ -269,8 +287,9 @@ std::string TqAuth::ensure_access_token() {
     std::string refresh_token;
     {
         std::lock_guard lock(mutex_);
-        if (token_is_fresh())
+        if (token_is_fresh()) {
             return access_token_;
+        }
         refresh_token = refresh_token_;
     }
     if (!refresh_token.empty() && refresh()) {
@@ -285,8 +304,9 @@ std::string TqAuth::ensure_access_token() {
 }
 
 std::string TqAuth::authorization_header() {
-    if (ensure_access_token().empty())
+    if (ensure_access_token().empty()) {
         return {};
+    }
     std::lock_guard lock(mutex_);
     return bearer_header_unlocked();
 }
@@ -294,20 +314,30 @@ std::string TqAuth::authorization_header() {
 std::optional<std::chrono::system_clock::time_point> TqAuth::expire_datetime() {
     {
         std::lock_guard lock(mutex_);
-        if (expire_loaded_)
+        if (expire_loaded_) {
             return expire_at_value_;
+        }
     }
     const auto authorization = authorization_header();
-    if (authorization.empty())
+    if (authorization.empty()) {
         return std::nullopt;
+    }
     try {
-        const std::string url  = cfg_.auth_url + "/auth/realms/shinnytech/rest/get-grant/tq";
-        const std::string body = util::http_get(
+        const std::string url =
+            fmt::format("{}/auth/realms/shinnytech/rest/get-grant/tq", cfg_.auth_url);
+        const auto body_result = util::http_get(
             url,
             cfg_.user_agent,
             std::chrono::duration_cast<std::chrono::milliseconds>(cfg_.request_timeout),
             {{"Authorization", authorization}});
-        const auto doc = json::parse(body);
+        if (!body_result) {
+            std::lock_guard lock(mutex_);
+            set_error(fmt::format("TqAuth expire request failed: {} ({})",
+                                  body_result.error().detail,
+                                  util::http_error_name(body_result.error().code)));
+            return std::nullopt;
+        }
+        const auto doc = json::parse(*body_result);
         if (!doc.contains("exp") || !doc["exp"].is_number_integer()) {
             std::lock_guard lock(mutex_);
             set_error("TqAuth expire response has no exp");
@@ -365,14 +395,22 @@ bool TqAuth::add_account(std::string_view account_id) {
         return false;
     }
     try {
-        const std::string url = cfg_.auth_url +
-                                "/auth/realms/shinnytech/rest/update-grant-accounts/" +
-                                url_encode(account_id);
-        util::http_put(url,
-                       {},
-                       cfg_.user_agent,
-                       std::chrono::duration_cast<std::chrono::milliseconds>(cfg_.request_timeout),
-                       {{"Authorization", authorization}});
+        const std::string url =
+            fmt::format("{}/auth/realms/shinnytech/rest/update-grant-accounts/{}",
+                        cfg_.auth_url,
+                        url_encode(account_id));
+        const auto put_result = util::http_put(
+            url,
+            {},
+            cfg_.user_agent,
+            std::chrono::duration_cast<std::chrono::milliseconds>(cfg_.request_timeout),
+            {{"Authorization", authorization}});
+        if (!put_result) {
+            set_error(fmt::format("TqAuth add account failed: {} ({})",
+                                  put_result.error().detail,
+                                  util::http_error_name(put_result.error().code)));
+            return false;
+        }
     } catch (const std::exception& e) {
         set_error(std::string("TqAuth add account failed: ") + e.what());
         return false;
@@ -382,37 +420,48 @@ bool TqAuth::add_account(std::string_view account_id) {
         return false;
     }
     const std::string body =
-        "grant_type=refresh_token&refresh_token=" + url_encode(refresh_token_) +
-        "&client_id=" + url_encode(cfg_.client_id) +
-        "&client_secret=" + url_encode(cfg_.client_secret);
+        fmt::format("grant_type=refresh_token&refresh_token={}&client_id={}&client_secret={}",
+                    url_encode(refresh_token_),
+                    url_encode(cfg_.client_id),
+                    url_encode(cfg_.client_secret));
     return post_token(body);
 }
 
 std::optional<TqAuth::TdUrl> TqAuth::get_td_url(std::string_view broker_id,
                                                 std::string_view account_id) {
     const auto authorization = authorization_header();
-    if (authorization.empty())
+    if (authorization.empty()) {
         return std::nullopt;
+    }
     try {
-        const std::string url  = cfg_.broker_url_prefix + "/" + url_encode(broker_id) +
-                                 ".json?account_id=" + url_encode(account_id) +
-                                 "&auth=" + url_encode(cfg_.user_name);
-        const std::string body = util::http_get(
+        const std::string url         = fmt::format("{}/{}.json?account_id={}&auth={}",
+                                                    cfg_.broker_url_prefix,
+                                                    url_encode(broker_id),
+                                                    url_encode(account_id),
+                                                    url_encode(cfg_.user_name));
+        const auto        body_result = util::http_get(
             url,
             cfg_.user_agent,
             std::chrono::duration_cast<std::chrono::milliseconds>(cfg_.request_timeout),
             {{"Authorization", authorization}});
-        const auto doc        = json::parse(body);
+        if (!body_result) {
+            std::lock_guard lock(mutex_);
+            set_error(fmt::format("TqAuth td url request failed: {} ({})",
+                                  body_result.error().detail,
+                                  util::http_error_name(body_result.error().code)));
+            return std::nullopt;
+        }
+        const auto doc        = json::parse(*body_result);
         const auto broker_key = std::string{broker_id};
         if (!doc.contains(broker_key) || !doc[broker_key].is_object()) {
             std::lock_guard lock(mutex_);
-            set_error("TqAuth unsupported broker: " + broker_key);
+            set_error(fmt::format("TqAuth unsupported broker: {}", broker_key));
             return std::nullopt;
         }
         const auto& broker = doc[broker_key];
         if (!broker.contains("category") || !category_has_tq(broker["category"])) {
             std::lock_guard lock(mutex_);
-            set_error("TqAuth broker does not support TQ: " + broker_key);
+            set_error(fmt::format("TqAuth broker does not support TQ: {}", broker_key));
             return std::nullopt;
         }
         TdUrl result;
@@ -435,17 +484,27 @@ std::optional<TqAuth::TdUrl> TqAuth::get_td_url(std::string_view broker_id,
 
 std::optional<std::string> TqAuth::get_md_url(bool stock, bool backtest) {
     const auto authorization = authorization_header();
-    if (authorization.empty())
+    if (authorization.empty()) {
         return std::nullopt;
+    }
     try {
-        const std::string url  = cfg_.ns_url + "?stock=" + (stock ? "true" : "false") +
-                                 "&backtest=" + (backtest ? "true" : "false");
-        const std::string body = util::http_get(
+        const std::string url         = fmt::format("{}?stock={}&backtest={}",
+                                                    cfg_.ns_url,
+                                                    stock ? "true" : "false",
+                                                    backtest ? "true" : "false");
+        const auto        body_result = util::http_get(
             url,
             cfg_.user_agent,
             std::chrono::duration_cast<std::chrono::milliseconds>(cfg_.request_timeout),
             {{"Authorization", authorization}});
-        const auto doc   = json::parse(body);
+        if (!body_result) {
+            std::lock_guard lock(mutex_);
+            set_error(fmt::format("TqAuth md url request failed: {} ({})",
+                                  body_result.error().detail,
+                                  util::http_error_name(body_result.error().code)));
+            return std::nullopt;
+        }
+        const auto doc   = json::parse(*body_result);
         const auto mdurl = string_or(doc, "mdurl");
         if (mdurl.empty()) {
             std::lock_guard lock(mutex_);

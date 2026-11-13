@@ -7,10 +7,12 @@ namespace tqsdk {
 namespace {
 
 double bar_price(const BacktestConfig& cfg, const BacktestBar& bar) {
-    if (cfg.execute_on_bar_close && std::isfinite(bar.close) && bar.close > 0)
+    if (cfg.execute_on_bar_close && std::isfinite(bar.close) && bar.close > 0) {
         return bar.close;
-    if (std::isfinite(bar.open) && bar.open > 0)
+    }
+    if (std::isfinite(bar.open) && bar.open > 0) {
         return bar.open;
+    }
     return bar.close;
 }
 
@@ -30,12 +32,14 @@ double BacktestEngine::equity() const noexcept {
 
 void BacktestEngine::mark(const BacktestBar& bar) {
     const double price = execution_price(bar);
-    if (std::isfinite(price) && price > 0)
+    if (std::isfinite(price) && price > 0) {
         last_price_ = price;
+    }
     current_datetime_    = bar.datetime;
     const double current = equity();
-    if (current > peak_equity_)
+    if (current > peak_equity_) {
         peak_equity_ = current;
+    }
     const double drawdown = peak_equity_ - current;
     if (drawdown > max_drawdown_) {
         max_drawdown_     = drawdown;
@@ -50,8 +54,9 @@ void BacktestEngine::mark_tick(const Tick& tick) {
     // Tick.datetime 是字符串；tick 回测暂不伪造 TimeStamp，成交 datetime 保持 0。
     current_datetime_    = 0;
     const double current = equity();
-    if (current > peak_equity_)
+    if (current > peak_equity_) {
         peak_equity_ = current;
+    }
     const double drawdown = peak_equity_ - current;
     if (drawdown > max_drawdown_) {
         max_drawdown_     = drawdown;
@@ -80,37 +85,42 @@ void BacktestEngine::record_fill(Direction direction,
 
 bool BacktestEngine::close_short(uint64_t volume, double price) {
     const auto qty = std::min<uint64_t>(volume, short_volume_);
-    if (qty == 0)
+    if (qty == 0) {
         return false;
+    }
     const double pnl = (avg_short_ - price) * static_cast<double>(qty) * config_.volume_multiple;
     const double commission =
         config_.commission_per_lot * static_cast<double>(qty) +
         config_.commission_rate * price * config_.volume_multiple * static_cast<double>(qty);
     short_volume_ -= qty;
-    if (short_volume_ == 0)
+    if (short_volume_ == 0) {
         avg_short_ = 0.0;
+    }
     record_fill(Direction::BUY, Offset::CLOSE, qty, price, commission, pnl);
     return true;
 }
 
 bool BacktestEngine::close_long(uint64_t volume, double price) {
     const auto qty = std::min<uint64_t>(volume, long_volume_);
-    if (qty == 0)
+    if (qty == 0) {
         return false;
+    }
     const double pnl = (price - avg_long_) * static_cast<double>(qty) * config_.volume_multiple;
     const double commission =
         config_.commission_per_lot * static_cast<double>(qty) +
         config_.commission_rate * price * config_.volume_multiple * static_cast<double>(qty);
     long_volume_ -= qty;
-    if (long_volume_ == 0)
+    if (long_volume_ == 0) {
         avg_long_ = 0.0;
+    }
     record_fill(Direction::SELL, Offset::CLOSE, qty, price, commission, pnl);
     return true;
 }
 
 void BacktestEngine::open_long(uint64_t volume, double price) {
-    if (volume == 0)
+    if (volume == 0) {
         return;
+    }
     const auto total = static_cast<double>(long_volume_ + volume);
     avg_long_        = (avg_long_ * static_cast<double>(long_volume_) + price * volume) / total;
     long_volume_ += volume;
@@ -121,8 +131,9 @@ void BacktestEngine::open_long(uint64_t volume, double price) {
 }
 
 void BacktestEngine::open_short(uint64_t volume, double price) {
-    if (volume == 0)
+    if (volume == 0) {
         return;
+    }
     const auto total = static_cast<double>(short_volume_ + volume);
     avg_short_       = (avg_short_ * static_cast<double>(short_volume_) + price * volume) / total;
     short_volume_ += volume;
@@ -133,8 +144,9 @@ void BacktestEngine::open_short(uint64_t volume, double price) {
 }
 
 bool BacktestEngine::execute(Direction direction, Offset offset, uint64_t volume) {
-    if (volume == 0 || last_price_ <= 0 || !std::isfinite(last_price_))
+    if (volume == 0 || last_price_ <= 0 || !std::isfinite(last_price_)) {
         return false;
+    }
     const double price     = last_price_;
     uint64_t     remaining = volume;
 
@@ -187,8 +199,9 @@ BacktestStats BacktestEngine::run(const std::vector<BacktestBar>& bars, Strategy
             strategy(context);
         }
     }
-    if (!bars.empty())
+    if (!bars.empty()) {
         mark(bars.back());
+    }
 
     BacktestStats stats;
     stats.bars             = bars.size();
@@ -228,8 +241,9 @@ BacktestStats BacktestEngine::run_ticks(const std::vector<Tick>& ticks, TickStra
             strategy(context);
         }
     }
-    if (!ticks.empty())
+    if (!ticks.empty()) {
         mark_tick(ticks.back());
+    }
 
     BacktestStats stats;
     stats.bars             = ticks.size();
@@ -274,8 +288,9 @@ bool BacktestContext::sell_close(uint64_t volume) {
 
 bool BacktestContext::target_position(std::int64_t target) {
     const auto current = engine_->position();
-    if (target == current)
+    if (target == current) {
         return true;
+    }
     if (target > current) {
         return engine_->execute(
             Direction::BUY, Offset::OPEN, static_cast<uint64_t>(target - current));
@@ -309,8 +324,9 @@ bool BacktestTickContext::sell_close(uint64_t volume) {
 
 bool BacktestTickContext::target_position(std::int64_t target) {
     const auto current = engine_->position();
-    if (target == current)
+    if (target == current) {
         return true;
+    }
     if (target > current) {
         return engine_->execute(
             Direction::BUY, Offset::OPEN, static_cast<uint64_t>(target - current));

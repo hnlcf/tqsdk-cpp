@@ -71,8 +71,9 @@ void DiffMergeEngine::merge_trade(const nlohmann::json& trade) {
         if (auto p = user.find("orders"); p != user.end() && p->is_object()) {
             for (auto oit = p->begin(); oit != p->end(); ++oit) {
                 auto& o = data_.orders.get_or_create(oit.key());
-                if (o.order_id.empty())
+                if (o.order_id.empty()) {
                     o.order_id = oit.key();
+                }
                 // 若外层 key 是 symbol,顺手填 instrument_id(不置位)
                 if (o.instrument_id.empty() && !outer_key.empty()) {
                     o.instrument_id = outer_key;
@@ -372,8 +373,9 @@ void DiffMergeEngine::merge_one_trade(Trade& t, const nlohmann::json& diff) {
             break;
         }
     }
-    if (bits)
+    if (bits) {
         data_.trades.mark_changed(t, bits);
+    }
 }
 
 } // namespace tqsdk

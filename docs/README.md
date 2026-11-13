@@ -12,6 +12,7 @@
 | [FLOWS.md](FLOWS.md) | 行情/交易/订阅/重连/结算/UI 信息流 |
 | [STATE_MACHINES.md](STATE_MACHINES.md) | 进程、连接、CTP、订单、WS 客户端、交易日状态机 |
 | [PROTOCOLS.md](PROTOCOLS.md) | IPC 帧、REST、WebSocket、序列化和错误语义 |
+| [ERROR_HANDLING.md](ERROR_HANDLING.md) | std::expected、模块错误、异常隔离、日志和迁移状态 |
 
 ## 2. 运行与运维
 

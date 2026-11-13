@@ -36,10 +36,12 @@ asio::awaitable<std::pair<unsigned, json>> request_json(asio::any_io_executor ex
 
     http::request<http::string_body> req{method, target, 11};
     req.set(http::field::host, "127.0.0.1");
-    if (!authorization.empty())
+    if (!authorization.empty()) {
         req.set(http::field::authorization, authorization);
-    if (!api_key.empty())
+    }
+    if (!api_key.empty()) {
         req.set("X-API-Key", api_key);
+    }
     if (!body.is_null()) {
         req.set(http::field::content_type, "application/json");
         req.body() = body.dump();
@@ -126,8 +128,9 @@ TEST(MultiAccountHttp, RoutesTradingAndSnapshotsByAccount) {
             co_return;
         },
         [&](std::exception_ptr ep) {
-            if (ep)
+            if (ep) {
                 std::rethrow_exception(ep);
+            }
             io.stop();
         });
     io.run();
@@ -255,8 +258,9 @@ TEST(MultiAccountHttp, WebSocketRoutesByAccount) {
             co_return;
         },
         [&](std::exception_ptr ep) {
-            if (ep)
+            if (ep) {
                 std::rethrow_exception(ep);
+            }
             io.stop();
         });
     io.run();
@@ -337,8 +341,9 @@ TEST(MultiAccountHttp, TasksAndRiskAreAccountScoped) {
             co_return;
         },
         [&](std::exception_ptr ep) {
-            if (ep)
+            if (ep) {
                 std::rethrow_exception(ep);
+            }
             io.stop();
         });
     io.run();
@@ -411,8 +416,9 @@ TEST(MultiAccountHttp, TaskRegistryIdsArePerAccount) {
             co_return;
         },
         [&](std::exception_ptr ep) {
-            if (ep)
+            if (ep) {
                 std::rethrow_exception(ep);
+            }
             io.stop();
         });
     io.run();
@@ -466,8 +472,9 @@ TEST(MultiAccountHttp, RemovedAccountDropsHubAndRejectsStream) {
             co_return;
         },
         [&](std::exception_ptr ep) {
-            if (ep)
+            if (ep) {
                 std::rethrow_exception(ep);
+            }
             io.stop();
         });
     io.run();
@@ -486,8 +493,9 @@ TEST(MultiAccountHttp, RemovedAccountDropsHubAndRejectsStream) {
             co_return;
         },
         [&](std::exception_ptr ep) {
-            if (ep)
+            if (ep) {
                 std::rethrow_exception(ep);
+            }
             io.stop();
         });
     io.run();
@@ -587,8 +595,9 @@ TEST(MultiAccountHttp, AuthProtectsRestAndWebSocket) {
             co_return;
         },
         [&](std::exception_ptr ep) {
-            if (ep)
+            if (ep) {
                 std::rethrow_exception(ep);
+            }
             io.stop();
         });
     io.run();

@@ -49,17 +49,22 @@ std::string trading_day_for(const std::tm& tm, TradingCalendar::Phase phase) {
 }
 
 std::string session_for(const std::tm& tm, TradingCalendar::Phase phase) {
-    if (phase == TradingCalendar::Phase::Closed)
+    if (phase == TradingCalendar::Phase::Closed) {
         return "closed";
-    if (phase == TradingCalendar::Phase::Settlement)
+    }
+    if (phase == TradingCalendar::Phase::Settlement) {
         return "settlement";
-    if (phase == TradingCalendar::Phase::Break)
+    }
+    if (phase == TradingCalendar::Phase::Break) {
         return "break";
-    if (phase == TradingCalendar::Phase::Unknown)
+    }
+    if (phase == TradingCalendar::Phase::Unknown) {
         return "unknown";
+    }
     const int minute = tm.tm_hour * 60 + tm.tm_min;
-    if (minute >= 21 * 60 || minute < 3 * 60)
+    if (minute >= 21 * 60 || minute < 3 * 60) {
         return "night";
+    }
     return "day";
 }
 

@@ -37,8 +37,9 @@ asio::awaitable<json> HttpServer::RouteHandlers::quotes(Query<QuoteBatchQuery> q
             out["quotes"][part] = quote_to_json(api_->get_quote(part), catalog_);
             ++count;
         }
-        if (end == std::string::npos)
+        if (end == std::string::npos) {
             break;
+        }
         begin = end + 1;
     }
     co_return out;
@@ -55,8 +56,9 @@ asio::awaitable<json> HttpServer::RouteHandlers::ticks(std::string symbol, Query
     }
     TickSeries* series = api_->get_tick_serial(symbol, static_cast<int>(limit));
     if (series != nullptr) {
-        for (const auto& tick : series->data)
+        for (const auto& tick : series->data) {
             ticks.push_back(tick);
+        }
     }
     co_return json{{"instrument_id", symbol}, {"source", "memory"}, {"ticks", std::move(ticks)}};
 }
@@ -67,12 +69,15 @@ constexpr std::int64_t kOneDayNs = 86'400'000'000'000LL;
 
 KlineAdjustMode parse_adjust(std::string_view value, bool& valid) {
     valid = true;
-    if (value.empty() || value == "none")
+    if (value.empty() || value == "none") {
         return KlineAdjustMode::None;
-    if (value == "forward")
+    }
+    if (value == "forward") {
         return KlineAdjustMode::Forward;
-    if (value == "back")
+    }
+    if (value == "back") {
         return KlineAdjustMode::Back;
+    }
     valid = false;
     return KlineAdjustMode::None;
 }
@@ -80,8 +85,9 @@ KlineAdjustMode parse_adjust(std::string_view value, bool& valid) {
 asio::awaitable<std::vector<KlineBar>>
 load_contract_daily(TqApi* api, std::string contract, std::int64_t duration_ns) {
     auto* stream = api->get_kline_serial(contract, duration_ns, 200);
-    if (stream == nullptr)
+    if (stream == nullptr) {
         co_return std::vector<KlineBar>{};
+    }
     for (int attempt = 0; attempt < 30 && stream->bars.empty(); ++attempt) {
         asio::steady_timer timer(co_await asio::this_coro::executor);
         timer.expires_after(std::chrono::milliseconds(100));
@@ -140,8 +146,9 @@ asio::awaitable<json> HttpServer::RouteHandlers::kline(std::string       symbol,
     std::map<std::string, std::vector<KlineBar>> contract_bars;
     for (const auto& roll : rolls) {
         for (const auto& contract : {roll.from, roll.to}) {
-            if (contract_bars.contains(contract))
+            if (contract_bars.contains(contract)) {
                 continue;
+            }
             contract_bars[contract] = co_await load_contract_daily(api_, contract, duration_ns);
         }
     }

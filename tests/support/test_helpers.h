@@ -19,15 +19,17 @@ inline void run_coro(boost::asio::io_context&     ctx,
     auto deadline = std::chrono::steady_clock::now() + timeout;
     while (!done) {
         auto now = std::chrono::steady_clock::now();
-        if (now >= deadline)
+        if (now >= deadline) {
             break;
+        }
         ctx.restart();
         ctx.run_for(std::min<std::chrono::steady_clock::duration>(deadline - now,
                                                                   std::chrono::milliseconds(50)));
     }
 
-    if (eptr)
+    if (eptr) {
         std::rethrow_exception(eptr);
+    }
     EXPECT_TRUE(done) << "coroutine timed out after " << timeout.count() << "ms";
 }
 

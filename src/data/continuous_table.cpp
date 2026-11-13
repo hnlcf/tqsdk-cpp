@@ -34,8 +34,9 @@ std::string date_key_impl(std::int64_t datetime_ns) {
 }
 
 bool number(std::string_view value, double& out) {
-    if (value.empty())
+    if (value.empty()) {
         return false;
+    }
     try {
         std::size_t used = 0;
         out              = std::stod(std::string(value), &used);
@@ -59,11 +60,13 @@ std::string ContinuousTable::date_key(std::int64_t datetime_ns) {
 }
 
 bool ContinuousTable::load_local() {
-    if (!config_.enabled || config_.file.empty())
+    if (!config_.enabled || config_.file.empty()) {
         return false;
+    }
     std::ifstream input(config_.file);
-    if (!input.good())
+    if (!input.good()) {
         return false;
+    }
     std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
     return parse(text);
 }
@@ -71,27 +74,33 @@ bool ContinuousTable::load_local() {
 bool ContinuousTable::parse(std::string_view json_text) {
     try {
         const auto root = nlohmann::json::parse(json_text);
-        if (!root.is_object())
+        if (!root.is_object()) {
             return false;
+        }
         ProductMap products;
         for (auto it = root.begin(); it != root.end(); ++it) {
-            if (!it.value().is_array())
+            if (!it.value().is_array()) {
                 continue;
+            }
             std::vector<Segment> segments;
             for (const auto& row : it.value()) {
-                if (!row.is_array() || row.size() < 2 || !row[0].is_string() || !row[1].is_string())
+                if (!row.is_array() || row.size() < 2 || !row[0].is_string() ||
+                    !row[1].is_string()) {
                     continue;
+                }
                 segments.push_back(Segment{row[0].get<std::string>(), row[1].get<std::string>()});
             }
-            if (segments.empty())
+            if (segments.empty()) {
                 continue;
+            }
             std::sort(segments.begin(), segments.end(), [](const auto& lhs, const auto& rhs) {
                 return lhs.date < rhs.date;
             });
             products.emplace(it.key(), std::move(segments));
         }
-        if (products.empty())
+        if (products.empty()) {
             return false;
+        }
         {
             std::lock_guard lock(mutex_);
             products_ = std::move(products);
@@ -114,10 +123,12 @@ bool ContinuousTable::ready() const noexcept {
 std::string ContinuousTable::product_of(std::string_view symbol) const {
     constexpr std::string_view main_prefix  = "KQ.m@";
     constexpr std::string_view index_prefix = "KQ.i@";
-    if (symbol.starts_with(main_prefix))
+    if (symbol.starts_with(main_prefix)) {
         return std::string(symbol.substr(main_prefix.size()));
-    if (symbol.starts_with(index_prefix))
+    }
+    if (symbol.starts_with(index_prefix)) {
         return std::string(symbol.substr(index_prefix.size()));
+    }
     return {};
 }
 
@@ -130,15 +141,18 @@ std::vector<ContinuousRoll> ContinuousTable::rolls_for(std::string_view product,
                                                        std::string_view end_date) const {
     std::lock_guard lock(mutex_);
     const auto      it = products_.find(std::string(product));
-    if (it == products_.end())
+    if (it == products_.end()) {
         return {};
+    }
     std::vector<ContinuousRoll> out;
     for (std::size_t i = 1; i < it->second.size(); ++i) {
         const auto& current = it->second[i];
-        if (!start_date.empty() && current.date < start_date)
+        if (!start_date.empty() && current.date < start_date) {
             continue;
-        if (!end_date.empty() && current.date > end_date)
+        }
+        if (!end_date.empty() && current.date > end_date) {
             continue;
+        }
         out.push_back(ContinuousRoll{current.date, it->second[i - 1].contract, current.contract});
     }
     return out;
@@ -156,8 +170,9 @@ nlohmann::json ContinuousTable::status_json() const {
 }
 
 void ContinuousTable::start_background_refresh() {
-    if (!config_.enabled || worker_.joinable())
+    if (!config_.enabled || worker_.joinable()) {
         return;
+    }
     stop_requested_ = false;
     worker_         = std::jthread([this](std::stop_token stop) {
         {
@@ -168,16 +183,25 @@ void ContinuousTable::start_background_refresh() {
         }
         while (!stop.stop_requested() && !stop_requested_) {
             try {
-                const auto text = util::http_get(
+                const auto text_result = util::http_get(
                     config_.url, constants::kDefaultNodeUserAgent, std::chrono::seconds(30));
-                if (parse(text) && !config_.file.empty()) {
-                    const auto temp = config_.file + ".tmp";
-                    {
-                        std::ofstream out(temp, std::ios::binary | std::ios::trunc);
-                        out << text;
+                if (!text_result) {
+                    std::lock_guard lock(mutex_);
+                    last_error_ = text_result.error().detail;
+                    SPDLOG_WARN("[continuous] refresh failed: {} ({})",
+                                text_result.error().detail,
+                                util::http_error_name(text_result.error().code));
+                } else {
+                    const auto& text = *text_result;
+                    if (parse(text) && !config_.file.empty()) {
+                        const auto temp = fmt::format("{}.tmp", config_.file);
+                        {
+                            std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+                            out << text;
+                        }
+                        std::error_code ec;
+                        std::filesystem::rename(temp, config_.file, ec);
                     }
-                    std::error_code ec;
-                    std::filesystem::rename(temp, config_.file, ec);
                 }
             } catch (const std::exception& e) {
                 std::lock_guard lock(mutex_);
@@ -208,8 +232,9 @@ ContinuousTable::adjust_daily(const std::vector<KlineBar>&                      
                               KlineAdjustMode                                     mode) {
     AdjustedKline result;
     result.bars = raw;
-    if (mode == KlineAdjustMode::None || raw.empty() || rolls.empty())
+    if (mode == KlineAdjustMode::None || raw.empty() || rolls.empty()) {
         return result;
+    }
 
     std::vector<std::pair<std::string, double>> ratios;
     ratios.reserve(rolls.size());
@@ -223,10 +248,11 @@ ContinuousTable::adjust_daily(const std::vector<KlineBar>&                      
         const KlineBar* old_bar = nullptr;
         const KlineBar* new_bar = nullptr;
         for (const auto& bar : old_it->second) {
-            if (date_key(bar.datetime) < roll.date)
+            if (date_key(bar.datetime) < roll.date) {
                 old_bar = &bar;
-            else
+            } else {
                 break;
+            }
         }
         for (const auto& bar : new_it->second) {
             if (date_key(bar.datetime) >= roll.date) {
@@ -241,30 +267,37 @@ ContinuousTable::adjust_daily(const std::vector<KlineBar>&                      
         }
         ratios.emplace_back(roll.date, new_bar->close / old_bar->close);
     }
-    if (ratios.empty())
+    if (ratios.empty()) {
         return result;
+    }
 
     for (auto& bar : result.bars) {
         const auto date   = date_key(bar.datetime);
         double     factor = 1.0;
         for (const auto& [roll_date, ratio] : ratios) {
             if (mode == KlineAdjustMode::Forward) {
-                if (roll_date > date)
+                if (roll_date > date) {
                     factor *= ratio;
+                }
             } else if (roll_date <= date) {
                 factor /= ratio;
             }
         }
-        if (std::abs(factor - 1.0) < 1e-12)
+        if (std::abs(factor - 1.0) < 1e-12) {
             continue;
-        if (std::isfinite(bar.open))
+        }
+        if (std::isfinite(bar.open)) {
             bar.open *= factor;
-        if (std::isfinite(bar.high))
+        }
+        if (std::isfinite(bar.high)) {
             bar.high *= factor;
-        if (std::isfinite(bar.low))
+        }
+        if (std::isfinite(bar.low)) {
             bar.low *= factor;
-        if (std::isfinite(bar.close))
+        }
+        if (std::isfinite(bar.close)) {
             bar.close *= factor;
+        }
     }
     result.adjusted = true;
     return result;

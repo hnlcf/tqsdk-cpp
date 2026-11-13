@@ -3,6 +3,7 @@
 #include "tqsdk/pch.h"
 
 #include "tqsdk/auth/tq_auth.h"
+#include "tqsdk/config/config_error.h"
 #include "tqsdk/constants.h"
 #include "tqsdk/data/continuous_table.h"
 #include "tqsdk/data/kline_store.h"
@@ -113,11 +114,14 @@ struct TqApiConfig {
     CtpConfig ctp;
 };
 
-/// 从 TOML 文件解析配置。文件不存在 / 语法错误 / 缺必填项 抛 std::runtime_error。
-TqApiConfig load_tqapi_config(const std::string& path);
+/// 从 TOML 文件加载配置。I/O/解析/校验错误通过 ConfigError 返回，不抛异常。
+config::ConfigResult<TqApiConfig> load_tqapi_config(const std::string& path) noexcept;
 
-/// 从 TOML 字符串解析配置（便于测试，无需落盘）。
+/// 从 TOML 字符串解析配置（兼容旧调用；新代码优先使用 try_parse_*）。
 TqApiConfig parse_tqapi_config(std::string_view toml_text);
+
+/// 从 TOML 字符串解析配置；不抛异常。
+config::ConfigResult<TqApiConfig> try_parse_tqapi_config(std::string_view toml_text) noexcept;
 
 /// 依据配置构造一个 TqApi。
 ///
@@ -242,13 +246,15 @@ struct NodeConfig {
 };
 
 /// 解析 gw 配置（TOML 文本）。
-GwConfig parse_gw_config(std::string_view toml_text);
+GwConfig                       parse_gw_config(std::string_view toml_text);
+config::ConfigResult<GwConfig> try_parse_gw_config(std::string_view toml_text) noexcept;
 
 /// 解析 node 配置（TOML 文本）。
-NodeConfig parse_node_config(std::string_view toml_text);
+NodeConfig                       parse_node_config(std::string_view toml_text);
+config::ConfigResult<NodeConfig> try_parse_node_config(std::string_view toml_text) noexcept;
 
-/// 从文件加载。
-GwConfig   load_gw_config(const std::string& path);
-NodeConfig load_node_config(const std::string& path);
+/// 从文件加载；错误通过 ConfigError 返回。
+config::ConfigResult<GwConfig>   load_gw_config(const std::string& path) noexcept;
+config::ConfigResult<NodeConfig> load_node_config(const std::string& path) noexcept;
 
 } // namespace tqsdk

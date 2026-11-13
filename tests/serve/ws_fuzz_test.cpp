@@ -16,8 +16,9 @@ TEST(WsFuzz, RandomClientTextNeverCrashes) {
     std::uniform_int_distribution<size_t> len_dist(0, 512);
     for (int iteration = 0; iteration < 1200; ++iteration) {
         std::string text(len_dist(rng), '\0');
-        for (auto& ch : text)
+        for (auto& ch : text) {
             ch = static_cast<char>(byte_dist(rng));
+        }
         EXPECT_NO_THROW({
             try {
                 (void)parse_ws_client_message(text);

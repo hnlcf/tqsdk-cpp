@@ -46,8 +46,9 @@ asio::awaitable<json> HttpServer::RouteHandlers::accounts() {
     json out = json::array();
     for (const auto& id : accounts_->account_ids()) {
         auto account = accounts_->find_account(id);
-        if (!account)
+        if (!account) {
             continue;
+        }
         out.push_back(json{{"account_id", id},
                            {"ready", account->ready()},
                            {"account", account_to_json(account->get_account())}});

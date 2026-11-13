@@ -19,54 +19,70 @@ namespace {
 // ---------- 枚举解析 ----------
 
 MdKind parse_md_kind(std::string_view s) {
-    if (s == "none" || s.empty())
+    if (s == "none" || s.empty()) {
         return MdKind::None;
-    if (s == "tq")
+    }
+    if (s == "tq") {
         return MdKind::Tq;
-    if (s == "ctp")
+    }
+    if (s == "ctp") {
         return MdKind::Ctp;
-    if (s == "remote")
+    }
+    if (s == "remote") {
         return MdKind::Remote;
-    if (s == "mock")
+    }
+    if (s == "mock") {
         return MdKind::Mock;
+    }
     throw std::runtime_error("config: unknown [md].kind = '" + std::string(s) + "'");
 }
 
 TdKind parse_td_kind(std::string_view s) {
-    if (s == "none" || s.empty())
+    if (s == "none" || s.empty()) {
         return TdKind::None;
-    if (s == "sim")
+    }
+    if (s == "sim") {
         return TdKind::Sim;
-    if (s == "ctp")
+    }
+    if (s == "ctp") {
         return TdKind::Ctp;
-    if (s == "remote")
+    }
+    if (s == "remote") {
         return TdKind::Remote;
-    if (s == "mock")
+    }
+    if (s == "mock") {
         return TdKind::Mock;
+    }
     throw std::runtime_error("config: unknown [td].kind = '" + std::string(s) + "'");
 }
 
 IpcTransport parse_transport(std::string_view s) {
-    if (s == "uds")
+    if (s == "uds") {
         return IpcTransport::Uds;
-    if (s == "tcp")
+    }
+    if (s == "tcp") {
         return IpcTransport::Tcp;
+    }
     throw std::runtime_error("config: unknown [ipc].transport = '" + std::string(s) + "'");
 }
 
 ipc::FrameEncoding parse_encoding(std::string_view s) {
-    if (s.empty() || s == "json")
+    if (s.empty() || s == "json") {
         return ipc::FrameEncoding::Json;
-    if (s == "msgpack")
+    }
+    if (s == "msgpack") {
         return ipc::FrameEncoding::MessagePack;
+    }
     throw std::runtime_error("config: unknown [ipc].encoding = '" + std::string(s) + "'");
 }
 
 ipc::IpcRole parse_role(std::string_view s) {
-    if (s.empty() || s == "gateway")
+    if (s.empty() || s == "gateway") {
         return ipc::IpcRole::Gateway;
-    if (s == "node")
+    }
+    if (s == "node") {
         return ipc::IpcRole::Node;
+    }
     throw std::runtime_error("config: unknown [ipc].role = '" + std::string(s) + "'");
 }
 
@@ -83,10 +99,12 @@ std::string get_str(const toml::table& tbl, std::string_view key, std::string de
 
 double get_double(const toml::table& tbl, std::string_view key, double def) {
     if (auto* v = tbl.get(key)) {
-        if (auto d = v->value<double>())
+        if (auto d = v->value<double>()) {
             return *d;
-        if (auto i = v->value<int64_t>())
+        }
+        if (auto i = v->value<int64_t>()) {
             return static_cast<double>(*i);
+        }
         throw std::runtime_error("config: key '" + std::string(key) + "' must be a number");
     }
     return def;
@@ -94,8 +112,9 @@ double get_double(const toml::table& tbl, std::string_view key, double def) {
 
 int64_t get_int(const toml::table& tbl, std::string_view key, int64_t def) {
     if (auto* v = tbl.get(key)) {
-        if (auto i = v->value<int64_t>())
+        if (auto i = v->value<int64_t>()) {
             return *i;
+        }
         throw std::runtime_error("config: key '" + std::string(key) + "' must be an integer");
     }
     return def;
@@ -103,8 +122,9 @@ int64_t get_int(const toml::table& tbl, std::string_view key, int64_t def) {
 
 bool get_bool(const toml::table& tbl, std::string_view key, bool def) {
     if (auto* v = tbl.get(key)) {
-        if (auto b = v->value<bool>())
+        if (auto b = v->value<bool>()) {
             return *b;
+        }
         throw std::runtime_error("config: key '" + std::string(key) + "' must be a boolean");
     }
     return def;
@@ -180,8 +200,9 @@ TqApiConfig build_from_toml(const toml::table& root) {
             const auto& specs_t = *specs_tv->as_table();
             for (auto&& [k, v] : specs_t) {
                 const auto* sub = v.as_table();
-                if (!sub)
+                if (!sub) {
                     continue;
+                }
                 TqApiConfig::Td::Spec spec;
                 spec.symbol          = std::string(k.str());
                 spec.volume_multiple = get_double(*sub, "volume_multiple", spec.volume_multiple);
@@ -243,15 +264,42 @@ TqApiConfig parse_tqapi_config(std::string_view toml_text) {
     return build_from_toml(root);
 }
 
-TqApiConfig load_tqapi_config(const std::string& path) {
-    toml::table root;
+config::ConfigResult<TqApiConfig> load_tqapi_config(const std::string& path) noexcept {
     try {
-        root = toml::parse_file(path);
+        auto root = toml::parse_file(path);
+        return build_from_toml(root);
     } catch (const toml::parse_error& e) {
-        throw std::runtime_error(std::string("config: parse '") + path +
-                                 "': " + e.description().data());
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::parse,
+            fmt::format("parse '{}': {}", path, e.description().data()),
+        });
+    } catch (const std::exception& e) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            fmt::format("load '{}': {}", path, e.what()),
+        });
+    } catch (...) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            fmt::format("load '{}': unknown error", path),
+        });
     }
-    return build_from_toml(root);
+}
+
+config::ConfigResult<TqApiConfig> try_parse_tqapi_config(std::string_view toml_text) noexcept {
+    try {
+        return parse_tqapi_config(toml_text);
+    } catch (const std::exception& e) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::parse,
+            fmt::format("parse TOML: {}", e.what()),
+        });
+    } catch (...) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            "parse TOML: unknown error",
+        });
+    }
 }
 
 asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context&           ctx,
@@ -500,8 +548,9 @@ NodeConfig build_node_from_toml(const toml::table& root) {
     if (auto* arr = root.get("accounts"); arr && arr->is_array()) {
         for (auto&& item : *arr->as_array()) {
             const auto* t = item.as_table();
-            if (!t)
+            if (!t) {
                 continue;
+            }
             NodeConfig::AccountEndpoint ep;
             ep.id      = get_str(*t, "id", "");
             ep.gw_host = get_str(*t, "gw_host", ep.gw_host);
@@ -588,10 +637,12 @@ NodeConfig build_node_from_toml(const toml::table& root) {
     if (const auto& m = require_table(root, "market_cache"); !m.empty()) {
         cfg.market_cache_file = get_str(m, "file", cfg.market_cache_file);
     }
-    if (!kline_file_set)
+    if (!kline_file_set) {
         cfg.kline_cache.file = cfg.market_cache_file;
-    if (!tick_file_set)
+    }
+    if (!tick_file_set) {
         cfg.tick_cache.file = cfg.market_cache_file;
+    }
     if (const auto& c = require_table(root, "continuous"); !c.empty()) {
         cfg.continuous.enabled = get_bool(c, "enabled", cfg.continuous.enabled);
         cfg.continuous.url     = get_str(c, "url", cfg.continuous.url);
@@ -638,26 +689,80 @@ NodeConfig parse_node_config(std::string_view toml_text) {
     return build_node_from_toml(root);
 }
 
-GwConfig load_gw_config(const std::string& path) {
-    toml::table root;
+config::ConfigResult<GwConfig> load_gw_config(const std::string& path) noexcept {
     try {
-        root = toml::parse_file(path);
+        auto root = toml::parse_file(path);
+        return build_gw_from_toml(root);
     } catch (const toml::parse_error& e) {
-        throw std::runtime_error(std::string("gw config: parse '") + path +
-                                 "': " + e.description().data());
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::parse,
+            fmt::format("gw config parse '{}': {}", path, e.description().data()),
+        });
+    } catch (const std::exception& e) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            fmt::format("gw config load '{}': {}", path, e.what()),
+        });
+    } catch (...) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            fmt::format("gw config load '{}': unknown error", path),
+        });
     }
-    return build_gw_from_toml(root);
 }
 
-NodeConfig load_node_config(const std::string& path) {
-    toml::table root;
+config::ConfigResult<GwConfig> try_parse_gw_config(std::string_view toml_text) noexcept {
     try {
-        root = toml::parse_file(path);
-    } catch (const toml::parse_error& e) {
-        throw std::runtime_error(std::string("node config: parse '") + path +
-                                 "': " + e.description().data());
+        return parse_gw_config(toml_text);
+    } catch (const std::exception& e) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::parse,
+            fmt::format("gw config parse: {}", e.what()),
+        });
+    } catch (...) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            "gw config parse: unknown error",
+        });
     }
-    return build_node_from_toml(root);
+}
+
+config::ConfigResult<NodeConfig> load_node_config(const std::string& path) noexcept {
+    try {
+        auto root = toml::parse_file(path);
+        return build_node_from_toml(root);
+    } catch (const toml::parse_error& e) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::parse,
+            fmt::format("node config parse '{}': {}", path, e.description().data()),
+        });
+    } catch (const std::exception& e) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            fmt::format("node config load '{}': {}", path, e.what()),
+        });
+    } catch (...) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            fmt::format("node config load '{}': unknown error", path),
+        });
+    }
+}
+
+config::ConfigResult<NodeConfig> try_parse_node_config(std::string_view toml_text) noexcept {
+    try {
+        return parse_node_config(toml_text);
+    } catch (const std::exception& e) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::parse,
+            fmt::format("node config parse: {}", e.what()),
+        });
+    } catch (...) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            "node config parse: unknown error",
+        });
+    }
 }
 
 } // namespace tqsdk

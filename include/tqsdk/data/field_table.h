@@ -11,9 +11,11 @@
 namespace tqsdk {
 
 consteval bool fields_sorted(auto const& arr) {
-    for (std::size_t i = 1; i < arr.size(); ++i)
-        if (arr[i - 1].first >= arr[i].first)
+    for (std::size_t i = 1; i < arr.size(); ++i) {
+        if (arr[i - 1].first >= arr[i].first) {
             return false;
+        }
+    }
     return true;
 }
 
@@ -74,8 +76,9 @@ inline QuoteField lookup_quote_field(std::string_view name) noexcept {
                                kQuoteFields.end(),
                                name,
                                [](const auto& a, std::string_view b) { return a.first < b; });
-    if (it == kQuoteFields.end() || it->first != name)
+    if (it == kQuoteFields.end() || it->first != name) {
         return QuoteField{0};
+    }
     return it->second;
 }
 
@@ -121,8 +124,9 @@ inline PositionField lookup_position_field(std::string_view name) noexcept {
                                kPositionFields.end(),
                                name,
                                [](const auto& a, std::string_view b) { return a.first < b; });
-    if (it == kPositionFields.end() || it->first != name)
+    if (it == kPositionFields.end() || it->first != name) {
         return PositionField{0};
+    }
     return it->second;
 }
 
@@ -158,8 +162,9 @@ inline OrderField lookup_order_field(std::string_view name) noexcept {
                                kOrderFields.end(),
                                name,
                                [](const auto& a, std::string_view b) { return a.first < b; });
-    if (it == kOrderFields.end() || it->first != name)
+    if (it == kOrderFields.end() || it->first != name) {
         return OrderField{0};
+    }
     return it->second;
 }
 
@@ -182,8 +187,9 @@ inline TradeField lookup_trade_field(std::string_view name) noexcept {
                                kTradeFields.end(),
                                name,
                                [](const auto& a, std::string_view b) { return a.first < b; });
-    if (it == kTradeFields.end() || it->first != name)
+    if (it == kTradeFields.end() || it->first != name) {
         return TradeField{0};
+    }
     return it->second;
 }
 
@@ -213,8 +219,9 @@ inline AccountField lookup_account_field(std::string_view name) noexcept {
                                kAccountFields.end(),
                                name,
                                [](const auto& a, std::string_view b) { return a.first < b; });
-    if (it == kAccountFields.end() || it->first != name)
+    if (it == kAccountFields.end() || it->first != name) {
         return AccountField{0};
+    }
     return it->second;
 }
 

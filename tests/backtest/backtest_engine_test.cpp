@@ -98,8 +98,9 @@ TEST(BacktestEngine, TracksOpenPositionMarkToMarket) {
 
     const std::vector<BacktestBar> bars{bar(1, 100), bar(2, 105)};
     const auto                     stats = engine.run(bars, [](BacktestContext& ctx) {
-        if (ctx.bar().datetime == 1)
+        if (ctx.bar().datetime == 1) {
             ctx.buy_open(1);
+        }
     });
 
     EXPECT_EQ(stats.final_position, 1);

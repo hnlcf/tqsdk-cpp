@@ -112,8 +112,9 @@ void DiffMergeEngine::merge_one_quote(std::string_view sym, const nlohmann::json
             break;
         }
     }
-    if (bits)
+    if (bits) {
         data_.quotes.mark_changed(q, bits);
+    }
 }
 
 } // namespace tqsdk

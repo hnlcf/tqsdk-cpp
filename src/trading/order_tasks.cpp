@@ -57,11 +57,13 @@ TargetPosTask::TargetPosTask(TqApi&             api,
     state_->options = std::move(options);
     const auto weak = std::weak_ptr<State>(state_);
     state_->hook_id = api.add_update_hook([weak] {
-        if (auto state = weak.lock())
+        if (auto state = weak.lock()) {
             on_update(state);
+        }
     });
-    if (state_->hook_id == 0)
+    if (state_->hook_id == 0) {
         state_->stopped = true;
+    }
 }
 
 TargetPosTask::~TargetPosTask() {
@@ -69,8 +71,9 @@ TargetPosTask::~TargetPosTask() {
 }
 
 void TargetPosTask::set_target_volume(std::int64_t volume) {
-    if (state_->stopped)
+    if (state_->stopped) {
         return;
+    }
     state_->target.store(volume, std::memory_order_relaxed);
     state_->api->notify_update();
 }
@@ -84,10 +87,12 @@ bool TargetPosTask::active() const {
 }
 
 void TargetPosTask::cancel() {
-    if (state_->stopped.exchange(true))
+    if (state_->stopped.exchange(true)) {
         return;
-    if (state_->api)
+    }
+    if (state_->api) {
         state_->api->remove_update_hook(state_->hook_id);
+    }
     std::vector<OrderId> ids;
     {
         std::lock_guard lock(state_->mutex);
@@ -106,8 +111,9 @@ void TargetPosTask::cancel() {
 }
 
 void TargetPosTask::on_update(const std::shared_ptr<State>& state) {
-    if (!state)
+    if (!state) {
         return;
+    }
     if (state->stopped.load(std::memory_order_relaxed) ||
         state->pending.exchange(true, std::memory_order_acq_rel)) {
         return;
@@ -138,15 +144,18 @@ void TargetPosTask::on_update(const std::shared_ptr<State>& state) {
     // 行情变化时撤掉旧价单，下一轮更新再按新价重报。
     for (const auto& id : active) {
         const auto* order = api.get_order(id);
-        if (order == nullptr || order->is_dead)
+        if (order == nullptr || order->is_dead) {
             continue;
+        }
         auto desired = quote_price(*quote, order->direction, state->mode, state->options);
-        if (!desired.has_value() || !valid_price(*desired))
+        if (!desired.has_value() || !valid_price(*desired)) {
             continue;
+        }
         const auto tick =
             std::isfinite(quote->price_tick) && quote->price_tick > 0 ? quote->price_tick : 1e-9;
-        if (std::abs(order->limit_price - *desired) <= tick * 0.5)
+        if (std::abs(order->limit_price - *desired) <= tick * 0.5) {
             continue;
+        }
         bool need_cancel = false;
         {
             std::lock_guard lock(state->mutex);
@@ -184,8 +193,9 @@ void TargetPosTask::on_update(const std::shared_ptr<State>& state) {
     std::int64_t pending_open_short  = 0;
     for (const auto& id : active) {
         const auto* order = api.get_order(id);
-        if (order == nullptr || order->is_dead)
+        if (order == nullptr || order->is_dead) {
             continue;
+        }
         const auto volume = static_cast<std::int64_t>(order->volume_left);
         if (order->direction == Direction::BUY && order->offset == Offset::OPEN) {
             pending_open_long += volume;
@@ -294,13 +304,15 @@ InsertOrderTask::~InsertOrderTask() {
 }
 
 void InsertOrderTask::start() {
-    if (state_->hook_id != 0 || !state_->stopped.load(std::memory_order_relaxed))
+    if (state_->hook_id != 0 || !state_->stopped.load(std::memory_order_relaxed)) {
         return;
+    }
     state_->stopped.store(false, std::memory_order_relaxed);
     const auto weak = std::weak_ptr<State>(state_);
     state_->hook_id = state_->api->add_update_hook([weak] {
-        if (auto state = weak.lock())
+        if (auto state = weak.lock()) {
             on_update(state);
+        }
     });
     if (state_->hook_id == 0) {
         state_->stopped = true;
@@ -318,10 +330,12 @@ std::uint64_t InsertOrderTask::filled_volume() const {
 }
 
 void InsertOrderTask::cancel() {
-    if (state_->stopped.exchange(true))
+    if (state_->stopped.exchange(true)) {
         return;
-    if (state_->api)
+    }
+    if (state_->api) {
         state_->api->remove_update_hook(state_->hook_id);
+    }
     OrderId active;
     {
         std::lock_guard lock(state_->mutex);
@@ -339,8 +353,9 @@ void InsertOrderTask::cancel() {
 }
 
 void InsertOrderTask::on_update(const std::shared_ptr<State>& state) {
-    if (!state)
+    if (!state) {
         return;
+    }
     if (state->stopped.load(std::memory_order_relaxed) ||
         state->pending.exchange(true, std::memory_order_acq_rel)) {
         return;
@@ -367,8 +382,9 @@ void InsertOrderTask::on_update(const std::shared_ptr<State>& state) {
         }
         {
             std::lock_guard lock(state->mutex);
-            if (state->active_order == active)
+            if (state->active_order == active) {
                 state->active_order.clear();
+            }
         }
         ++state->attempts;
         if (state->attempts > state->max_retries) {

@@ -6,8 +6,9 @@
 namespace tqsdk {
 
 void DiffMergeEngine::apply(const nlohmann::json& push) {
-    if (!push.is_object())
+    if (!push.is_object()) {
         return;
+    }
     for (auto it = push.begin(); it != push.end(); ++it) {
         std::string_view k = it.key();
         SPDLOG_DEBUG("[diff] Merge {} event", k);

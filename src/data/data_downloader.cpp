@@ -36,22 +36,27 @@ std::string DataDownloader::ticks_csv(const TickSeries& series) const {
         out << "datetime" << d << "instrument_id" << d << "last_price" << d << "highest" << d
             << "lowest" << d << "open" << d << "close" << d << "pre_close" << d << "pre_settlement"
             << d << "average" << d << "turnover" << d << "open_interest" << d << "volume";
-        for (int i = 1; i <= 5; ++i)
+        for (int i = 1; i <= 5; ++i) {
             out << d << "bid_price" << i;
-        for (int i = 1; i <= 5; ++i)
+        }
+        for (int i = 1; i <= 5; ++i) {
             out << d << "ask_price" << i;
-        for (int i = 1; i <= 5; ++i)
+        }
+        for (int i = 1; i <= 5; ++i) {
             out << d << "bid_volume" << i;
-        for (int i = 1; i <= 5; ++i)
+        }
+        for (int i = 1; i <= 5; ++i) {
             out << d << "ask_volume" << i;
+        }
         out << '\n';
     }
 
     const auto  start = begin_index(series.data.size(), options_.limit);
     std::size_t index = 0;
     for (const auto& t : series.data) {
-        if (index++ < start)
+        if (index++ < start) {
             continue;
+        }
         out << t.datetime << d << t.instrument_id << d;
         csv_field(out, t.last_price, d);
         csv_field(out, t.highest, d);
@@ -64,14 +69,18 @@ std::string DataDownloader::ticks_csv(const TickSeries& series) const {
         csv_field(out, t.turnover, d);
         csv_field(out, t.open_interest, d);
         out << t.volume << d;
-        for (double v : t.bid_price)
+        for (double v : t.bid_price) {
             csv_field(out, v, d);
-        for (double v : t.ask_price)
+        }
+        for (double v : t.ask_price) {
             csv_field(out, v, d);
-        for (auto v : t.bid_volume)
+        }
+        for (auto v : t.bid_volume) {
             out << v << d;
-        for (auto v : t.ask_volume)
+        }
+        for (auto v : t.ask_volume) {
             out << v << d;
+        }
         out << '\n';
     }
     return out.str();
@@ -90,8 +99,9 @@ std::string DataDownloader::klines_csv(const KlineStream& series) const {
     const auto  start = begin_index(total, options_.limit);
     std::size_t index = 0;
     for (const auto& bar : series.bars) {
-        if (index++ < start)
+        if (index++ < start) {
             continue;
+        }
         out << bar.datetime << d << series.instrumnet_id << d << series.duration_ns << d;
         csv_field(out, bar.open, d);
         csv_field(out, bar.high, d);

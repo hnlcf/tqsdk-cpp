@@ -62,8 +62,9 @@ struct SimFixture {
         while (!done && std::chrono::steady_clock::now() < deadline) {
             pump(20);
         }
-        if (eptr)
+        if (eptr) {
             std::rethrow_exception(eptr);
+        }
         EXPECT_TRUE(done) << "coroutine did not complete";
     }
 };
@@ -188,8 +189,9 @@ TEST(SimTdE2E, LimitSellFillsWhenPriceRises) {
         auto* cur = f.api->get_order(o->order_id);
         EXPECT_TRUE(cur->is_dead);
         EXPECT_EQ(cur->trade_price, 3810.0);
-        if (auto* p = get_position(*f.api, "SHFE.rb2610"))
+        if (auto* p = get_position(*f.api, "SHFE.rb2610")) {
             EXPECT_EQ(p->volume_short, 1u);
+        }
         co_return;
     });
 
@@ -263,8 +265,9 @@ TEST(SimTdE2E, OpenThenClose) {
         co_await f.api->wait_update();
         auto* p = get_position(*f.api, "SHFE.rb2610");
         EXPECT_TRUE(p != nullptr);
-        if (p)
+        if (p) {
             EXPECT_EQ(p->volume_long, 1u);
+        }
 
         f.sim->on_tick("SHFE.rb2610", 3850.0); // 涨到 3850
         co_await f.api->insert_order(make_market(Direction::SELL, Offset::CLOSE, 1));
@@ -332,8 +335,9 @@ TEST(SimTdE2E, FokNotCrossingBecomesFinished) {
         co_await f.api->wait_update();
         auto* cur = f.api->get_order(rid);
         EXPECT_NE(cur, nullptr);
-        if (cur == nullptr)
+        if (cur == nullptr) {
             co_return;
+        }
         EXPECT_TRUE(cur->is_dead);
         EXPECT_EQ(cur->volume_left, 2u);
         EXPECT_EQ(cur->advanced, AdvancedOrder::FOK);

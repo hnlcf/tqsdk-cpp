@@ -52,8 +52,9 @@ struct SimFixture {
             ctx,
             [this, condition = std::move(condition)]() -> asio::awaitable<void> {
                 for (int i = 0; i < 100 && !condition(); ++i) {
-                    if (!co_await api->wait_update())
+                    if (!co_await api->wait_update()) {
                         break;
+                    }
                 }
             },
             [this](std::exception_ptr ep) {
@@ -65,15 +66,17 @@ struct SimFixture {
             test::pump(ctx, 10);
         }
         ASSERT_TRUE(done) << "task coroutine did not complete";
-        if (error)
+        if (error) {
             std::rethrow_exception(error);
+        }
     }
 };
 
 std::int64_t net_position(TqApi& api, std::string_view symbol) {
     const auto* p = api.data().positions.find(std::string{symbol});
-    if (!p)
+    if (!p) {
         return 0;
+    }
     return static_cast<std::int64_t>(p->volume_long) - static_cast<std::int64_t>(p->volume_short);
 }
 

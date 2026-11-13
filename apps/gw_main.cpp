@@ -94,18 +94,20 @@ int main(int argc, char** argv) {
     app.add_option("-l,--log-level", log_level, "Log level (overrides TQSDK_LOG_LEVEL)");
     app.add_option("-t,--threads", threads, "IO worker threads (overrides [runtime].threads)");
     app.set_version_flag("-v,--version",
-                         std::string(tqsdk::kPackageName) + " " + std::string(tqsdk::kVersion));
+                         fmt::format("{} {}", tqsdk::kPackageName, tqsdk::kVersion));
     CLI11_PARSE(app, argc, argv);
 
     tqsdk::setup_logging(tqsdk::LogOptions{log_level});
 
-    GwConfig cfg;
-    try {
-        cfg = load_gw_config(config_path);
-    } catch (const std::exception& e) {
-        SPDLOG_CRITICAL("failed to load config '{}': {}", config_path, e.what());
+    auto cfg_result = load_gw_config(config_path);
+    if (!cfg_result) {
+        SPDLOG_CRITICAL("failed to load config '{}': {} ({})",
+                        config_path,
+                        cfg_result.error().detail,
+                        config::config_error_name(cfg_result.error().code));
         return 1;
     }
+    GwConfig cfg = std::move(*cfg_result);
 
     if (threads > 0) {
         cfg.runtime.threads = normalize_worker_threads(threads);

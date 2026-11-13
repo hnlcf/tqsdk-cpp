@@ -99,8 +99,9 @@ void TqMdGateway::wake_peek() noexcept {
 asio::awaitable<void> TqMdGateway::send_subscribe_quote() {
     std::string ins_list;
     for (const auto& s : pending_subs_) {
-        if (!ins_list.empty())
+        if (!ins_list.empty()) {
             ins_list.push_back(',');
+        }
         ins_list += s;
     }
     co_await send_cmd(nlohmann::json{{"aid", "subscribe_quote"}, {"ins_list", ins_list}});
@@ -276,8 +277,9 @@ asio::awaitable<void> TqMdGateway::do_connect_and_run() {
         if (!pending_subs_.empty()) {
             std::string ins_list;
             for (const auto& s : pending_subs_) {
-                if (!ins_list.empty())
+                if (!ins_list.empty()) {
                     ins_list.push_back(',');
+                }
                 ins_list += s;
             }
             co_await send_cmd(nlohmann::json{{"aid", "subscribe_quote"}, {"ins_list", ins_list}});

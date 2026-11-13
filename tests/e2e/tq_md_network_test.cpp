@@ -95,8 +95,9 @@ TEST(TqMdNetwork, KlineSerialReceivesBars) {
                     nbars      = k->bars.size();
                     last_close = k->bars.back().close;
                     got_bars   = std::isfinite(last_close) && last_close > 0;
-                    if (got_bars)
+                    if (got_bars) {
                         break;
+                    }
                 }
             }
             co_return;

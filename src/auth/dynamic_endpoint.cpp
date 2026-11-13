@@ -9,8 +9,9 @@ namespace tqsdk {
 namespace {
 
 std::optional<std::uint16_t> parse_port(std::string_view text) {
-    if (text.empty())
+    if (text.empty()) {
         return std::nullopt;
+    }
     unsigned value = 0;
     auto [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), value);
     if (ec != std::errc{} || ptr != text.data() + text.size() || value > 65535) {
@@ -34,8 +35,9 @@ std::optional<Endpoint> Endpoint::parse(std::string_view url) {
         url.substr(authority_begin,
                    path_begin == std::string_view::npos ? std::string_view::npos
                                                         : path_begin - authority_begin);
-    if (authority.empty())
+    if (authority.empty()) {
         return std::nullopt;
+    }
 
     const auto colon = authority.rfind(':');
     if (colon == std::string_view::npos) {
@@ -44,33 +46,37 @@ std::optional<Endpoint> Endpoint::parse(std::string_view url) {
     } else {
         endpoint.host     = std::string{authority.substr(0, colon)};
         const auto parsed = parse_port(authority.substr(colon + 1));
-        if (!parsed)
+        if (!parsed) {
             return std::nullopt;
+        }
         endpoint.port = *parsed;
     }
-    if (endpoint.host.empty() || endpoint.port == 0)
+    if (endpoint.host.empty() || endpoint.port == 0) {
         return std::nullopt;
+    }
     endpoint.path = path_begin == std::string_view::npos ? std::string{"/"}
                                                          : std::string{url.substr(path_begin)};
     return endpoint;
 }
 
 std::string Endpoint::to_string() const {
-    return scheme + "://" + host + ":" + std::to_string(port) + path;
+    return fmt::format("{}://{}:{}{}", scheme, host, port, path);
 }
 
 std::optional<Endpoint> DynamicEndpointResolver::md(bool stock, bool backtest) {
     const auto url = auth_.get_md_url(stock, backtest);
-    if (!url.has_value() || url->empty())
+    if (!url.has_value() || url->empty()) {
         return std::nullopt;
+    }
     return Endpoint::parse(*url);
 }
 
 std::optional<std::string> DynamicEndpointResolver::td(std::string_view broker_id,
                                                        std::string_view account_id) {
     auto url = auth_.get_td_url(broker_id, account_id);
-    if (!url.has_value() || url->url.empty())
+    if (!url.has_value() || url->url.empty()) {
         return std::nullopt;
+    }
     return url->url;
 }
 

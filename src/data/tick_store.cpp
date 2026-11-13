@@ -315,16 +315,18 @@ void TickStore::update_series(SQLite::Database& db, const std::string& symbol) {
     SQLite::Statement count(db, "SELECT COUNT(*) FROM ticks WHERE symbol = ?");
     count.bind(1, symbol);
     int64_t n = 0;
-    if (count.executeStep())
+    if (count.executeStep()) {
         n = count.getColumn(0).getInt64();
+    }
 
     SQLite::Statement last(db,
                            "SELECT datetime FROM ticks WHERE symbol = ? "
                            "ORDER BY datetime DESC, id DESC LIMIT 1");
     last.bind(1, symbol);
     std::string datetime;
-    if (last.executeStep())
+    if (last.executeStep()) {
         datetime = last.getColumn(0).getString();
+    }
 
     SQLite::Statement upsert(
         db,

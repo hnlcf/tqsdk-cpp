@@ -75,7 +75,14 @@ bool HolidayCalendar::refresh_now() {
     std::lock_guard lock(refresh_mutex_);
     try {
         SPDLOG_INFO("[Holiday] downloading {}", cfg_.url);
-        const auto text = util::http_get(cfg_.url, "tqsdk-node/0.1 holiday-calendar");
+        const auto text_result = util::http_get(cfg_.url, "tqsdk-node/0.1 holiday-calendar");
+        if (!text_result) {
+            SPDLOG_WARN("[Holiday] download failed: {} ({})",
+                        text_result.error().detail,
+                        util::http_error_name(text_result.error().code));
+            return false;
+        }
+        const auto& text = *text_result;
         load_from_json_text(text, cfg_.url);
 
 #if defined(_WIN32)
@@ -83,7 +90,7 @@ bool HolidayCalendar::refresh_now() {
 #else
         const auto pid = static_cast<long>(::getpid());
 #endif
-        const auto tmp = cfg_.file + ".tmp." + std::to_string(pid);
+        const auto tmp = fmt::format("{}.tmp.{}", cfg_.file, pid);
         {
             std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
             if (out.is_open()) {

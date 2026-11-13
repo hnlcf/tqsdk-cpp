@@ -1,8 +1,8 @@
 ---
-# 需要 clang-format >= 17（推荐 18+），以完整支持 C++20 协程、concepts 和 requires
+# 需要 clang-format >= 19，以完整支持 C++23 协程、concepts、requires 和 InsertBraces
 Language: Cpp
 BasedOnStyle: LLVM
-Standard: c++20
+Standard: c++23
 
 # ---------- 缩进与列宽 ----------
 IndentWidth: 4
@@ -89,7 +89,7 @@ ShortNamespaceLines: 0
 IndentCaseLabels: false
 IndentGotoLabels: false
 IndentPPDirectives: BeforeHash
-InsertBraces: false
+InsertBraces: true
 InsertNewlineAtEOF: true
 ReflowComments: false
 SortIncludes: CaseSensitive
