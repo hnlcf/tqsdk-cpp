@@ -132,7 +132,19 @@ C ABI（`backtest_c_api.cpp`）例外：异常绝不允许跨 C ABI，必须在�
 - `make_tqapi()` 改为 `GatewayResult`，配置/建连失败日志化；
 - 新增错误路径测试。
 
-### 6.1 内部异常白名单
+### 6.1 当前审计结果
+
+项目内已没有自建异常类（`class XxxError` / `struct XxxError : std::exception`）。
+剩余 46 处 `throw` 均为边界内适配器或 Asio 取消协议：
+
+- `WsProtocol` / `msg` / `serde` 的 `from_json`：nlohmann 自定义转换契约要求；
+- `ipc::ICodec` / `protocol`：JSON/MessagePack 序列化适配器；
+- `Channel<T>`：Asio 取消/关闭协议（`operation_aborted`）；
+- `async_mutex` 注释中的示例 rethrow。
+
+这些异常都在适配层/通道内部被捕获或由 Asio 消费者处理，公共 app/HTTP/IPC 对端不会收到项目自定义异常。
+
+### 6.2 内部异常白名单
 
 公共边界已改为 expected/错误码后，以下内部路径仍允许异常，但它们必须在模块边界
 被捕获，不允许穿透到 app/HTTP/IPC 对端：
