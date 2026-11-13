@@ -134,7 +134,7 @@ private:
                                                std::string_view instrument,
                                                Direction        direction,
                                                Offset           offset) const;
-    asio::awaitable<void> acquire_order_slot();
+    asio::awaitable<bool> acquire_order_slot();
 
     boost::asio::any_io_executor   ex_;
     CtpConfig                      cfg_;

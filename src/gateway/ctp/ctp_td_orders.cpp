@@ -274,10 +274,10 @@ CommandAck CtpTdGateway::send_cancel(const CancelOrderReq& req) {
     return CommandAck{true, req.order_id, {}};
 }
 
-asio::awaitable<void> CtpTdGateway::acquire_order_slot() {
+asio::awaitable<bool> CtpTdGateway::acquire_order_slot() {
     auto guard = co_await AsyncMutex::acquire(order_mutex_);
     if (stopped_) {
-        throw std::runtime_error("CTP trading gateway stopped");
+        co_return false;
     }
     const auto now = std::chrono::steady_clock::now();
     if (next_order_at_ > now) {
@@ -285,22 +285,27 @@ asio::awaitable<void> CtpTdGateway::acquire_order_slot() {
         boost::system::error_code ec;
         co_await order_timer_.async_wait(asio::redirect_error(asio::use_awaitable, ec));
         if (stopped_) {
-            throw std::runtime_error("CTP trading gateway stopped");
+            co_return false;
         }
     }
     // 报单/撤单统一节流，避免交易所/柜台频率限制导致拒绝。
     next_order_at_ =
         std::max(std::chrono::steady_clock::now(), next_order_at_) + cfg_.order_interval;
+    co_return true;
 }
 
 asio::awaitable<CommandAck> CtpTdGateway::insert_order(const InsertOrderReq& req,
                                                        const OrderId&        rid) {
-    co_await acquire_order_slot();
+    if (!co_await acquire_order_slot()) {
+        co_return CommandAck{false, rid, "CTP trading gateway stopped"};
+    }
     co_return send_insert(req, rid);
 }
 
 asio::awaitable<CommandAck> CtpTdGateway::cancel_order(const CancelOrderReq& req) {
-    co_await acquire_order_slot();
+    if (!co_await acquire_order_slot()) {
+        co_return CommandAck{false, req.order_id, "CTP trading gateway stopped"};
+    }
     co_return send_cancel(req);
 }
 
