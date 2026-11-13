@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tqsdk/pch.h"
+#include "tqsdk/util/panic.h"
 
 namespace tqsdk {
 
@@ -83,9 +84,10 @@ Channel<T>::Channel(asio::any_io_executor ex, std::size_t capacity)
 
 template <typename T>
 Channel<T>::~Channel() {
-    // 契约：析构时不应有挂起的协程
-    assert(recv_waiters_.empty() && send_waiters_.empty() &&
-           "Channel destroyed with pending awaiters");
+    // 契约：析构时不应有挂起的协程；这是不可恢复的生命周期错误。
+    if (!recv_waiters_.empty() || !send_waiters_.empty()) {
+        TQSDK_PANIC("Channel destroyed with pending awaiters");
+    }
 }
 
 template <typename T>

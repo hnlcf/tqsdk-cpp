@@ -67,13 +67,13 @@ if (!result) {
 
 ### 2.3 不可恢复：panic
 
-使用 `tqsdk/panic.h` 的 `tqsdk::panic()`：
+使用 `tqsdk/panic.h` 的 `TQSDK_PANIC("reason {}", value)` 宏（记录文件/函数/行号）：
 
 - 继续运行会破坏账户、订单、协议或内存安全；
 - 已满足前置条件后，内部状态机进入不可能状态；
 - 持久化文件成功解析但关键不变量被破坏。
 
-禁止用 panic 处理网络错误、配置错误、普通输入错误或第三方异常。
+`TQSDK_PANIC` 会输出 `file:line function: message` 后 `std::abort()`；禁止用 panic 处理网络错误、配置错误、普通输入错误或第三方异常。
 
 ## 3. 第三方库异常隔离
 
