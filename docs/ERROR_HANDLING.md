@@ -124,6 +124,10 @@ C ABI（`backtest_c_api.cpp`）例外：异常绝不允许跨 C ABI，必须在�
 - `node` 主账户和附加账户均使用 expected 边界；
 - HTTP 调用方（holiday/catalog/continuous/auth）已在本层处理错误；
 - 新增 `TQSDK_PANIC(...)`（记录 file/line/function）及独立模块错误类型；
+- `HttpServer::listen()` 返回 `ServeResult<void>`；
+- account 解析改为 `optional`，删除 `AccountNotFound`；
+- WS 解析改为 `WsParseResult`，删除 `WsProtocolError`；
+- CTP 停机和 gateway 启动失败改为日志/CommandAck，不再 throw；
 - 新增错误路径测试。
 
 ### 6.1 内部异常白名单
@@ -134,7 +138,7 @@ C ABI（`backtest_c_api.cpp`）例外：异常绝不允许跨 C ABI，必须在�
 - Boost.Asio 协程的 `operation_aborted`/取消异常：作为协程控制流保留；
 - nlohmann JSON、toml++、SQLiteCpp、OpenSSL 的适配器异常：在 codec/config/store/http
   适配层捕获并转换；
-- `WsProtocolError`、`IpcError`：在 WebSocket/IPC session 边界转换为错误事件或关闭连接；
+- `IpcError`：在 IPC session 边界转换为错误事件或关闭连接；WS 解析已改为 `WsParseResult`；
 - `config` 的旧 `parse_*` 兼容 API：内部统一由 `try_parse_*`/`load_*` 包装；
 - CTP/SIM 网关的异步内部路径：由 `try_make_tqapi`/事件循环边界转换为 GatewayError。
 
