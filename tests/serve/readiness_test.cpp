@@ -51,7 +51,7 @@ TEST(Readiness, SimGatewayIsReadyAndExposesMetrics) {
     EXPECT_FALSE(ready["td"]["expected_disconnect"]);
 
     tqsdk::serve::HttpServer server(&api, io.get_executor(), {}, core_ex);
-    server.listen("127.0.0.1", 0);
+    ASSERT_TRUE(server.listen("127.0.0.1", 0));
     const auto port = server.port();
 
     unsigned       status = 0;

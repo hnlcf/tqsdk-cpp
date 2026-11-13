@@ -67,7 +67,7 @@ struct WsFixture {
         api->start();
 
         http = std::make_unique<serve::HttpServer>(api.get(), ctx.get_executor(), std::move(opts));
-        http->listen("127.0.0.1", 0);
+        EXPECT_TRUE(http->listen("127.0.0.1", 0));
         port = http->port();
     }
 

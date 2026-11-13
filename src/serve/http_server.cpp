@@ -191,21 +191,42 @@ bool HttpServer::authorized(const http::request<http::string_body>& req) const {
     return false;
 }
 
-void HttpServer::listen(const std::string& address, uint16_t port) {
-    tcp::endpoint             ep{boost::asio::ip::make_address(address), port};
+ServeResult<void> HttpServer::listen(const std::string& address, uint16_t port) noexcept {
+    tcp::endpoint ep;
+    try {
+        ep = tcp::endpoint{boost::asio::ip::make_address(address), port};
+    } catch (const std::exception& e) {
+        return std::unexpected(ServeError{
+            http::status::internal_server_error,
+            json{{"error", fmt::format("invalid listen address: {}", e.what())}},
+            ServeErrorCode::internal,
+        });
+    }
     boost::system::error_code ec;
     acceptor_.open(ep.protocol(), ec);
     if (ec) {
-        throw boost::system::system_error(ec, "HttpServer: open acceptor");
+        return std::unexpected(ServeError{
+            http::status::service_unavailable,
+            json{{"error", fmt::format("open acceptor: {}", ec.message())}},
+            ServeErrorCode::service_unavailable,
+        });
     }
     acceptor_.set_option(net::socket_base::reuse_address(true), ec);
     acceptor_.bind(ep, ec);
     if (ec) {
-        throw boost::system::system_error(ec, fmt::format("HttpServer: bind {}:{}", address, port));
+        return std::unexpected(ServeError{
+            http::status::service_unavailable,
+            json{{"error", fmt::format("bind {}:{}: {}", address, port, ec.message())}},
+            ServeErrorCode::service_unavailable,
+        });
     }
     acceptor_.listen(net::socket_base::max_listen_connections, ec);
     if (ec) {
-        throw boost::system::system_error(ec, "HttpServer: listen");
+        return std::unexpected(ServeError{
+            http::status::service_unavailable,
+            json{{"error", fmt::format("listen: {}", ec.message())}},
+            ServeErrorCode::service_unavailable,
+        });
     }
     port_ = acceptor_.local_endpoint().port();
 
@@ -223,6 +244,7 @@ void HttpServer::listen(const std::string& address, uint16_t port) {
                 port_,
                 ws_->options().path,
                 account_count);
+    return {};
 }
 
 void HttpServer::stop() noexcept {

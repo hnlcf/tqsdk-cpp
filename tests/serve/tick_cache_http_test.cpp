@@ -68,7 +68,7 @@ TEST(TickCacheHttp, ServesCachedTicksAndStatus) {
 
     tqsdk::serve::HttpServer server(
         &api, io.get_executor(), {}, io.get_executor(), nullptr, nullptr, &store);
-    server.listen("127.0.0.1", 0);
+    ASSERT_TRUE(server.listen("127.0.0.1", 0));
 
     unsigned status_code = 0;
     json     status_body;

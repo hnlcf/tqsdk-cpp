@@ -85,7 +85,7 @@ TEST(MultiAccountHttp, RoutesTradingAndSnapshotsByAccount) {
 
     tqsdk::serve::HttpServer server(
         a.api.get(), io.get_executor(), {}, io.get_executor(), nullptr, &manager);
-    server.listen("127.0.0.1", 0);
+    ASSERT_TRUE(server.listen("127.0.0.1", 0));
 
     unsigned accounts_status = 0;
     json     accounts_body;
@@ -216,7 +216,7 @@ TEST(MultiAccountHttp, WebSocketRoutesByAccount) {
 
     tqsdk::serve::HttpServer server(
         a.api.get(), io.get_executor(), {}, io.get_executor(), nullptr, &manager);
-    server.listen("127.0.0.1", 0);
+    ASSERT_TRUE(server.listen("127.0.0.1", 0));
 
     json                      b_snapshot;
     json                      a_snapshot;
@@ -288,7 +288,7 @@ TEST(MultiAccountHttp, TasksAndRiskAreAccountScoped) {
     ASSERT_TRUE(manager.add_account("B", b.api));
     tqsdk::serve::HttpServer server(
         a.api.get(), io.get_executor(), {}, io.get_executor(), nullptr, &manager);
-    server.listen("127.0.0.1", 0);
+    ASSERT_TRUE(server.listen("127.0.0.1", 0));
 
     unsigned    create_status = 0;
     json        create_body;
@@ -377,7 +377,7 @@ TEST(MultiAccountHttp, TaskRegistryIdsArePerAccount) {
     ASSERT_TRUE(manager.add_account("B", b.api));
     tqsdk::serve::HttpServer server(
         a.api.get(), io.get_executor(), {}, io.get_executor(), nullptr, &manager);
-    server.listen("127.0.0.1", 0);
+    ASSERT_TRUE(server.listen("127.0.0.1", 0));
 
     std::string a_id;
     std::string b_id;
@@ -449,7 +449,7 @@ TEST(MultiAccountHttp, RemovedAccountDropsHubAndRejectsStream) {
 
     tqsdk::serve::HttpServer server(
         a.api.get(), io.get_executor(), {}, io.get_executor(), nullptr, &manager);
-    server.listen("127.0.0.1", 0);
+    ASSERT_TRUE(server.listen("127.0.0.1", 0));
 
     // Added after HttpServer construction; no gateway/background loop needed for
     // the WS routing test. The removal callback must drop the lazy hub.
@@ -535,7 +535,7 @@ TEST(MultiAccountHttp, AuthProtectsRestAndWebSocket) {
                                     nullptr,
                                     auth,
                                     audit);
-    server.listen("127.0.0.1", 0);
+    ASSERT_TRUE(server.listen("127.0.0.1", 0));
 
     unsigned health_status  = 0;
     unsigned no_auth_status = 0;

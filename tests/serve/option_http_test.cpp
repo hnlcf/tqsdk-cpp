@@ -66,7 +66,7 @@ TEST(OptionHttp, OptionAnalyticsReturnsAtmAndGreeks) {
     ASSERT_TRUE(catalog->load_local());
     tqsdk::TqApi             api(core_ex, nullptr, nullptr);
     tqsdk::serve::HttpServer server(&api, io.get_executor(), {}, core_ex, catalog.get());
-    server.listen("127.0.0.1", 0);
+    ASSERT_TRUE(server.listen("127.0.0.1", 0));
 
     unsigned       status = 0;
     nlohmann::json body;

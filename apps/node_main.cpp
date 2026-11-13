@@ -245,10 +245,11 @@ int main(int argc, char** argv) {
                                                                           std::move(auth_opts),
                                                                           rt->audit,
                                                                           rt->continuous.get());
-        try {
-            rt->http->listen(cfg.serve_bind, cfg.serve_port);
-        } catch (const std::exception& e) {
-            SPDLOG_CRITICAL("[node] HTTP serve failed: {}", e.what());
+        auto listen_result          = rt->http->listen(cfg.serve_bind, cfg.serve_port);
+        if (!listen_result) {
+            SPDLOG_CRITICAL("[node] HTTP serve failed: {} ({})",
+                            listen_result.error().body.dump(),
+                            serve::serve_error_name(listen_result.error().code));
             io.stop();
             co_return;
         }

@@ -107,7 +107,7 @@ TEST(Threading, HttpServerWithMultipleIoThreads) {
     api.start();
 
     tqsdk::serve::HttpServer server(&api, io_ex, {}, core_ex);
-    server.listen("127.0.0.1", 0);
+    ASSERT_TRUE(server.listen("127.0.0.1", 0));
     const uint16_t port = server.port();
 
     constexpr int    kClients = 32;
@@ -160,7 +160,7 @@ TEST(Threading, WebSocketWithMultipleIoThreads) {
     api.start();
 
     tqsdk::serve::HttpServer server(&api, io_ex, {}, core_ex);
-    server.listen("127.0.0.1", 0);
+    ASSERT_TRUE(server.listen("127.0.0.1", 0));
     const uint16_t port = server.port();
 
     bool               done = false;

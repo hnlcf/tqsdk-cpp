@@ -59,7 +59,7 @@ TEST(CatalogHttp, QueryNumbersAreStrictAndBounded) {
     tqsdk::TqApi api(core_ex, nullptr, nullptr);
     api.start();
     tqsdk::serve::HttpServer server(&api, io.get_executor(), {}, core_ex, catalog.get());
-    server.listen("127.0.0.1", 0);
+    ASSERT_TRUE(server.listen("127.0.0.1", 0));
     const auto port = server.port();
 
     std::vector<std::pair<unsigned, nlohmann::json>> responses;
