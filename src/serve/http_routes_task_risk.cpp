@@ -13,7 +13,11 @@ HttpServer::RouteHandlers::target_create(Query<AccountQuery> query, TargetTaskRe
         co_return make_serve_error(http::status::bad_request,
                                    json{{"error", "symbol is required"}});
     }
-    AccountScope scope    = account_scope(query.value.account);
+    auto scope_result = account_scope(query.value.account);
+    if (!scope_result) {
+        co_return std::unexpected(scope_result.error());
+    }
+    AccountScope scope    = std::move(*scope_result);
     TqApi*       selected = scope.api;
     auto&        tasks    = *scope.tasks;
     selected->get_quote(request.symbol);
@@ -42,7 +46,11 @@ HttpServer::RouteHandlers::target_create(Query<AccountQuery> query, TargetTaskRe
 
 asio::awaitable<ServeResult<json>>
 HttpServer::RouteHandlers::target_delete(std::string task_id, Query<AccountQuery> query) {
-    AccountScope scope = account_scope(query.value.account);
+    auto scope_result = account_scope(query.value.account);
+    if (!scope_result) {
+        co_return std::unexpected(scope_result.error());
+    }
+    AccountScope scope = std::move(*scope_result);
     auto&        tasks = *scope.tasks;
     auto         it    = tasks.targets.find(task_id);
     if (it == tasks.targets.end()) {
@@ -60,7 +68,11 @@ HttpServer::RouteHandlers::order_task_create(Query<AccountQuery> query, OrderTas
         co_return make_serve_error(http::status::bad_request,
                                    json{{"error", "invalid order task"}});
     }
-    AccountScope scope    = account_scope(query.value.account);
+    auto scope_result = account_scope(query.value.account);
+    if (!scope_result) {
+        co_return std::unexpected(scope_result.error());
+    }
+    AccountScope scope    = std::move(*scope_result);
     TqApi*       selected = scope.api;
     auto&        tasks    = *scope.tasks;
     const auto   id       = fmt::format("order-{}", ++tasks.seq);
@@ -71,7 +83,11 @@ HttpServer::RouteHandlers::order_task_create(Query<AccountQuery> query, OrderTas
 
 asio::awaitable<ServeResult<json>>
 HttpServer::RouteHandlers::order_task_delete(std::string task_id, Query<AccountQuery> query) {
-    AccountScope scope = account_scope(query.value.account);
+    auto scope_result = account_scope(query.value.account);
+    if (!scope_result) {
+        co_return std::unexpected(scope_result.error());
+    }
+    AccountScope scope = std::move(*scope_result);
     auto&        tasks = *scope.tasks;
     auto         it    = tasks.orders.find(task_id);
     if (it == tasks.orders.end()) {
@@ -84,7 +100,11 @@ HttpServer::RouteHandlers::order_task_delete(std::string task_id, Query<AccountQ
 }
 
 asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::tasks(Query<AccountQuery> query) {
-    AccountScope scope = account_scope(query.value.account);
+    auto scope_result = account_scope(query.value.account);
+    if (!scope_result) {
+        co_return std::unexpected(scope_result.error());
+    }
+    AccountScope scope = std::move(*scope_result);
     auto&        tasks = *scope.tasks;
 
     json targets = json::array();
@@ -107,20 +127,32 @@ asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::tasks(Query<Accoun
 
 asio::awaitable<ServeResult<json>>
 HttpServer::RouteHandlers::risk_status(Query<AccountQuery> query) {
-    TqApi* selected = account_scope(query.value.account).api;
+    auto selected_result = account_scope(query.value.account);
+    if (!selected_result) {
+        co_return std::unexpected(selected_result.error());
+    }
+    TqApi* selected = selected_result->api;
     co_return json{{"rules", selected->risk_manager().size()}};
 }
 
 asio::awaitable<ServeResult<json>>
 HttpServer::RouteHandlers::risk_clear(Query<AccountQuery> query) {
-    TqApi* selected = account_scope(query.value.account).api;
+    auto selected_result = account_scope(query.value.account);
+    if (!selected_result) {
+        co_return std::unexpected(selected_result.error());
+    }
+    TqApi* selected = selected_result->api;
     selected->risk_manager().clear();
     co_return json{{"success", true}, {"rules", 0}};
 }
 
 asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::risk_add(Query<AccountQuery> query,
                                                                        RiskRuleRequest request) {
-    TqApi*                    selected = account_scope(query.value.account).api;
+    auto selected_result = account_scope(query.value.account);
+    if (!selected_result) {
+        co_return std::unexpected(selected_result.error());
+    }
+    TqApi*                    selected = selected_result->api;
     std::shared_ptr<RiskRule> rule;
     if (request.type == "OPEN_COUNT_LIMIT") {
         rule = std::make_shared<OpenCountsLimitRule>(request.limit, request.symbols);

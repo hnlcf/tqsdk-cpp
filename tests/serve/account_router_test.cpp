@@ -13,11 +13,11 @@ TEST(AccountRouter, WithoutManagerKeepsSingleAccountCompatibility) {
     auto             primary = std::make_shared<TqApi>(io.get_executor(), nullptr, nullptr);
     AccountRouter    router(primary.get(), nullptr);
 
-    auto empty = router.resolve("");
+    auto empty = router.resolve("").value();
     EXPECT_EQ(empty.id, "default");
     EXPECT_EQ(empty.api, primary.get());
 
-    auto named = router.resolve("custom");
+    auto named = router.resolve("custom").value();
     EXPECT_EQ(named.id, "custom");
     EXPECT_EQ(named.api, primary.get());
     EXPECT_EQ(router.default_id(), "default");
@@ -38,16 +38,16 @@ TEST(AccountRouter, ResolvesDefaultAndNamedAccounts) {
     AccountRouter router(primary.get(), &manager);
     EXPECT_EQ(router.default_id(), "A");
 
-    auto default_scope = router.resolve("");
+    auto default_scope = router.resolve("").value();
     EXPECT_EQ(default_scope.id, "A");
     EXPECT_EQ(default_scope.api, a.get());
 
-    auto b_scope = router.resolve("B");
+    auto b_scope = router.resolve("B").value();
     EXPECT_EQ(b_scope.id, "B");
     EXPECT_EQ(b_scope.api, b.get());
 
     EXPECT_FALSE(router.try_resolve("missing").has_value());
-    EXPECT_THROW(router.resolve("missing"), AccountNotFound);
+    EXPECT_FALSE(router.resolve("missing").has_value());
     EXPECT_EQ(router.account_ids(), (std::vector<std::string>{"A", "B"}));
 }
 

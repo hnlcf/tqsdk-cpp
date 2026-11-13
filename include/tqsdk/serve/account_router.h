@@ -22,16 +22,6 @@ struct AccountScope {
     explicit operator bool() const noexcept { return api != nullptr; }
 };
 
-/// Thrown when `?account=` names an account that is not registered.
-class AccountNotFound : public std::runtime_error {
-public:
-    explicit AccountNotFound(std::string account_id)
-        : std::runtime_error(fmt::format("account not found: {}", account_id)),
-          account_id(std::move(account_id)) {}
-
-    std::string account_id;
-};
-
 /// Resolve `?account=` once, in one place.
 ///
 /// Before multi-account was introduced, `account_api()` simply returned the
@@ -45,10 +35,10 @@ public:
         : primary_(primary),
           accounts_(accounts) {}
 
-    /// Resolve or throw AccountNotFound. Empty `requested` means default.
-    AccountScope resolve(std::string_view requested) const;
+    /// Resolve an account. Empty `requested` means default; unknown returns nullopt.
+    std::optional<AccountScope> resolve(std::string_view requested) const;
 
-    /// Non-throwing variant used by routing code that wants to return 404.
+    /// 兼容旧命名；等同于 resolve()。
     std::optional<AccountScope> try_resolve(std::string_view requested) const;
 
     /// Concrete default account id; never empty.

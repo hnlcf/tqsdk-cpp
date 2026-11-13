@@ -237,9 +237,9 @@ private:
     make_json_response(http::status code, const nlohmann::json& body, unsigned version);
 
     /// 注册全部路由（构造时调用一次）。
-    void         setup_routes();
-    AccountScope account_scope(std::string_view account_id);
-    TqApi*       account_api(std::string_view account_id);
+    void                      setup_routes();
+    ServeResult<AccountScope> account_scope(std::string_view account_id) noexcept;
+    ServeResult<TqApi*>       account_api(std::string_view account_id) noexcept;
 
     /// Lazily create/select the hub for a resolved account. Hubs are created on
     /// data_ex_ so the map is serialized with client/subscription mutations.

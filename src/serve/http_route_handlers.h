@@ -16,9 +16,11 @@ struct HttpServer::RouteHandlers {
           tick_store_(server.tick_store_),
           continuous_(server.continuous_) {}
 
-    TqApi* account_api(std::string_view account_id) const { return owner.account_api(account_id); }
+    ServeResult<TqApi*> account_api(std::string_view account_id) const {
+        return owner.account_api(account_id);
+    }
 
-    AccountScope account_scope(std::string_view account_id) const {
+    ServeResult<AccountScope> account_scope(std::string_view account_id) const {
         return owner.account_scope(account_id);
     }
 

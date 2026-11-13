@@ -99,19 +99,25 @@ void HttpServer::drop_account_hub(std::string_view account_id) {
     }
 }
 
-AccountScope HttpServer::account_scope(std::string_view account_id) {
-    try {
-        auto scope  = account_router_.resolve(account_id);
-        scope.tasks = &task_registries_[scope.id];
-        return scope;
-    } catch (const AccountNotFound& e) {
-        throw HttpError{http::status::not_found,
-                        json{{"error", "account not found"}, {"account", e.account_id}}};
+ServeResult<AccountScope> HttpServer::account_scope(std::string_view account_id) noexcept {
+    auto scope = account_router_.resolve(account_id);
+    if (!scope) {
+        return std::unexpected(ServeError{
+            http::status::not_found,
+            json{{"error", "account not found"}, {"account", account_id}},
+            ServeErrorCode::not_found,
+        });
     }
+    scope->tasks = &task_registries_[scope->id];
+    return *scope;
 }
 
-TqApi* HttpServer::account_api(std::string_view account_id) {
-    return account_scope(account_id).api;
+ServeResult<TqApi*> HttpServer::account_api(std::string_view account_id) noexcept {
+    auto scope = account_scope(account_id);
+    if (!scope) {
+        return std::unexpected(scope.error());
+    }
+    return scope->api;
 }
 
 namespace {

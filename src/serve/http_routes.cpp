@@ -62,7 +62,11 @@ asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::holiday_status() {
 
 asio::awaitable<ServeResult<json>>
 HttpServer::RouteHandlers::trading_status(Query<AccountQuery> query) {
-    TqApi* selected = account_api(query.value.account);
+    auto selected_result = account_api(query.value.account);
+    if (!selected_result) {
+        co_return std::unexpected(selected_result.error());
+    }
+    TqApi* selected = *selected_result;
     co_return TradingStatus::from_phase(selected->session_phase()).to_json();
 }
 
