@@ -195,7 +195,7 @@ CommandAck CtpTdGateway::send_insert(const InsertOrderReq& req, const OrderId& r
                 ctp_offset_for_order(exchange, instrument, req.direction, *leg2);
             field.CombHedgeFlag[1] = THOST_FTDC_HF_Speculation;
         } else {
-            return CommandAck{false, rid, "invalid offset_leg2: " + req.offset_leg2};
+            return CommandAck{false, rid, fmt::format("invalid offset_leg2: {}", req.offset_leg2)};
         }
     }
     field.LimitPrice          = ctp_limit_price(req.price_type, req.limit_price);
@@ -219,7 +219,7 @@ CommandAck CtpTdGateway::send_insert(const InsertOrderReq& req, const OrderId& r
                 req.limit_price);
     int ret = api_->ReqOrderInsert(&field, req_id);
     if (ret != 0) {
-        return CommandAck{false, rid, "CTP ReqOrderInsert ret=" + std::to_string(ret)};
+        return CommandAck{false, rid, fmt::format("CTP ReqOrderInsert ret={}", ret)};
     }
 
     CachedOrder cached;
@@ -269,7 +269,7 @@ CommandAck CtpTdGateway::send_cancel(const CancelOrderReq& req) {
 
     int ret = api_->ReqOrderAction(&field, req_id);
     if (ret != 0) {
-        return CommandAck{false, req.order_id, "CTP ReqOrderAction ret=" + std::to_string(ret)};
+        return CommandAck{false, req.order_id, fmt::format("CTP ReqOrderAction ret={}", ret)};
     }
     return CommandAck{true, req.order_id, {}};
 }
@@ -354,21 +354,23 @@ void CtpTdGateway::handle_order_action(const CThostFtdcInputOrderActionField& in
         emit(TradeEvent{TradeEvent::Kind::Error,
                         nlohmann::json{},
                         {},
-                        "CTP cancel failed: " + cstr(info->ErrorMsg)});
+                        fmt::format("CTP cancel failed: {}", cstr(info->ErrorMsg))});
     }
 }
 
 void CtpTdGateway::handle_err_order_insert(const CThostFtdcInputOrderField& input,
                                            const CThostFtdcRspInfoField&    info) {
     reject_order(cstr(input.OrderRef),
-                 "CTP " + std::to_string(info.ErrorID) + ": " + cstr(info.ErrorMsg));
+                 fmt::format("CTP {}: {}", info.ErrorID, cstr(info.ErrorMsg)));
 }
 
 void CtpTdGateway::handle_err_order_action(const CThostFtdcOrderActionField& action,
                                            const CThostFtdcRspInfoField&     info) {
     (void)action;
-    emit(TradeEvent{
-        TradeEvent::Kind::Error, nlohmann::json{}, {}, "CTP cancel error: " + cstr(info.ErrorMsg)});
+    emit(TradeEvent{TradeEvent::Kind::Error,
+                    nlohmann::json{},
+                    {},
+                    fmt::format("CTP cancel error: {}", cstr(info.ErrorMsg))});
 }
 
 void CtpTdGateway::handle_rtn_order(const CThostFtdcOrderField& order) {

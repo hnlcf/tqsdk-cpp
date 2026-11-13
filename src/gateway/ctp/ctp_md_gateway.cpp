@@ -212,7 +212,7 @@ void CtpMdGateway::resubscribe_desired() {
     if (ret != 0) {
         emit(MarketDataEvent{MarketDataEvent::Kind::Error,
                              nlohmann::json{},
-                             "CTP SubscribeMarketData ret=" + std::to_string(ret)});
+                             fmt::format("CTP SubscribeMarketData ret={}", ret)});
     }
 }
 
@@ -232,7 +232,7 @@ void CtpMdGateway::handle_front_connected() {
     if (ret != 0) {
         emit(MarketDataEvent{MarketDataEvent::Kind::Error,
                              nlohmann::json{},
-                             "CTP ReqUserLogin ret=" + std::to_string(ret)});
+                             fmt::format("CTP ReqUserLogin ret={}", ret)});
     }
 }
 
@@ -246,7 +246,7 @@ void CtpMdGateway::handle_front_disconnected(int reason) {
     SPDLOG_WARN("[CtpMd] front disconnected reason={}", reason);
     emit(MarketDataEvent{MarketDataEvent::Kind::Disconnected,
                          nlohmann::json{},
-                         "CTP md disconnected reason=" + std::to_string(reason)});
+                         fmt::format("CTP md disconnected reason={}", reason)});
 }
 
 void CtpMdGateway::handle_login(const CThostFtdcRspUserLoginField& rsp,
@@ -263,7 +263,7 @@ void CtpMdGateway::handle_login(const CThostFtdcRspUserLoginField& rsp,
         SPDLOG_WARN("[CtpMd] login failed: {} ({})", cstr(info->ErrorMsg), info->ErrorID);
         emit(MarketDataEvent{MarketDataEvent::Kind::Error,
                              nlohmann::json{},
-                             "CTP md login failed: " + cstr(info->ErrorMsg)});
+                             fmt::format("CTP md login failed: {}", cstr(info->ErrorMsg))});
         arm_watchdog();
         return;
     }
@@ -287,7 +287,7 @@ void CtpMdGateway::handle_sub_market(const CThostFtdcSpecificInstrumentField* sp
                              nlohmann::json{},
                              std::string{"CTP subscribe "} +
                                  (spec ? cstr(spec->InstrumentID) : "") +
-                                 " failed: " + cstr(info->ErrorMsg)});
+                                 fmt::format(" failed: {}", cstr(info->ErrorMsg))});
     } else if (spec != nullptr) {
         SPDLOG_INFO("[CtpMd] subscribe ok: {}", cstr(spec->InstrumentID));
     }
@@ -308,7 +308,7 @@ void CtpMdGateway::handle_depth(const CThostFtdcDepthMarketDataField& depth) {
     }
     if (it == desired_.end()) {
         // 部分行情前置的 ExchangeID 为空；按 InstrumentID 后缀匹配完整订阅键。
-        const std::string suffix = "." + cstr(depth.InstrumentID);
+        const std::string suffix = fmt::format(".{}", cstr(depth.InstrumentID));
         for (auto i = desired_.begin(); i != desired_.end(); ++i) {
             if (i->first.size() >= suffix.size() &&
                 i->first.compare(i->first.size() - suffix.size(), suffix.size(), suffix) == 0) {
@@ -365,7 +365,7 @@ CtpMdGateway::release(const std::vector<std::string>&                     symbol
         if (ret != 0) {
             emit(MarketDataEvent{MarketDataEvent::Kind::Error,
                                  nlohmann::json{},
-                                 "CTP UnSubscribeMarketData ret=" + std::to_string(ret)});
+                                 fmt::format("CTP UnSubscribeMarketData ret={}", ret)});
         }
     }
     co_return;

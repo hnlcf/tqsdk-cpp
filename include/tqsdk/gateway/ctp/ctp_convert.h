@@ -114,7 +114,7 @@ inline std::string tq_symbol(std::string_view exchange, std::string_view instrum
     if (exchange.empty()) {
         return std::string{instrument};
     }
-    return std::string{exchange} + "." + std::string{instrument};
+    return fmt::format("{}.{}", exchange, instrument);
 }
 
 inline std::pair<std::string, std::string> split_tq_symbol(std::string_view symbol) {

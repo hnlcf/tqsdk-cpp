@@ -5,7 +5,7 @@
 namespace tqsdk::ipc {
 
 std::string GatewaySubscriptionBook::kline_key(std::string_view symbol, int64_t duration_ns) {
-    return std::string{symbol} + "|" + std::to_string(duration_ns);
+    return fmt::format("{}|{}", symbol, duration_ns);
 }
 
 void GatewaySubscriptionBook::use_symbol(const std::string& symbol, Delta& delta) {

@@ -541,7 +541,7 @@ std::string TqApi::next_order_id() {
     // CTP OrderRef 本质是递增的 int32；用 epoch 秒播种，格式为 r<十进制>。
     // 12 字符以内，可原样作为 CTP OrderRef，且重启后新号大于柜台历史号。
     const uint64_t seq = order_seq_.fetch_add(1, std::memory_order_relaxed) % 2'000'000'000ULL;
-    return "r" + std::to_string(seq);
+    return fmt::format("r{}", seq);
 }
 
 } // namespace tqsdk

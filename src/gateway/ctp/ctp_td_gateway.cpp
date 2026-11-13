@@ -118,7 +118,8 @@ asio::awaitable<void> CtpTdGateway::start() {
         }
     }
     order_store_ = std::make_unique<CtpOrderStore>(
-        (std::filesystem::path(cfg_.flow_path) / ("ctp_orders_" + safe_user + ".json")).string());
+        (std::filesystem::path(cfg_.flow_path) / (fmt::format("ctp_orders_{}.json", safe_user)))
+            .string());
 
     install_callbacks();
     state_->alive.store(true, std::memory_order_release);

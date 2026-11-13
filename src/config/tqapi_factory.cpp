@@ -34,7 +34,7 @@ MdKind parse_md_kind(std::string_view s) {
     if (s == "mock") {
         return MdKind::Mock;
     }
-    throw std::runtime_error("config: unknown [md].kind = '" + std::string(s) + "'");
+    throw std::runtime_error(fmt::format("config: unknown [md].kind = '{}'", s));
 }
 
 TdKind parse_td_kind(std::string_view s) {
@@ -53,7 +53,7 @@ TdKind parse_td_kind(std::string_view s) {
     if (s == "mock") {
         return TdKind::Mock;
     }
-    throw std::runtime_error("config: unknown [td].kind = '" + std::string(s) + "'");
+    throw std::runtime_error(fmt::format("config: unknown [td].kind = '{}'", s));
 }
 
 IpcTransport parse_transport(std::string_view s) {
@@ -63,7 +63,7 @@ IpcTransport parse_transport(std::string_view s) {
     if (s == "tcp") {
         return IpcTransport::Tcp;
     }
-    throw std::runtime_error("config: unknown [ipc].transport = '" + std::string(s) + "'");
+    throw std::runtime_error(fmt::format("config: unknown [ipc].transport = '{}'", s));
 }
 
 ipc::FrameEncoding parse_encoding(std::string_view s) {
@@ -73,7 +73,7 @@ ipc::FrameEncoding parse_encoding(std::string_view s) {
     if (s == "msgpack") {
         return ipc::FrameEncoding::MessagePack;
     }
-    throw std::runtime_error("config: unknown [ipc].encoding = '" + std::string(s) + "'");
+    throw std::runtime_error(fmt::format("config: unknown [ipc].encoding = '{}'", s));
 }
 
 ipc::IpcRole parse_role(std::string_view s) {
@@ -83,7 +83,7 @@ ipc::IpcRole parse_role(std::string_view s) {
     if (s == "node") {
         return ipc::IpcRole::Node;
     }
-    throw std::runtime_error("config: unknown [ipc].role = '" + std::string(s) + "'");
+    throw std::runtime_error(fmt::format("config: unknown [ipc].role = '{}'", s));
 }
 
 // 读取指定 table 的某键为 string（缺省返回 def）。
@@ -92,7 +92,7 @@ std::string get_str(const toml::table& tbl, std::string_view key, std::string de
         if (auto s = v->value<std::string>()) {
             return *s;
         }
-        throw std::runtime_error("config: key '" + std::string(key) + "' must be a string");
+        throw std::runtime_error(fmt::format("config: key '{}' must be a string", key));
     }
     return def;
 }
@@ -105,7 +105,7 @@ double get_double(const toml::table& tbl, std::string_view key, double def) {
         if (auto i = v->value<int64_t>()) {
             return static_cast<double>(*i);
         }
-        throw std::runtime_error("config: key '" + std::string(key) + "' must be a number");
+        throw std::runtime_error(fmt::format("config: key '{}' must be a number", key));
     }
     return def;
 }
@@ -115,7 +115,7 @@ int64_t get_int(const toml::table& tbl, std::string_view key, int64_t def) {
         if (auto i = v->value<int64_t>()) {
             return *i;
         }
-        throw std::runtime_error("config: key '" + std::string(key) + "' must be an integer");
+        throw std::runtime_error(fmt::format("config: key '{}' must be an integer", key));
     }
     return def;
 }
@@ -125,7 +125,7 @@ bool get_bool(const toml::table& tbl, std::string_view key, bool def) {
         if (auto b = v->value<bool>()) {
             return *b;
         }
-        throw std::runtime_error("config: key '" + std::string(key) + "' must be a boolean");
+        throw std::runtime_error(fmt::format("config: key '{}' must be a boolean", key));
     }
     return def;
 }

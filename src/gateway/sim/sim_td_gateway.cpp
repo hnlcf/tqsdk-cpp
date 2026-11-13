@@ -258,7 +258,7 @@ void SimTdGateway::apply_fill(LiveOrder& order,
     update_position(order, volume, fill_price, batch);
 
     // ---- 成交明细 trade ----
-    TradeId tid = "trade_" + std::to_string(trade_seq_.fetch_add(1, std::memory_order_relaxed));
+    TradeId tid = fmt::format("trade_{}", trade_seq_.fetch_add(1, std::memory_order_relaxed));
     nlohmann::json tj{{"order_id", order.rid},
                       {"trade_id", tid},
                       {"instrument_id", order.instrument_id},

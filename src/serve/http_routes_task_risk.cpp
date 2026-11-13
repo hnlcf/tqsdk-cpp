@@ -28,7 +28,7 @@ HttpServer::RouteHandlers::target_create(Query<AccountQuery> query, TargetTaskRe
     }
     TargetPosOptions options;
     options.max_volume = request.max_volume;
-    const auto id      = "target-" + std::to_string(++tasks.seq);
+    const auto id      = fmt::format("target-{}", ++tasks.seq);
     auto       task =
         std::make_shared<TargetPosTask>(*selected, request.symbol, mode, std::move(options));
     task->set_target_volume(request.target_volume);
@@ -63,7 +63,7 @@ HttpServer::RouteHandlers::order_task_create(Query<AccountQuery> query, OrderTas
     AccountScope scope    = account_scope(query.value.account);
     TqApi*       selected = scope.api;
     auto&        tasks    = *scope.tasks;
-    const auto   id       = "order-" + std::to_string(++tasks.seq);
+    const auto   id       = fmt::format("order-{}", ++tasks.seq);
     auto         task     = std::make_shared<InsertOrderTask>(*selected, std::move(request.order));
     tasks.orders[id]      = std::move(task);
     co_return json{{"success", true}, {"task_id", id}, {"account", scope.id}};
