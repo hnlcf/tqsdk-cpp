@@ -68,6 +68,12 @@ auto api = std::move(*result);
 - GCC 本地构建：通过
 - `tqsdk-node --help`：0
 
+## Release
+
+- Tag：`v0.4.0`
+- GitHub Release：https://github.com/hnlcf/tqsdk-cpp/releases/tag/v0.4.0
+- 已上传 12 个 assets：DEB/RPM/TGZ、libs/dev、container image、Python wheel、SHA256SUMS。
+
 ## 已知限制
 
 - 内部仍有 46 处 `throw`，均为 nlohmann `from_json`、IPC 序列化适配器或 Asio
