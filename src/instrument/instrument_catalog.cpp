@@ -248,7 +248,8 @@ bool InstrumentCatalog::download_to_file() {
         }
         const auto parsed = nlohmann::json::parse(body);
         if (!parsed.is_object() || parsed.empty()) {
-            throw std::runtime_error("response is not a non-empty JSON object");
+            SPDLOG_WARN("[Catalog] response is not a non-empty JSON object");
+            return false;
         }
         const auto tmp = fmt::format("{}.tmp", cfg_.file);
         {

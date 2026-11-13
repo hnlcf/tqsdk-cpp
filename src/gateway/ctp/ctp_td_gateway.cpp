@@ -104,7 +104,8 @@ asio::awaitable<void> CtpTdGateway::start() {
     }
     started_ = true;
     if (cfg_.td_front.empty()) {
-        throw std::runtime_error("CTP td_front is empty");
+        SPDLOG_ERROR("[CtpTd] td_front is empty");
+        co_return;
     }
     // 供 TradingCalendar 判断节假日/节前夜盘；后台线程低频刷新。
     HolidayCalendar::start_global();
@@ -126,7 +127,8 @@ asio::awaitable<void> CtpTdGateway::start() {
     spi_ = std::make_unique<CtpTdSpi>(state_);
     api_ = CThostFtdcTraderApi::CreateFtdcTraderApi(cfg_.flow_path.c_str());
     if (api_ == nullptr) {
-        throw std::runtime_error("CreateFtdcTraderApi failed");
+        SPDLOG_ERROR("[CtpTd] CreateFtdcTraderApi failed");
+        co_return;
     }
     api_->RegisterSpi(spi_.get());
     api_->SubscribePrivateTopic(THOST_TERT_QUICK);

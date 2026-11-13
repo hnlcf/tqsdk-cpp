@@ -60,7 +60,7 @@ bool HolidayCalendar::load_local() {
         return false;
     }
     try {
-        load_from_json_text(text, cfg_.file);
+        (void)load_from_json_text(text, cfg_.file);
         return true;
     } catch (const std::exception& e) {
         SPDLOG_WARN("[Holiday] load {} failed: {}", cfg_.file, e.what());
@@ -83,7 +83,7 @@ bool HolidayCalendar::refresh_now() {
             return false;
         }
         const auto& text = *text_result;
-        load_from_json_text(text, cfg_.url);
+        (void)load_from_json_text(text, cfg_.url);
 
 #if defined(_WIN32)
         const auto pid = static_cast<long>(_getpid());
@@ -111,10 +111,17 @@ bool HolidayCalendar::refresh_now() {
     }
 }
 
-void HolidayCalendar::load_from_json_text(std::string_view text, std::string_view source) {
-    const auto doc = nlohmann::json::parse(text);
+bool HolidayCalendar::load_from_json_text(std::string_view text, std::string_view source) noexcept {
+    nlohmann::json doc;
+    try {
+        doc = nlohmann::json::parse(text);
+    } catch (const std::exception& e) {
+        SPDLOG_WARN("[Holiday] invalid JSON from {}: {}", source, e.what());
+        return false;
+    }
     if (!doc.is_array()) {
-        throw std::runtime_error("holiday JSON must be an array");
+        SPDLOG_WARN("[Holiday] JSON from {} must be an array", source);
+        return false;
     }
     std::unordered_set<int> dates;
     dates.reserve(doc.size());
@@ -126,7 +133,8 @@ void HolidayCalendar::load_from_json_text(std::string_view text, std::string_vie
         }
     }
     if (dates.empty()) {
-        throw std::runtime_error("holiday JSON contains no valid dates");
+        SPDLOG_WARN("[Holiday] JSON from {} contains no valid dates", source);
+        return false;
     }
     std::size_t count = 0;
     {
@@ -138,6 +146,7 @@ void HolidayCalendar::load_from_json_text(std::string_view text, std::string_vie
         loaded_.store(true, std::memory_order_release);
     }
     SPDLOG_INFO("[Holiday] loaded {} dates from {}", count, source);
+    return true;
 }
 
 void HolidayCalendar::start_background_refresh() {

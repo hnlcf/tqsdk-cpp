@@ -52,7 +52,7 @@ public:
     static void             start_global();
 
 private:
-    void load_from_json_text(std::string_view text, std::string_view source);
+    bool load_from_json_text(std::string_view text, std::string_view source) noexcept;
     void refresh_loop(std::stop_token stop);
 
     Config                    cfg_;

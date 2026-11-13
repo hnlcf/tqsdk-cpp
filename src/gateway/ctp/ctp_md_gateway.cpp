@@ -122,7 +122,8 @@ asio::awaitable<void> CtpMdGateway::start() {
     }
     started_ = true;
     if (cfg_.md_front.empty()) {
-        throw std::runtime_error("CTP md_front is empty");
+        SPDLOG_ERROR("[CtpMd] md_front is empty");
+        co_return;
     }
     std::error_code ec;
     std::filesystem::create_directories(cfg_.flow_path, ec);
@@ -132,7 +133,8 @@ asio::awaitable<void> CtpMdGateway::start() {
     spi_ = std::make_unique<CtpMdSpi>(state_);
     api_ = CThostFtdcMdApi::CreateFtdcMdApi(cfg_.flow_path.c_str());
     if (api_ == nullptr) {
-        throw std::runtime_error("CreateFtdcMdApi failed");
+        SPDLOG_ERROR("[CtpMd] CreateFtdcMdApi failed");
+        co_return;
     }
     api_->RegisterSpi(spi_.get());
     front_connected_ = false;
