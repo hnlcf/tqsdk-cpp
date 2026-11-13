@@ -143,7 +143,8 @@ asio::awaitable<void> GatewayIpcServer::control_loop() {
             if (e.code() == asio::error::operation_aborted) {
                 co_return;
             }
-            throw;
+            SPDLOG_WARN("[Gw.control] receive failed: {}", e.what());
+            co_return;
         }
         if (!frame.has_value()) {
             SPDLOG_DEBUG("[Gw.control] incoming closed");

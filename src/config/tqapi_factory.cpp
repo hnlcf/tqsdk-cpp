@@ -16,6 +16,29 @@ namespace tqsdk {
 
 namespace {
 
+struct ConfigParseState {
+    bool                    failed = false;
+    config::ConfigErrorCode code   = config::ConfigErrorCode::invalid_value;
+    std::string             detail;
+};
+
+thread_local ConfigParseState* g_config_parse_state = nullptr;
+
+void fail_parse(config::ConfigErrorCode code, std::string detail) {
+    if (g_config_parse_state != nullptr && !g_config_parse_state->failed) {
+        g_config_parse_state->failed = true;
+        g_config_parse_state->code   = code;
+        g_config_parse_state->detail = std::move(detail);
+    }
+}
+
+struct ParseGuard {
+    explicit ParseGuard(ConfigParseState& state) { g_config_parse_state = &state; }
+    ~ParseGuard() { g_config_parse_state = nullptr; }
+    ParseGuard(const ParseGuard&)            = delete;
+    ParseGuard& operator=(const ParseGuard&) = delete;
+};
+
 // ---------- 枚举解析 ----------
 
 MdKind parse_md_kind(std::string_view s) {
@@ -34,7 +57,8 @@ MdKind parse_md_kind(std::string_view s) {
     if (s == "mock") {
         return MdKind::Mock;
     }
-    throw std::runtime_error(fmt::format("config: unknown [md].kind = '{}'", s));
+    fail_parse(config::ConfigErrorCode::invalid_value, fmt::format("unknown [md].kind = '{}'", s));
+    return MdKind::None;
 }
 
 TdKind parse_td_kind(std::string_view s) {
@@ -53,7 +77,8 @@ TdKind parse_td_kind(std::string_view s) {
     if (s == "mock") {
         return TdKind::Mock;
     }
-    throw std::runtime_error(fmt::format("config: unknown [td].kind = '{}'", s));
+    fail_parse(config::ConfigErrorCode::invalid_value, fmt::format("unknown [td].kind = '{}'", s));
+    return TdKind::None;
 }
 
 IpcTransport parse_transport(std::string_view s) {
@@ -63,7 +88,9 @@ IpcTransport parse_transport(std::string_view s) {
     if (s == "tcp") {
         return IpcTransport::Tcp;
     }
-    throw std::runtime_error(fmt::format("config: unknown [ipc].transport = '{}'", s));
+    fail_parse(config::ConfigErrorCode::invalid_value,
+               fmt::format("unknown [ipc].transport = '{}'", s));
+    return IpcTransport::Uds;
 }
 
 ipc::FrameEncoding parse_encoding(std::string_view s) {
@@ -73,7 +100,9 @@ ipc::FrameEncoding parse_encoding(std::string_view s) {
     if (s == "msgpack") {
         return ipc::FrameEncoding::MessagePack;
     }
-    throw std::runtime_error(fmt::format("config: unknown [ipc].encoding = '{}'", s));
+    fail_parse(config::ConfigErrorCode::invalid_value,
+               fmt::format("unknown [ipc].encoding = '{}'", s));
+    return ipc::FrameEncoding::Json;
 }
 
 ipc::IpcRole parse_role(std::string_view s) {
@@ -83,7 +112,8 @@ ipc::IpcRole parse_role(std::string_view s) {
     if (s == "node") {
         return ipc::IpcRole::Node;
     }
-    throw std::runtime_error(fmt::format("config: unknown [ipc].role = '{}'", s));
+    fail_parse(config::ConfigErrorCode::invalid_value, fmt::format("unknown [ipc].role = '{}'", s));
+    return ipc::IpcRole::Gateway;
 }
 
 // 读取指定 table 的某键为 string（缺省返回 def）。
@@ -92,7 +122,9 @@ std::string get_str(const toml::table& tbl, std::string_view key, std::string de
         if (auto s = v->value<std::string>()) {
             return *s;
         }
-        throw std::runtime_error(fmt::format("config: key '{}' must be a string", key));
+        fail_parse(config::ConfigErrorCode::invalid_value,
+                   fmt::format("key '{}' must be a string", key));
+        return def;
     }
     return def;
 }
@@ -105,7 +137,9 @@ double get_double(const toml::table& tbl, std::string_view key, double def) {
         if (auto i = v->value<int64_t>()) {
             return static_cast<double>(*i);
         }
-        throw std::runtime_error(fmt::format("config: key '{}' must be a number", key));
+        fail_parse(config::ConfigErrorCode::invalid_value,
+                   fmt::format("key '{}' must be a number", key));
+        return def;
     }
     return def;
 }
@@ -115,7 +149,9 @@ int64_t get_int(const toml::table& tbl, std::string_view key, int64_t def) {
         if (auto i = v->value<int64_t>()) {
             return *i;
         }
-        throw std::runtime_error(fmt::format("config: key '{}' must be an integer", key));
+        fail_parse(config::ConfigErrorCode::invalid_value,
+                   fmt::format("key '{}' must be an integer", key));
+        return def;
     }
     return def;
 }
@@ -125,7 +161,9 @@ bool get_bool(const toml::table& tbl, std::string_view key, bool def) {
         if (auto b = v->value<bool>()) {
             return *b;
         }
-        throw std::runtime_error(fmt::format("config: key '{}' must be a boolean", key));
+        fail_parse(config::ConfigErrorCode::invalid_value,
+                   fmt::format("key '{}' must be a boolean", key));
+        return def;
     }
     return def;
 }
@@ -241,27 +279,43 @@ std::unique_ptr<ipc::IIpcChannel>
 connect_channel(asio::io_context& ctx, const TqApiConfig::Ipc& ipc_cfg, const RemoteEndpoint& ep) {
     if (ipc_cfg.transport == IpcTransport::Uds) {
         if (ep.socket.empty()) {
-            throw std::runtime_error("config: uds transport requires socket path");
+            fail_parse(config::ConfigErrorCode::invalid_value,
+                       "uds transport requires socket path");
+            return nullptr;
         }
         return ipc::UdsChannel::connect(ctx, ep.socket);
     }
     if (ep.tcp_host.empty() || ep.tcp_port == 0) {
-        throw std::runtime_error("config: tcp transport requires tcp_host and tcp_port");
+        fail_parse(config::ConfigErrorCode::invalid_value, "tcp transport requires host and port");
+        return nullptr;
     }
     return ipc::TcpChannel::connect(ctx, ep.tcp_host, ep.tcp_port);
 }
 
 } // namespace
 
-TqApiConfig parse_tqapi_config(std::string_view toml_text) {
-    toml::table root;
+config::ConfigResult<TqApiConfig> parse_tqapi_config(std::string_view toml_text) noexcept {
+    toml::table      root;
+    ConfigParseState state;
+    ParseGuard       guard(state);
     try {
         root = toml::parse(toml_text);
     } catch (const toml::parse_error& e) {
-        throw std::runtime_error(std::string("config: toml parse error: ") +
-                                 e.description().data());
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::parse,
+            fmt::format("toml parse error: {}", e.description().data()),
+        });
+    } catch (const std::exception& e) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            fmt::format("toml parse error: {}", e.what()),
+        });
     }
-    return build_from_toml(root);
+    auto cfg = build_from_toml(root);
+    if (state.failed) {
+        return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
+    }
+    return cfg;
 }
 
 config::ConfigResult<TqApiConfig> load_tqapi_config(const std::string& path) noexcept {
@@ -273,8 +327,14 @@ config::ConfigResult<TqApiConfig> load_tqapi_config(const std::string& path) noe
         });
     }
     try {
-        auto root = toml::parse_file(path);
-        return build_from_toml(root);
+        auto             root = toml::parse_file(path);
+        ConfigParseState state;
+        ParseGuard       guard(state);
+        auto             cfg = build_from_toml(root);
+        if (state.failed) {
+            return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
+        }
+        return cfg;
     } catch (const toml::parse_error& e) {
         return std::unexpected(config::ConfigError{
             config::ConfigErrorCode::parse,
@@ -294,25 +354,14 @@ config::ConfigResult<TqApiConfig> load_tqapi_config(const std::string& path) noe
 }
 
 config::ConfigResult<TqApiConfig> try_parse_tqapi_config(std::string_view toml_text) noexcept {
-    try {
-        return parse_tqapi_config(toml_text);
-    } catch (const std::exception& e) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::parse,
-            fmt::format("parse TOML: {}", e.what()),
-        });
-    } catch (...) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::unknown,
-            "parse TOML: unknown error",
-        });
-    }
+    return parse_tqapi_config(toml_text);
 }
 
-asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context&           ctx,
-                                                   const TqApiConfig&          cfg,
-                                                   asio::any_io_executor       core_ex,
-                                                   std::shared_ptr<KlineStore> kline_store) {
+asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>
+make_tqapi(asio::io_context&           ctx,
+           const TqApiConfig&          cfg,
+           asio::any_io_executor       core_ex,
+           std::shared_ptr<KlineStore> kline_store) noexcept {
     auto ex = core_ex ? std::move(core_ex) : asio::any_io_executor(ctx.get_executor());
 
     const bool need_md_remote = cfg.md.kind == MdKind::Remote;
@@ -330,9 +379,10 @@ asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context&           c
             RemoteEndpoint td_ep{cfg.td.socket, cfg.td.tcp_host, cfg.td.tcp_port};
             if (need_md_remote && (td_ep.socket != ep.socket || td_ep.tcp_host != ep.tcp_host ||
                                    td_ep.tcp_port != ep.tcp_port)) {
-                throw std::runtime_error(
-                    "config: md and td remote endpoints differ; only one shared gw connection "
-                    "is supported");
+                co_return std::unexpected(gateway::GatewayError{
+                    gateway::GatewayErrorCode::config,
+                    "md and td remote endpoints differ; only one shared gw connection is supported",
+                });
             }
             ep = td_ep;
         }
@@ -350,6 +400,10 @@ asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context&           c
         auto session_factory = [&ctx, ex, ipc_cfg, endpoint, opts]()
             -> asio::awaitable<ipc::IpcResult<std::unique_ptr<ipc::IpcSession>>> {
             auto channel = connect_channel(ctx, ipc_cfg, endpoint);
+            if (!channel) {
+                co_return std::unexpected(
+                    ipc::IpcFailure{ipc::IpcErrorCode::connect, "cannot create IPC channel"});
+            }
             auto session = std::make_unique<ipc::IpcSession>(std::move(channel), ex, opts);
             auto started = co_await session->start();
             if (!started) {
@@ -361,9 +415,12 @@ asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context&           c
         client              = std::make_shared<ipc::IpcClient>(session_factory, ex);
         auto connect_result = co_await client->connect();
         if (!connect_result) {
-            throw std::runtime_error(fmt::format("{} ({})",
-                                                 connect_result.error().detail,
-                                                 ipc::ipc_error_name(connect_result.error().code)));
+            co_return std::unexpected(gateway::GatewayError{
+                gateway::GatewayErrorCode::connect,
+                fmt::format("{} ({})",
+                            connect_result.error().detail,
+                            ipc::ipc_error_name(connect_result.error().code)),
+            });
         }
     }
 
@@ -443,19 +500,7 @@ try_make_tqapi(asio::io_context&           ctx,
                const TqApiConfig&          cfg,
                asio::any_io_executor       core_ex,
                std::shared_ptr<KlineStore> kline_store) noexcept {
-    try {
-        co_return co_await make_tqapi(ctx, cfg, std::move(core_ex), std::move(kline_store));
-    } catch (const std::exception& e) {
-        co_return std::unexpected(gateway::GatewayError{
-            gateway::GatewayErrorCode::connect,
-            fmt::format("gateway initialization failed: {}", e.what()),
-        });
-    } catch (...) {
-        co_return std::unexpected(gateway::GatewayError{
-            gateway::GatewayErrorCode::unknown,
-            "gateway initialization failed: unknown error",
-        });
-    }
+    co_return co_await make_tqapi(ctx, cfg, std::move(core_ex), std::move(kline_store));
 }
 
 // ============================================================================
@@ -702,26 +747,52 @@ NodeConfig build_node_from_toml(const toml::table& root) {
 
 } // namespace
 
-GwConfig parse_gw_config(std::string_view toml_text) {
-    toml::table root;
+config::ConfigResult<GwConfig> parse_gw_config(std::string_view toml_text) noexcept {
+    toml::table      root;
+    ConfigParseState state;
+    ParseGuard       guard(state);
     try {
         root = toml::parse(toml_text);
     } catch (const toml::parse_error& e) {
-        throw std::runtime_error(std::string("gw config: toml parse error: ") +
-                                 e.description().data());
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::parse,
+            fmt::format("gw toml parse error: {}", e.description().data()),
+        });
+    } catch (const std::exception& e) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            fmt::format("gw toml parse error: {}", e.what()),
+        });
     }
-    return build_gw_from_toml(root);
+    auto cfg = build_gw_from_toml(root);
+    if (state.failed) {
+        return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
+    }
+    return cfg;
 }
 
-NodeConfig parse_node_config(std::string_view toml_text) {
-    toml::table root;
+config::ConfigResult<NodeConfig> parse_node_config(std::string_view toml_text) noexcept {
+    toml::table      root;
+    ConfigParseState state;
+    ParseGuard       guard(state);
     try {
         root = toml::parse(toml_text);
     } catch (const toml::parse_error& e) {
-        throw std::runtime_error(std::string("node config: toml parse error: ") +
-                                 e.description().data());
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::parse,
+            fmt::format("node toml parse error: {}", e.description().data()),
+        });
+    } catch (const std::exception& e) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            fmt::format("node toml parse error: {}", e.what()),
+        });
     }
-    return build_node_from_toml(root);
+    auto cfg = build_node_from_toml(root);
+    if (state.failed) {
+        return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
+    }
+    return cfg;
 }
 
 config::ConfigResult<GwConfig> load_gw_config(const std::string& path) noexcept {
@@ -733,8 +804,14 @@ config::ConfigResult<GwConfig> load_gw_config(const std::string& path) noexcept 
         });
     }
     try {
-        auto root = toml::parse_file(path);
-        return build_gw_from_toml(root);
+        auto             root = toml::parse_file(path);
+        ConfigParseState state;
+        ParseGuard       guard(state);
+        auto             cfg = build_gw_from_toml(root);
+        if (state.failed) {
+            return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
+        }
+        return cfg;
     } catch (const toml::parse_error& e) {
         return std::unexpected(config::ConfigError{
             config::ConfigErrorCode::parse,
@@ -778,8 +855,14 @@ config::ConfigResult<NodeConfig> load_node_config(const std::string& path) noexc
         });
     }
     try {
-        auto root = toml::parse_file(path);
-        return build_node_from_toml(root);
+        auto             root = toml::parse_file(path);
+        ConfigParseState state;
+        ParseGuard       guard(state);
+        auto             cfg = build_node_from_toml(root);
+        if (state.failed) {
+            return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
+        }
+        return cfg;
     } catch (const toml::parse_error& e) {
         return std::unexpected(config::ConfigError{
             config::ConfigErrorCode::parse,

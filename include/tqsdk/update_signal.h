@@ -36,7 +36,7 @@ public:
             co_await t.async_wait(asio::use_awaitable);
         } catch (const boost::system::system_error& e) {
             if (e.code() != asio::error::operation_aborted) {
-                throw;
+                SPDLOG_WARN("[UpdateSignal] wait failed: {}", e.what());
             }
         }
         waiter_     = nullptr;

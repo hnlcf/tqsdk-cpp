@@ -38,7 +38,7 @@ public:
                 co_await t.async_wait(asio::use_awaitable);
             } catch (const boost::system::system_error& e) {
                 if (e.code() != asio::error::operation_aborted) {
-                    throw;
+                    TQSDK_PANIC("AsyncMutex wait failed: {}", e.what());
                 }
                 // operation_aborted = 被 unlock 唤醒
             }

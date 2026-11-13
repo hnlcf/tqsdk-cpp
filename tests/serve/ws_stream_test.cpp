@@ -332,7 +332,8 @@ TEST(WsStreamConfig, ParseServeWsSection) {
         max_clients = 7
         max_queue = 9
         coalesce_ms = 12
-    )");
+    )")
+                   .value();
 
     EXPECT_EQ(cfg.serve_bind, "0.0.0.0");
     EXPECT_EQ(cfg.serve_port, 9000);

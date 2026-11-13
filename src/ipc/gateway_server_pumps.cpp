@@ -65,7 +65,8 @@ asio::awaitable<void> GatewayIpcServer::md_pump() {
             if (e.code() == asio::error::operation_aborted) {
                 co_return;
             }
-            throw;
+            SPDLOG_WARN("[Gw.pump] receive failed: {}", e.what());
+            co_return;
         }
         if (std::holds_alternative<std::monostate>(raced)) {
             co_return; // 停止信号获胜
@@ -123,7 +124,8 @@ asio::awaitable<void> GatewayIpcServer::td_pump() {
             if (e.code() == asio::error::operation_aborted) {
                 co_return;
             }
-            throw;
+            SPDLOG_WARN("[Gw.pump] receive failed: {}", e.what());
+            co_return;
         }
         if (std::holds_alternative<std::monostate>(raced)) {
             co_return; // 停止信号获胜

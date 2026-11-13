@@ -245,10 +245,11 @@ int main(int argc, char** argv) {
              td_p,
              md_bus,
              td_bus]() mutable -> asio::awaitable<void> {
-                try {
-                    co_await session->start(); // 握手；失败抛异常
-                } catch (const std::exception& e) {
-                    SPDLOG_WARN("[gw] handshake failed: {}", e.what());
+                auto started = co_await session->start();
+                if (!started) {
+                    SPDLOG_WARN("[gw] handshake failed: {} ({})",
+                                started.error().detail,
+                                ipc::ipc_error_name(started.error().code));
                     co_return;
                 }
                 SPDLOG_INFO("[gw] node connected & handshake ok");

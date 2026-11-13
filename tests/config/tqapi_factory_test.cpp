@@ -29,7 +29,8 @@ TEST(TqApiConfigTest, ParseInProcessSim) {
         [td]
         kind = "sim"
         initial_balance = 500000
-    )");
+    )")
+                   .value();
 
     EXPECT_EQ(cfg.ipc.transport, IpcTransport::Uds);
     EXPECT_EQ(cfg.ipc.encoding, ipc::FrameEncoding::MessagePack);
@@ -56,7 +57,8 @@ TEST(TqApiConfigTest, ParseRemoteBoth) {
         socket = "/tmp/gw.sock"
         name = "gw-td"
         ack_timeout_ms = 3000
-    )");
+    )")
+                   .value();
     EXPECT_EQ(cfg.md.kind, MdKind::Remote);
     EXPECT_EQ(cfg.md.socket, "/tmp/gw.sock");
     EXPECT_EQ(cfg.td.kind, TdKind::Remote);
@@ -73,14 +75,15 @@ TEST(TqApiConfigTest, ParseTcpTransport) {
         kind = "remote"
         tcp_host = "127.0.0.1"
         tcp_port = 9000
-    )");
+    )")
+                   .value();
     EXPECT_EQ(cfg.ipc.transport, IpcTransport::Tcp);
     EXPECT_EQ(cfg.md.tcp_host, "127.0.0.1");
     EXPECT_EQ(cfg.md.tcp_port, 9000);
 }
 
 TEST(TqApiConfigTest, ParseDefaultsToNone) {
-    auto cfg = parse_tqapi_config("");
+    auto cfg = parse_tqapi_config("").value();
     EXPECT_EQ(cfg.md.kind, MdKind::None);
     EXPECT_EQ(cfg.td.kind, TdKind::None);
     EXPECT_EQ(cfg.ipc.transport, IpcTransport::Uds);
@@ -88,11 +91,11 @@ TEST(TqApiConfigTest, ParseDefaultsToNone) {
 }
 
 TEST(TqApiConfigTest, ParseErrorsOnBadKind) {
-    EXPECT_THROW(parse_tqapi_config("[md]\nkind = \"bogus\"\n"), std::runtime_error);
-    EXPECT_THROW(parse_tqapi_config("[td]\nkind = \"bogus\"\n"), std::runtime_error);
-    EXPECT_EQ(parse_tqapi_config("[td]\nkind = \"ctp\"\n").td.kind, TdKind::Ctp);
-    EXPECT_THROW(parse_tqapi_config("[ipc]\ntransport = \"smoke\"\n"), std::runtime_error);
-    EXPECT_THROW(parse_tqapi_config("this is not toml === "), std::runtime_error);
+    EXPECT_FALSE(parse_tqapi_config("[md]\nkind = \"bogus\"\n"));
+    EXPECT_FALSE(parse_tqapi_config("[td]\nkind = \"bogus\"\n"));
+    EXPECT_EQ(parse_tqapi_config("[td]\nkind = \"ctp\"\n").value().td.kind, TdKind::Ctp);
+    EXPECT_FALSE(parse_tqapi_config("[ipc]\ntransport = \"smoke\"\n"));
+    EXPECT_FALSE(parse_tqapi_config("this is not toml === "));
 }
 
 // ============================ 进程内构造 ============================
@@ -105,8 +108,13 @@ TEST(TqApiFactoryTest, BuildSimTdOnly) {
     cfg.td.initial_balance = 1'000'000.0;
 
     std::unique_ptr<TqApi> api;
-    auto                   mk = test::spawn_joined(
-        ctx, [&]() -> asio::awaitable<void> { api = co_await make_tqapi(ctx, cfg); });
+    auto                   mk = test::spawn_joined(ctx, [&]() -> asio::awaitable<void> {
+        auto result = co_await make_tqapi(ctx, cfg);
+        if (!result) {
+            throw std::runtime_error(result.error().detail);
+        }
+        api = std::move(*result);
+    });
     test::wait_all(ctx, std::chrono::seconds(2), mk);
     mk.rethrow_if_error();
 
@@ -138,8 +146,13 @@ TEST(TqApiFactoryTest, BuildNoneBoth) {
     TqApiConfig      cfg; // 全 none
 
     std::unique_ptr<TqApi> api;
-    auto                   mk = test::spawn_joined(
-        ctx, [&]() -> asio::awaitable<void> { api = co_await make_tqapi(ctx, cfg); });
+    auto                   mk = test::spawn_joined(ctx, [&]() -> asio::awaitable<void> {
+        auto result = co_await make_tqapi(ctx, cfg);
+        if (!result) {
+            throw std::runtime_error(result.error().detail);
+        }
+        api = std::move(*result);
+    });
     test::wait_all(ctx, std::chrono::seconds(2), mk);
     mk.rethrow_if_error();
     ASSERT_NE(api, nullptr);
@@ -224,8 +237,13 @@ TEST(TqApiFactoryTest, RemoteMdAndTdEndToEnd) {
 
     // ---- gw 侧：按配置造 TqApi（同步 connect + 后台握手）----
     std::unique_ptr<TqApi> api;
-    auto                   mk = test::spawn_joined(
-        ctx, [&]() -> asio::awaitable<void> { api = co_await make_tqapi(ctx, cfg); });
+    auto                   mk = test::spawn_joined(ctx, [&]() -> asio::awaitable<void> {
+        auto result = co_await make_tqapi(ctx, cfg);
+        if (!result) {
+            throw std::runtime_error(result.error().detail);
+        }
+        api = std::move(*result);
+    });
 
     // 驱动：等待 TqApi 建好（握手完成）
     ASSERT_TRUE(test::drive_until(ctx, [&] { return mk.is_done(); }, std::chrono::seconds(3)));
@@ -288,16 +306,16 @@ TEST(TqApiFactoryTest, RemoteMdAndTdEndToEnd) {
 }
 
 TEST(TqApiFactoryConfig, ParsesRuntimeThreads) {
-    auto node = parse_node_config("[runtime]\nthreads = 4\n");
+    auto node = parse_node_config("[runtime]\nthreads = 4\n").value();
     EXPECT_EQ(node.runtime.threads, 4);
 
-    auto gw = parse_gw_config("[runtime]\nthreads = 2\n");
+    auto gw = parse_gw_config("[runtime]\nthreads = 2\n").value();
     EXPECT_EQ(gw.runtime.threads, 2);
 
     // 0/负值收敛为 1，超大值封顶 64。
-    EXPECT_EQ(parse_node_config("[runtime]\nthreads = 0\n").runtime.threads, 1);
-    EXPECT_EQ(parse_gw_config("[runtime]\nthreads = -8\n").runtime.threads, 1);
-    EXPECT_EQ(parse_node_config("[runtime]\nthreads = 1000\n").runtime.threads, 64);
+    EXPECT_EQ(parse_node_config("[runtime]\nthreads = 0\n").value().runtime.threads, 1);
+    EXPECT_EQ(parse_gw_config("[runtime]\nthreads = -8\n").value().runtime.threads, 1);
+    EXPECT_EQ(parse_node_config("[runtime]\nthreads = 1000\n").value().runtime.threads, 64);
 }
 
 TEST(TqApiFactoryConfig, ParsesKlineCache) {
@@ -309,7 +327,8 @@ max_bars_per_series = 500
 flush_interval_ms = 50
 max_pending_bars = 1234
 fresh_after_sec = 60
-)");
+)")
+                    .value();
     EXPECT_TRUE(node.kline_cache.enabled);
     EXPECT_EQ(node.kline_cache.file, "data/kline.sqlite3");
     EXPECT_EQ(node.kline_cache.max_bars_per_series, 500);
@@ -317,7 +336,7 @@ fresh_after_sec = 60
     EXPECT_EQ(node.kline_cache.max_pending_bars, 1234u);
     EXPECT_EQ(node.kline_cache.fresh_after_sec, 60);
 
-    auto disabled = parse_node_config("[kline_cache]\nenabled = false\n");
+    auto disabled = parse_node_config("[kline_cache]\nenabled = false\n").value();
     EXPECT_FALSE(disabled.kline_cache.enabled);
 }
 
@@ -329,7 +348,8 @@ file = "/tmp/market.sqlite3"
 enabled = true
 [tick_cache]
 enabled = true
-)");
+)")
+                   .value();
     EXPECT_EQ(cfg.kline_cache.file, "/tmp/market.sqlite3");
     EXPECT_EQ(cfg.tick_cache.file, "/tmp/market.sqlite3");
 
@@ -340,7 +360,8 @@ file = "/tmp/market.sqlite3"
 file = "/tmp/kline-only.sqlite3"
 [tick_cache]
 file = "/tmp/tick-only.sqlite3"
-)");
+)")
+                            .value();
     EXPECT_EQ(explicit_cfg.kline_cache.file, "/tmp/kline-only.sqlite3");
     EXPECT_EQ(explicit_cfg.tick_cache.file, "/tmp/tick-only.sqlite3");
 }
@@ -353,7 +374,8 @@ file = "/tmp/ticks.sqlite3"
 max_ticks_per_series = 1234
 flush_interval_ms = 20
 max_pending_ticks = 99
-)");
+)")
+                   .value();
     EXPECT_TRUE(cfg.tick_cache.enabled);
     EXPECT_EQ(cfg.tick_cache.file, "/tmp/ticks.sqlite3");
     EXPECT_EQ(cfg.tick_cache.max_ticks_per_series, 1234u);
@@ -371,7 +393,8 @@ gw_port = 14331
 id = "C"
 gw_host = "10.0.0.2"
 gw_port = 14332
-)");
+)")
+                   .value();
     ASSERT_EQ(cfg.accounts.size(), 2u);
     EXPECT_EQ(cfg.accounts[0].id, "B");
     EXPECT_EQ(cfg.accounts[0].gw_port, 14331);
@@ -380,11 +403,13 @@ gw_port = 14332
 }
 
 TEST(TqApiFactoryConfig, ParsesAutoUrlFlags) {
-    auto cfg = parse_tqapi_config("[md]\nkind = \"tq\"\nauto_url = true\n[td]\nauto_url = true\n");
+    auto cfg =
+        parse_tqapi_config("[md]\nkind = \"tq\"\nauto_url = true\n[td]\nauto_url = true\n").value();
     EXPECT_TRUE(cfg.md.auto_url);
     EXPECT_TRUE(cfg.td.auto_url);
 
-    auto gw = parse_gw_config("[md]\nkind = \"tq\"\nauto_url = true\n[td]\nauto_url = true\n");
+    auto gw =
+        parse_gw_config("[md]\nkind = \"tq\"\nauto_url = true\n[td]\nauto_url = true\n").value();
     EXPECT_TRUE(gw.md.auto_url);
     EXPECT_TRUE(gw.td.auto_url);
 }
@@ -403,7 +428,8 @@ commission_per_lot = 2.5
 
 [td.last_prices]
 "SHFE.rb2701" = 3037.0
-)");
+)")
+                   .value();
     EXPECT_EQ(cfg.td.kind, TdKind::Sim);
     EXPECT_DOUBLE_EQ(cfg.td.initial_balance, 200000.0);
     ASSERT_EQ(cfg.td.specs.size(), 1u);
@@ -426,7 +452,7 @@ token_env = "MY_TQ_TOKEN"
 allow_query_token = false
 exempt_healthz = false
 )";
-    auto        cfg  = parse_node_config(toml);
+    auto        cfg  = parse_node_config(toml).value();
     EXPECT_TRUE(cfg.auth.enabled);
     EXPECT_EQ(cfg.auth.token_env, "MY_TQ_TOKEN");
     EXPECT_FALSE(cfg.auth.allow_query_token);
@@ -441,7 +467,7 @@ file = "/tmp/audit.log"
 max_bytes = 2048
 max_files = 2
 )";
-    auto        cfg  = parse_node_config(toml);
+    auto        cfg  = parse_node_config(toml).value();
     EXPECT_TRUE(cfg.audit.enabled);
     EXPECT_EQ(cfg.audit.file, "/tmp/audit.log");
     EXPECT_EQ(cfg.audit.max_bytes, 2048u);
@@ -466,7 +492,7 @@ flow_path = "/tmp/ctp-flow"
 order_interval_ms = 37
 front_timeout_ms = 12345
 )";
-    auto        cfg  = parse_tqapi_config(toml);
+    auto        cfg  = parse_tqapi_config(toml).value();
     EXPECT_EQ(cfg.md.kind, MdKind::Ctp);
     EXPECT_EQ(cfg.td.kind, TdKind::Ctp);
     EXPECT_EQ(cfg.ctp.broker_id, "9999");
@@ -480,7 +506,7 @@ front_timeout_ms = 12345
     EXPECT_EQ(cfg.ctp.order_interval.count(), 37);
     EXPECT_EQ(cfg.ctp.front_timeout.count(), 12345);
 
-    auto gw = parse_gw_config(toml);
+    auto gw = parse_gw_config(toml).value();
     EXPECT_EQ(gw.ctp.broker_id, "9999");
 }
 
@@ -489,7 +515,7 @@ front_timeout_ms = 12345
 TEST(ConfigErrors, TryParseReturnsConfigError) {
     const auto result = try_parse_tqapi_config("[md]\nkind = \"bogus\"\n");
     ASSERT_FALSE(result);
-    EXPECT_EQ(result.error().code, config::ConfigErrorCode::parse);
+    EXPECT_EQ(result.error().code, config::ConfigErrorCode::invalid_value);
     EXPECT_FALSE(result.error().detail.empty());
 }
 

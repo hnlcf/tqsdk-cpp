@@ -86,7 +86,8 @@ private:
                 if (e.code() == asio::error::operation_aborted) {
                     break;
                 }
-                throw;
+                SPDLOG_WARN("[EventBus] receive failed: {}", e.what());
+                break;
             }
             if (std::holds_alternative<std::monostate>(raced)) {
                 break; // stop()

@@ -119,7 +119,7 @@ struct TqApiConfig {
 config::ConfigResult<TqApiConfig> load_tqapi_config(const std::string& path) noexcept;
 
 /// 从 TOML 字符串解析配置（兼容旧调用；新代码优先使用 try_parse_*）。
-TqApiConfig parse_tqapi_config(std::string_view toml_text);
+config::ConfigResult<TqApiConfig> parse_tqapi_config(std::string_view toml_text) noexcept;
 
 /// 从 TOML 字符串解析配置；不抛异常。
 config::ConfigResult<TqApiConfig> try_parse_tqapi_config(std::string_view toml_text) noexcept;
@@ -132,14 +132,14 @@ config::ConfigResult<TqApiConfig> try_parse_tqapi_config(std::string_view toml_t
 /// 远程模式下，md/td 共享同一条 IpcSession（一个 gw 连接同时承载行情与交易），
 /// 由 RemoteMdGateway / RemoteTdGateway 通过 shared_ptr<IpcClient> 共享持有。
 ///
-/// 失败（建连/握手超时、文件缺失等）抛异常。
+/// 失败通过 GatewayError 返回。
 /// core_ex 为空时使用 ctx 的 executor；多线程运行时调用方应传入 core strand，
 /// TqApi/DataManager/网关事件循环全部绑定到该 executor。
-asio::awaitable<std::unique_ptr<TqApi>>
+asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>
 make_tqapi(asio::io_context&           ctx,
            const TqApiConfig&          cfg,
            asio::any_io_executor       core_ex     = {},
-           std::shared_ptr<KlineStore> kline_store = nullptr);
+           std::shared_ptr<KlineStore> kline_store = nullptr) noexcept;
 /// 与 make_tqapi 相同，但把建连/握手/配置异常隔离为本层 GatewayError。
 /// app 入口和 multi-account 边界应优先使用本函数。
 asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>
@@ -254,11 +254,11 @@ struct NodeConfig {
 };
 
 /// 解析 gw 配置（TOML 文本）。
-GwConfig                       parse_gw_config(std::string_view toml_text);
+config::ConfigResult<GwConfig> parse_gw_config(std::string_view toml_text) noexcept;
 config::ConfigResult<GwConfig> try_parse_gw_config(std::string_view toml_text) noexcept;
 
 /// 解析 node 配置（TOML 文本）。
-NodeConfig                       parse_node_config(std::string_view toml_text);
+config::ConfigResult<NodeConfig> parse_node_config(std::string_view toml_text) noexcept;
 config::ConfigResult<NodeConfig> try_parse_node_config(std::string_view toml_text) noexcept;
 
 /// 从文件加载；错误通过 ConfigError 返回。

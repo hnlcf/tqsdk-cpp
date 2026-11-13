@@ -36,7 +36,8 @@ password = "tq_password"
 auth_url = "https://auth.example.test/"
 request_timeout_sec = 7
 refresh_margin_sec = 11
-)");
+)")
+                         .value();
     EXPECT_TRUE(cfg.tq_auth.enabled);
     EXPECT_EQ(cfg.tq_auth.user_name, "tq_user");
     EXPECT_EQ(cfg.tq_auth.auth_url, "https://auth.example.test/");

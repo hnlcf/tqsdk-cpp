@@ -193,7 +193,8 @@ asio::awaitable<bool> IpcSession::dispatch_frame(ReceivedFrame frame) {
             if (e.code() == asio::error::operation_aborted) {
                 co_return false;
             }
-            throw;
+            SPDLOG_WARN("IpcSession[{}]: incoming send failed: {}", opts_.local_name, e.what());
+            co_return false;
         }
         co_return true;
     }
