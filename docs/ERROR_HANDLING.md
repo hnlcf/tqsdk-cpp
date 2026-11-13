@@ -119,11 +119,12 @@ C ABI（`backtest_c_api.cpp`）例外：异常绝不允许跨 C ABI，必须在�
 - `gw_main/node_main` 不再用异常捕获配置错误，改为 expected 分支；
 - 新增 `try_make_tqapi()`，把 gateway 初始化异常隔离为 `GatewayError`；
 - `IpcClient::connect()` / `send_command_and_wait()` 返回 `expected<..., IpcFailure>`；
+- HTTP route handlers 返回 `ServeResult<json>`，router 在边界转换错误响应；
 - `TqAuth::login_result()` 返回 `expected<void, AuthError>`；
 - HTTP route handler 返回 `ServeResult<json>`，router 在边界解包为 Response；
 - `node` 主账户和附加账户均使用 expected 边界；
 - HTTP 调用方（holiday/catalog/continuous/auth）已在本层处理错误；
-- 新增 `util::panic` 及 HTTP/config 独立错误类型；
+- 新增 `TQSDK_PANIC(...)`（记录 file/line/function）及独立模块错误类型；
 - 新增错误路径测试。
 
 ### 6.1 内部异常白名单
