@@ -120,9 +120,12 @@ int main(int argc, char** argv) {
     // 可选：通过 TqAuth 名称服务解析动态 MD URL。解析失败时保留静态配置。
     TqApiConfig::Md md_cfg = cfg.md;
     if (md_cfg.kind == MdKind::Tq && md_cfg.auto_url && cfg.tq_auth.enabled) {
-        TqAuth auth(cfg.tq_auth);
-        if (!auth.login()) {
-            SPDLOG_WARN("[gw] dynamic md url: TqAuth login failed: {}", auth.last_error());
+        TqAuth     auth(cfg.tq_auth);
+        const auto auth_result = auth.login_result();
+        if (!auth_result) {
+            SPDLOG_WARN("[gw] dynamic md url: TqAuth login failed: {} ({})",
+                        auth_result.error().detail,
+                        auth::auth_error_name(auth_result.error().code));
         } else {
             DynamicEndpointResolver resolver(auth);
             if (auto endpoint = resolver.md()) {
@@ -142,14 +145,19 @@ int main(int argc, char** argv) {
 
     // Tq 交易网关 URL 目前只做解析/诊断，CTP TD 仍使用 ctp.td_front。
     if (cfg.td.auto_url && cfg.tq_auth.enabled) {
-        TqAuth auth(cfg.tq_auth);
-        if (auth.login()) {
+        TqAuth     auth(cfg.tq_auth);
+        const auto auth_result = auth.login_result();
+        if (auth_result) {
             DynamicEndpointResolver resolver(auth);
             if (auto url = resolver.td(cfg.ctp.broker_id, cfg.ctp.user_id)) {
                 SPDLOG_INFO("[gw] dynamic td url resolved (ctp front unchanged): {}", *url);
             } else {
                 SPDLOG_WARN("[gw] dynamic td url unavailable: {}", auth.last_error());
             }
+        } else {
+            SPDLOG_WARN("[gw] dynamic td url: TqAuth login failed: {} ({})",
+                        auth_result.error().detail,
+                        auth::auth_error_name(auth_result.error().code));
         }
     }
 

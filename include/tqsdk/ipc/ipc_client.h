@@ -4,6 +4,7 @@
 
 #include "tqsdk/gateway/market_data_gateway.h"
 #include "tqsdk/gateway/trading_gateway.h"
+#include "tqsdk/ipc/ipc_error.h"
 #include "tqsdk/ipc/ipc_session.h"
 #include "tqsdk/ipc/protocol.h"
 #include "tqsdk/ipc/stream_seq.h"
@@ -76,7 +77,8 @@ public:
     IpcClient& operator=(const IpcClient&) = delete;
 
     /// 可重连模式的首连：factory 建连并握手。成功返回后调用 start()。
-    asio::awaitable<void> connect();
+    /// 建连/握手错误通过 IpcFailure 返回，不抛异常。
+    asio::awaitable<IpcResult<void>> connect() noexcept;
 
     /// 启动分发读循环（幂等，只启动一次）。须在设置 md/td 处理器之后调用。
     /// 可重连模式会额外启动连接监督循环。

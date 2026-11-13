@@ -12,7 +12,7 @@
 |---|---|---|
 | `util/http_*` | `util::HttpError` / `HttpErrorCode` | URL、DNS、连接、TLS、HTTP 状态、读写 |
 | `config` | `config::ConfigError` / `ConfigErrorCode` | TOML 文件、语法、字段校验 |
-| `ipc` | `ipc::IpcError`（待迁移为 expected） | 帧、握手、会话、重连 |
+| `ipc` | `ipc::IpcFailure` / `IpcErrorCode` | 建连/握手边界；帧内部仍使用 IpcError 适配 |
 | `gateway` | `gateway::GatewayError` / `GatewayErrorCode` | TqApi 建连/握手、网关构造边界 |
 | `data` | `data::DataError`（待添加） | 缓存、持久化、反序列化、数据一致性 |
 | `serve` | `serve::ServeError`（待添加） | 参数提取、路由、HTTP 映射 |
@@ -117,6 +117,8 @@ C ABI（`backtest_c_api.cpp`）例外：异常绝不允许跨 C ABI，必须在�
   `try_parse_*` → `ConfigResult<T>`；
 - `gw_main/node_main` 不再用异常捕获配置错误，改为 expected 分支；
 - 新增 `try_make_tqapi()`，把 gateway 初始化异常隔离为 `GatewayError`；
+- `IpcClient::connect()` 返回 `expected<void, IpcFailure>`；
+- `TqAuth::login_result()` 返回 `expected<void, AuthError>`；
 - `node` 主账户和附加账户均使用 expected 边界；
 - HTTP 调用方（holiday/catalog/continuous/auth）已在本层处理错误；
 - 新增 `util::panic` 及 HTTP/config 独立错误类型；

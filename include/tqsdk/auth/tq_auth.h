@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tqsdk/auth/auth_error.h"
 #include "tqsdk/constants.h"
 #include "tqsdk/pch.h"
 
@@ -52,6 +53,9 @@ public:
 
     /// 使用账号密码登录；失败返回 false，并通过 last_error() 提供原因。
     bool login();
+
+    /// 登录的 expected 边界；不抛异常，错误码/详情由 AuthError 给出。
+    auth::AuthResult<void> login_result() noexcept;
 
     /// 使用 refresh_token 刷新；失败返回 false。
     bool refresh();

@@ -23,15 +23,29 @@ IpcClient::~IpcClient() {
     stop();
 }
 
-asio::awaitable<void> IpcClient::connect() {
+asio::awaitable<IpcResult<void>> IpcClient::connect() noexcept {
     if (session_) {
-        co_return;
+        co_return IpcResult<void>{};
     }
     if (!factory_) {
-        throw IpcError("IpcClient::connect: no session factory");
+        co_return std::unexpected(
+            IpcFailure{IpcErrorCode::no_factory, "IpcClient::connect: no session factory"});
     }
-    session_  = co_await factory_();
-    encoding_ = session_ ? session_->encoding() : kDefaultEncoding;
+    try {
+        session_  = co_await factory_();
+        encoding_ = session_ ? session_->encoding() : kDefaultEncoding;
+        co_return IpcResult<void>{};
+    } catch (const std::exception& e) {
+        co_return std::unexpected(IpcFailure{
+            IpcErrorCode::connect,
+            fmt::format("IpcClient::connect failed: {}", e.what()),
+        });
+    } catch (...) {
+        co_return std::unexpected(IpcFailure{
+            IpcErrorCode::connect,
+            "IpcClient::connect failed: unknown error",
+        });
+    }
 }
 
 void IpcClient::start() {

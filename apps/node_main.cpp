@@ -103,10 +103,12 @@ int main(int argc, char** argv) {
     auto             rt      = std::make_shared<NodeRuntime>();
 
     if (cfg.tq_auth.enabled) {
-        rt->auth = std::make_shared<TqAuth>(cfg.tq_auth);
-        if (!rt->auth->login()) {
-            SPDLOG_WARN("[node] TqAuth login failed: {}; catalog will request without token",
-                        rt->auth->last_error());
+        rt->auth               = std::make_shared<TqAuth>(cfg.tq_auth);
+        const auto auth_result = rt->auth->login_result();
+        if (!auth_result) {
+            SPDLOG_WARN("[node] TqAuth login failed: {} ({}); catalog will request without token",
+                        auth_result.error().detail,
+                        auth::auth_error_name(auth_result.error().code));
         } else {
             SPDLOG_INFO(
                 "[node] TqAuth logged in as {} (catalog/latest downloads will use Bearer token)",

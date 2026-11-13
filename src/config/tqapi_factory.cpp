@@ -265,6 +265,13 @@ TqApiConfig parse_tqapi_config(std::string_view toml_text) {
 }
 
 config::ConfigResult<TqApiConfig> load_tqapi_config(const std::string& path) noexcept {
+    std::error_code fs_ec;
+    if (!std::filesystem::exists(path, fs_ec)) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::file_io,
+            fmt::format("config file not found: {}", path),
+        });
+    }
     try {
         auto root = toml::parse_file(path);
         return build_from_toml(root);
@@ -348,8 +355,13 @@ asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context&           c
             co_return session;
         };
 
-        client = std::make_shared<ipc::IpcClient>(session_factory, ex);
-        co_await client->connect(); // 首连失败直接抛错（保持启动 fail-fast）
+        client              = std::make_shared<ipc::IpcClient>(session_factory, ex);
+        auto connect_result = co_await client->connect();
+        if (!connect_result) {
+            throw std::runtime_error(fmt::format("{} ({})",
+                                                 connect_result.error().detail,
+                                                 ipc::ipc_error_name(connect_result.error().code)));
+        }
     }
 
     // ---- 造行情网关 ----
@@ -710,6 +722,13 @@ NodeConfig parse_node_config(std::string_view toml_text) {
 }
 
 config::ConfigResult<GwConfig> load_gw_config(const std::string& path) noexcept {
+    std::error_code fs_ec;
+    if (!std::filesystem::exists(path, fs_ec)) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::file_io,
+            fmt::format("config file not found: {}", path),
+        });
+    }
     try {
         auto root = toml::parse_file(path);
         return build_gw_from_toml(root);
@@ -748,6 +767,13 @@ config::ConfigResult<GwConfig> try_parse_gw_config(std::string_view toml_text) n
 }
 
 config::ConfigResult<NodeConfig> load_node_config(const std::string& path) noexcept {
+    std::error_code fs_ec;
+    if (!std::filesystem::exists(path, fs_ec)) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::file_io,
+            fmt::format("config file not found: {}", path),
+        });
+    }
     try {
         auto root = toml::parse_file(path);
         return build_node_from_toml(root);

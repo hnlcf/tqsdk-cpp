@@ -752,7 +752,11 @@ TEST(IpcClientTest, ReconnectsAndResumes) {
     client.set_resume_ack_handler([&](const ResumeAckBody&) { ++resume_ack; });
 
     test::run_coro(io, [&]() -> asio::awaitable<void> {
-        co_await client.connect();
+        auto connect_result = co_await client.connect();
+        if (!connect_result) {
+            ADD_FAILURE() << connect_result.error().detail;
+            co_return;
+        }
         client.start();
 
         auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);

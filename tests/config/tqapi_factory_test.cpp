@@ -496,6 +496,6 @@ TEST(ConfigErrors, TryParseReturnsConfigError) {
 TEST(ConfigErrors, LoadMissingFileReturnsError) {
     const auto result = load_node_config("/tmp/tqsdk-missing-config-for-test.toml");
     ASSERT_FALSE(result);
-    EXPECT_EQ(result.error().code, config::ConfigErrorCode::parse);
+    EXPECT_EQ(result.error().code, config::ConfigErrorCode::file_io);
     EXPECT_FALSE(result.error().detail.empty());
 }

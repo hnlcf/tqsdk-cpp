@@ -238,6 +238,28 @@ bool TqAuth::post_token(std::string_view body) {
     return apply_token_response(*response_result, "TqAuth token request failed");
 }
 
+auth::AuthResult<void> TqAuth::login_result() noexcept {
+    try {
+        if (login()) {
+            return {};
+        }
+        return std::unexpected(auth::AuthError{
+            auth::AuthErrorCode::unknown,
+            last_error(),
+        });
+    } catch (const std::exception& e) {
+        return std::unexpected(auth::AuthError{
+            auth::AuthErrorCode::transport,
+            fmt::format("login exception: {}", e.what()),
+        });
+    } catch (...) {
+        return std::unexpected(auth::AuthError{
+            auth::AuthErrorCode::unknown,
+            "login exception: unknown error",
+        });
+    }
+}
+
 bool TqAuth::login() {
     if (!cfg_.enabled) {
         std::lock_guard lock(mutex_);
