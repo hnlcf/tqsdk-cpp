@@ -4,7 +4,7 @@
 
 - Linux（当前主要验证平台）；
 - CMake ≥ 3.20；
-- C++20 编译器（Clang 当前验证）；
+- C++23 编译器（`CMAKE_CXX_STANDARD 23`；Clang 23 当前验证）；
 - Boost.Asio/Beast、OpenSSL、spdlog、nlohmann_json、magic_enum、
   tomlplusplus、CLI11、SQLiteCpp；
 - SolidJS + pnpm + Node.js LTS（Web 前端）；

@@ -1,6 +1,6 @@
 # TqSdk C++
 
-C++20 期货数据与交易基础设施，目标是把 TqSdk 的“异步数据流 + 可替换网关”
+C++23 期货数据与交易基础设施，目标是把 TqSdk 的“异步数据流 + 可替换网关”
 思想落到可部署的 C++ 工程中。当前支持：
 
 - Tq 行情、CTP 真实交易、Sim 本地撮合；
@@ -34,6 +34,8 @@ cmake --preset ui-dev
 cmake --build --preset ui-dev
 ctest --test-dir build-ui --output-on-failure
 ```
+
+C++23 由 `CMAKE_CXX_STANDARD 23` + `CMAKE_CXX_EXTENSIONS OFF` 固定；需要支持 C++23 的编译器（当前验证 Clang 23）。
 
 CTP 需要把 SDK 放在 `third_party/ctp/`。默认 `ui-dev` preset 会按项目当前配置
 启用核心测试；CTP 构建细节见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。

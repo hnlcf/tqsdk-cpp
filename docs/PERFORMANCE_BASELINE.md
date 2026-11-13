@@ -8,7 +8,7 @@
 ```text
 Linux fedora 7.2.11 x86_64
 Python 3.14.8 / Node v26.13.0 / pnpm
-clang++ C++20
+clang++ C++20（历史基线；当前构建标准已升级为 C++23）
 构建：build-ui（RelWithDebInfo，未开 sanitizer）
 ```
 
