@@ -36,8 +36,8 @@ TEST(WsFuzz, RandomClientTextNeverCrashes) {
 
 TEST(WsFuzz, DeeplyNestedInputIsRejectedWithoutCrash) {
     std::string text(128, '[');
-    EXPECT_THROW(parse_ws_client_message(text), std::exception);
-    EXPECT_THROW(parse_ws_server_message(text), std::exception);
+    EXPECT_FALSE(parse_ws_client_message(text));
+    EXPECT_FALSE(parse_ws_server_message(text));
 }
 
 } // namespace

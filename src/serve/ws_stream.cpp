@@ -186,13 +186,12 @@ struct WebSocketHub::Client : std::enable_shared_from_this<WebSocketHub::Client>
     }
 
     asio::awaitable<void> handle_message(std::string text) {
-        WsClientMessage message;
-        try {
-            message = parse_ws_client_message(text);
-        } catch (const std::exception& e) {
-            send(WsError{e.what()});
+        auto parsed = parse_ws_client_message(text);
+        if (!parsed) {
+            send(WsError{parsed.error().detail});
             co_return;
         }
+        WsClientMessage message = std::move(*parsed);
 
         // 编译期分派到各自的 handler；不会漏掉新加的 variant 成员。
         co_await std::visit([this](const auto& msg) { return handle(msg); }, message);

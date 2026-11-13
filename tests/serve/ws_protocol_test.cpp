@@ -18,7 +18,8 @@ TEST(WsProtocol, ParseSubscribeMessage) {
         "symbols":["SHFE.rb2610","DCE.i2601"],
         "klines":[{"symbol":"SHFE.rb2610","duration_ns":60000000000,"view_width":50}],
         "topics":["account","orders"]
-    })");
+    })")
+                   .value();
 
     ASSERT_TRUE(std::holds_alternative<WsSubscribe>(msg));
     const auto& sub = as_subscribe(msg);
@@ -33,13 +34,13 @@ TEST(WsProtocol, ParseSubscribeMessage) {
 
 TEST(WsProtocol, ParseUnsubscribeFromStdString) {
     const std::string text = R"({"op":"unsubscribe","symbols":["SHFE.rb2610"],"klines":[]})";
-    auto              msg  = parse_ws_client_message(text);
+    auto              msg  = parse_ws_client_message(text).value();
     ASSERT_TRUE(std::holds_alternative<WsUnsubscribe>(msg));
     EXPECT_EQ(std::get<WsUnsubscribe>(msg).symbols[0], "SHFE.rb2610");
 }
 
 TEST(WsProtocol, ParsePing) {
-    auto msg = parse_ws_client_message(R"({"op":"ping"})");
+    auto msg = parse_ws_client_message(R"({"op":"ping"})").value();
     EXPECT_TRUE(std::holds_alternative<WsPing>(msg));
 }
 
@@ -52,7 +53,8 @@ TEST(WsProtocol, InvalidKlineEntriesAreDropped) {
             {"symbol":"SHFE.rb2610","duration_ns":0},
             {"symbol":"SHFE.rb2610","duration_ns":100,"view_width":0}
         ]
-    })");
+    })")
+                   .value();
 
     const auto& sub = as_subscribe(msg);
     ASSERT_EQ(sub.symbols.size(), 1u);
@@ -62,11 +64,11 @@ TEST(WsProtocol, InvalidKlineEntriesAreDropped) {
 }
 
 TEST(WsProtocol, RejectBadClientMessages) {
-    EXPECT_THROW(parse_ws_client_message("not json"), WsProtocolError);
-    EXPECT_THROW(parse_ws_client_message(R"({"symbols":[]})"), WsProtocolError);
-    EXPECT_THROW(parse_ws_client_message(R"({"op":"bogus"})"), WsProtocolError);
-    EXPECT_THROW(parse_ws_client_message("[]"), WsProtocolError);
-    EXPECT_THROW(parse_ws_client_message(R"({"op":"subscribe","symbols":123})"), WsProtocolError);
+    EXPECT_FALSE(parse_ws_client_message("not json"));
+    EXPECT_FALSE(parse_ws_client_message(R"({"symbols":[]})"));
+    EXPECT_FALSE(parse_ws_client_message(R"({"op":"bogus"})"));
+    EXPECT_FALSE(parse_ws_client_message("[]"));
+    EXPECT_FALSE(parse_ws_client_message(R"({"op":"subscribe","symbols":123})"));
 }
 
 TEST(WsProtocol, ClientMessageRoundtrip) {
@@ -76,7 +78,7 @@ TEST(WsProtocol, ClientMessageRoundtrip) {
     sub.topics  = {"account"};
 
     const std::string text = serialize_ws_message(WsClientMessage{std::move(sub)});
-    auto              msg  = parse_ws_client_message(text);
+    auto              msg  = parse_ws_client_message(text).value();
 
     ASSERT_TRUE(std::holds_alternative<WsSubscribe>(msg));
     const auto& out = std::get<WsSubscribe>(msg);
@@ -104,7 +106,7 @@ TEST(WsProtocol, ServerDiffRoundtrip) {
     diff.data         = Json{{"quotes", {{"SHFE.rb2610", {{"last_price", 3800.0}}}}}};
 
     const std::string text = serialize_ws_message(WsServerMessage{std::move(diff)});
-    auto              msg  = parse_ws_server_message(text);
+    auto              msg  = parse_ws_server_message(text).value();
 
     ASSERT_TRUE(std::holds_alternative<WsDiff>(msg));
     const auto& out = std::get<WsDiff>(msg);
@@ -114,36 +116,40 @@ TEST(WsProtocol, ServerDiffRoundtrip) {
 }
 
 TEST(WsProtocol, ServerErrorAndPongRoundtrip) {
-    auto err_msg = parse_ws_server_message(serialize_ws_message(WsServerMessage{WsError{"boom"}}));
+    auto err_msg =
+        parse_ws_server_message(serialize_ws_message(WsServerMessage{WsError{"boom"}})).value();
     ASSERT_TRUE(std::holds_alternative<WsError>(err_msg));
     EXPECT_EQ(std::get<WsError>(err_msg).error, "boom");
 
-    auto pong = parse_ws_server_message(serialize_ws_message(WsServerMessage{WsPong{}}));
+    auto pong = parse_ws_server_message(serialize_ws_message(WsServerMessage{WsPong{}})).value();
     EXPECT_TRUE(std::holds_alternative<WsPong>(pong));
 }
 
 TEST(WsProtocol, RejectBadServerMessages) {
-    EXPECT_THROW(parse_ws_server_message("not json"), WsProtocolError);
-    EXPECT_THROW(parse_ws_server_message(R"({"type":"bogus"})"), WsProtocolError);
-    EXPECT_THROW(parse_ws_server_message(R"({})"), WsProtocolError);
-    EXPECT_THROW(parse_ws_server_message(R"({"type":"diff","seq":"x"})"), WsProtocolError);
+    EXPECT_FALSE(parse_ws_server_message("not json"));
+    EXPECT_FALSE(parse_ws_server_message(R"({"type":"bogus"})"));
+    EXPECT_FALSE(parse_ws_server_message(R"({})"));
+    EXPECT_FALSE(parse_ws_server_message(R"({"type":"diff","seq":"x"})"));
 }
 
 TEST(WsProtocol, NumericDiscriminatorIsProtocolError) {
-    EXPECT_THROW(parse_ws_client_message(R"({"op":1})"), WsProtocolError);
-    EXPECT_THROW(parse_ws_client_message(R"({"op":true})"), WsProtocolError);
-    EXPECT_THROW(parse_ws_server_message(R"({"type":1})"), WsProtocolError);
-    EXPECT_THROW(parse_ws_server_message(R"({"type":true})"), WsProtocolError);
+    EXPECT_FALSE(parse_ws_client_message(R"({"op":1})"));
+    EXPECT_FALSE(parse_ws_client_message(R"({"op":true})"));
+    EXPECT_FALSE(parse_ws_server_message(R"({"type":1})"));
+    EXPECT_FALSE(parse_ws_server_message(R"({"type":true})"));
 }
 
 TEST(WsProtocol, TopicsPresenceIsDistinctFromEmptyTopics) {
     const auto no_topics =
-        parse_ws_client_message(R"({"op":"subscribe","symbols":["SHFE.rb2610"],"klines":[]})");
+        parse_ws_client_message(R"({"op":"subscribe","symbols":["SHFE.rb2610"],"klines":[]})")
+            .value();
     ASSERT_TRUE(std::holds_alternative<WsSubscribe>(no_topics));
     EXPECT_FALSE(as_subscribe(no_topics).topics_provided);
 
-    const auto empty_topics = parse_ws_client_message(
-        R"({"op":"subscribe","symbols":["SHFE.rb2610"],"klines":[],"topics":[]})");
+    const auto empty_topics =
+        parse_ws_client_message(
+            R"({"op":"subscribe","symbols":["SHFE.rb2610"],"klines":[],"topics":[]})")
+            .value();
     ASSERT_TRUE(std::holds_alternative<WsSubscribe>(empty_topics));
     EXPECT_TRUE(as_subscribe(empty_topics).topics_provided);
 }
