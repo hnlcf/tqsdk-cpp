@@ -25,7 +25,7 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build clang libssl-dev curl zip unzip tar
+          sudo apt-get install -y cmake ninja-build clang g++-14 libstdc++-14-dev libssl-dev curl zip unzip tar
 
       - name: Checkout and bootstrap vcpkg
         run: |
@@ -49,6 +49,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_MANIFEST_DIR="$VCPKG_MANIFEST_DIR" \
             -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_CXX_FLAGS="--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/14" \
             -DTQSDK_BUILD_TESTS=ON \
             -DTQSDK_ENABLE_CTP=OFF \
             -DTQSDK_BUILD_APPS=ON \

@@ -30,7 +30,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake ninja-build clang libssl-dev curl zip unzip tar \
+            cmake ninja-build clang g++-14 libstdc++-14-dev libssl-dev curl zip unzip tar \
             rpm binutils gzip
 
       - uses: astral-sh/setup-uv@v6
@@ -71,6 +71,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_MANIFEST_DIR="$VCPKG_MANIFEST_DIR" \
             -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_CXX_FLAGS="--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/14" \
             -DTQSDK_BUILD_TESTS=OFF \
             -DTQSDK_ENABLE_CTP=ON \
             -DTQSDK_BUILD_APPS=ON \

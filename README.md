@@ -35,7 +35,7 @@ cmake --build --preset ui-dev
 ctest --test-dir build-ui --output-on-failure
 ```
 
-C++23 由 `CMAKE_CXX_STANDARD 23` + `CMAKE_CXX_EXTENSIONS OFF` 固定；需要支持 C++23 的编译器（当前验证 Clang 23）。
+C++23 由 `CMAKE_CXX_STANDARD 23` + `CMAKE_CXX_EXTENSIONS OFF` 固定；需要支持 C++23 的编译器与标准库（`std::expected`；Ubuntu 24.04 使用 `g++-14/libstdc++-14-dev`，当前验证 Clang 23）。
 
 CTP 需要把 SDK 放在 `third_party/ctp/`。默认 `ui-dev` preset 会按项目当前配置
 启用核心测试；CTP 构建细节见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。
