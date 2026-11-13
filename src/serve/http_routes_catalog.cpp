@@ -18,9 +18,10 @@ asio::awaitable<Response> HttpServer::RouteHandlers::catalog_status() {
     co_return Response{http::status::ok, catalog_->status_json(), {}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::catalog_instruments(Query<CatalogQuery> query) {
+asio::awaitable<ServeResult<json>>
+HttpServer::RouteHandlers::catalog_instruments(Query<CatalogQuery> query) {
     if (catalog_ == nullptr) {
-        throw HttpError{http::status::service_unavailable, catalog_not_ready()};
+        co_return make_serve_error(http::status::service_unavailable, catalog_not_ready());
     }
     InstrumentCatalog::ListFilter filter;
     filter.classes         = query.value.classes;
@@ -41,20 +42,22 @@ asio::awaitable<json> HttpServer::RouteHandlers::catalog_instruments(Query<Catal
                    {"catalog", catalog_->status_json()}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::catalog_instrument(std::string instrument_id) {
+asio::awaitable<ServeResult<json>>
+HttpServer::RouteHandlers::catalog_instrument(std::string instrument_id) {
     if (catalog_ == nullptr) {
-        throw HttpError{http::status::service_unavailable, catalog_not_ready()};
+        co_return make_serve_error(http::status::service_unavailable, catalog_not_ready());
     }
     auto item = catalog_->find(instrument_id);
     if (!item) {
-        throw HttpError{http::status::not_found, json{{"error", "instrument not found"}}};
+        co_return make_serve_error(http::status::not_found,
+                                   json{{"error", "instrument not found"}});
     }
     co_return InstrumentCatalog::to_json(*item);
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::option_products() {
+asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::option_products() {
     if (catalog_ == nullptr) {
-        throw HttpError{http::status::service_unavailable, catalog_not_ready()};
+        co_return make_serve_error(http::status::service_unavailable, catalog_not_ready());
     }
     const auto products = catalog_->option_products();
     json       out      = json::array();
@@ -70,13 +73,14 @@ asio::awaitable<json> HttpServer::RouteHandlers::option_products() {
     co_return json{{"products", std::move(out)}, {"catalog", catalog_->status_json()}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::option_chain(std::string underlying) {
+asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::option_chain(std::string underlying) {
     if (catalog_ == nullptr) {
-        throw HttpError{http::status::service_unavailable, catalog_not_ready()};
+        co_return make_serve_error(http::status::service_unavailable, catalog_not_ready());
     }
     const auto contracts = catalog_->option_contracts(underlying, 2000);
     if (contracts.empty()) {
-        throw HttpError{http::status::not_found, json{{"error", "option chain not found"}}};
+        co_return make_serve_error(http::status::not_found,
+                                   json{{"error", "option chain not found"}});
     }
     json calls = json::array();
     json puts  = json::array();
@@ -104,15 +108,16 @@ asio::awaitable<json> HttpServer::RouteHandlers::option_chain(std::string underl
     };
 }
 
-asio::awaitable<json>
+asio::awaitable<ServeResult<json>>
 HttpServer::RouteHandlers::option_analytics(std::string                 underlying,
                                             Query<OptionAnalyticsQuery> query) {
     if (catalog_ == nullptr) {
-        throw HttpError{http::status::service_unavailable, catalog_not_ready()};
+        co_return make_serve_error(http::status::service_unavailable, catalog_not_ready());
     }
     const auto contracts = catalog_->option_contracts(underlying, 5000);
     if (contracts.empty()) {
-        throw HttpError{http::status::not_found, json{{"error", "option chain not found"}}};
+        co_return make_serve_error(http::status::not_found,
+                                   json{{"error", "option chain not found"}});
     }
 
     auto   spot_opt = json_value::detail::parse_double(query.value.spot);
@@ -121,8 +126,9 @@ HttpServer::RouteHandlers::option_analytics(std::string                 underlyi
         spot = api_->get_quote(underlying).last_price;
     }
     if (!std::isfinite(spot) || spot <= 0) {
-        throw HttpError{http::status::bad_request,
-                        json{{"error", "spot is required or underlying quote unavailable"}}};
+        co_return make_serve_error(
+            http::status::bad_request,
+            json{{"error", "spot is required or underlying quote unavailable"}});
     }
     const double rate     = json_value::detail::parse_double(query.value.rate).value_or(0.0);
     const double dividend = json_value::detail::parse_double(query.value.dividend).value_or(0.0);
@@ -190,7 +196,7 @@ HttpServer::RouteHandlers::option_analytics(std::string                 underlyi
                    {"rows", std::move(out_rows)}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::kline_cache_status() {
+asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::kline_cache_status() {
     co_return api_->kline_cache_status();
 }
 

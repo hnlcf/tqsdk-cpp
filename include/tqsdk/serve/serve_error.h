@@ -53,4 +53,11 @@ constexpr std::string_view serve_error_name(ServeErrorCode code) noexcept {
 template <typename T>
 using ServeResult = std::expected<T, ServeError>;
 
+inline std::unexpected<ServeError>
+make_serve_error(boost::beast::http::status status,
+                 nlohmann::json             body,
+                 ServeErrorCode             code = ServeErrorCode::bad_request) noexcept {
+    return std::unexpected(ServeError{status, std::move(body), code});
+}
+
 } // namespace tqsdk::serve

@@ -12,19 +12,19 @@ namespace tqsdk {
 namespace serve {
 using namespace detail;
 
-asio::awaitable<json> HttpServer::RouteHandlers::tick_cache_status() {
+asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::tick_cache_status() {
     if (tick_store_ == nullptr) {
         co_return json{{"enabled", false}, {"ready", false}};
     }
     co_return tick_store_->status_json();
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::quote(std::string symbol) {
+asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::quote(std::string symbol) {
     Quote& quote = api_->get_quote(symbol);
     co_return quote_to_json(quote, catalog_);
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::quotes(Query<QuoteBatchQuery> query) {
+asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::quotes(Query<QuoteBatchQuery> query) {
     json out          = json::object();
     out["quotes"]     = json::object();
     std::size_t count = 0;
@@ -45,7 +45,8 @@ asio::awaitable<json> HttpServer::RouteHandlers::quotes(Query<QuoteBatchQuery> q
     co_return out;
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::ticks(std::string symbol, Query<TickQuery> query) {
+asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::ticks(std::string      symbol,
+                                                                    Query<TickQuery> query) {
     const std::size_t limit = query_size(query.value.limit, constants::kDefaultTickCapacity, 20000);
     json              ticks = json::array();
     if (query.value.source == "cache" && tick_store_ != nullptr) {
@@ -98,15 +99,15 @@ load_contract_daily(TqApi* api, std::string contract, std::int64_t duration_ns) 
 
 } // namespace
 
-asio::awaitable<json> HttpServer::RouteHandlers::kline(std::string       symbol,
-                                                       std::int64_t      duration_ns,
-                                                       Query<KlineQuery> query) {
+asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::kline(std::string       symbol,
+                                                                    std::int64_t      duration_ns,
+                                                                    Query<KlineQuery> query) {
     const int    width  = static_cast<int>(std::clamp<int64_t>(
         json_value::detail::parse_integer<int64_t>(query.value.width).value_or(200), 200, 5000));
     KlineStream* stream = api_->get_kline_serial(symbol, duration_ns, width);
     if (stream == nullptr) {
-        throw HttpError{http::status::service_unavailable,
-                        json{{"error", "kline stream unavailable"}}};
+        co_return make_serve_error(http::status::service_unavailable,
+                                   json{{"error", "kline stream unavailable"}});
     }
     // 首次订阅是异步的；给行情一个短暂窗口，避免首次 HTTP 请求返回空 bars。
     for (int attempt = 0; attempt < 30 && stream->bars.empty(); ++attempt) {
@@ -117,8 +118,8 @@ asio::awaitable<json> HttpServer::RouteHandlers::kline(std::string       symbol,
     bool       valid = false;
     const auto mode  = parse_adjust(query.value.adjust, valid);
     if (!valid) {
-        throw HttpError{http::status::bad_request,
-                        json{{"error", "adjust must be none, forward or back"}}};
+        co_return make_serve_error(http::status::bad_request,
+                                   json{{"error", "adjust must be none, forward or back"}});
     }
     if (mode == KlineAdjustMode::None || duration_ns != kOneDayNs || continuous_ == nullptr ||
         !continuous_->ready()) {

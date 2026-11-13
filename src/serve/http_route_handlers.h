@@ -22,42 +22,48 @@ struct HttpServer::RouteHandlers {
         return owner.account_scope(account_id);
     }
 
-    asio::awaitable<json>     healthz();
-    asio::awaitable<Response> readyz();
-    asio::awaitable<json>     metrics();
-    asio::awaitable<json>     accounts();
-    asio::awaitable<json>     holiday_status();
-    asio::awaitable<json>     trading_status(Query<AccountQuery> query);
-    asio::awaitable<Response> catalog_status();
-    asio::awaitable<json>     catalog_instruments(Query<CatalogQuery> query);
-    asio::awaitable<json>     catalog_instrument(std::string instrument_id);
-    asio::awaitable<json>     option_products();
-    asio::awaitable<json>     option_chain(std::string underlying);
-    asio::awaitable<json>     option_analytics(std::string                 underlying,
-                                               Query<OptionAnalyticsQuery> query);
-    asio::awaitable<json>     kline_cache_status();
-    asio::awaitable<json>     tick_cache_status();
-    asio::awaitable<json>     quote(std::string symbol);
-    asio::awaitable<json>     quotes(Query<QuoteBatchQuery> query);
-    asio::awaitable<json>     ticks(std::string symbol, Query<TickQuery> query);
-    asio::awaitable<json>     trading_snapshot(Query<AccountQuery> query);
-    asio::awaitable<json>
+    asio::awaitable<ServeResult<json>> healthz();
+    asio::awaitable<Response>          readyz();
+    asio::awaitable<ServeResult<json>> metrics();
+    asio::awaitable<ServeResult<json>> accounts();
+    asio::awaitable<ServeResult<json>> holiday_status();
+    asio::awaitable<ServeResult<json>> trading_status(Query<AccountQuery> query);
+    asio::awaitable<Response>          catalog_status();
+    asio::awaitable<ServeResult<json>> catalog_instruments(Query<CatalogQuery> query);
+    asio::awaitable<ServeResult<json>> catalog_instrument(std::string instrument_id);
+    asio::awaitable<ServeResult<json>> option_products();
+    asio::awaitable<ServeResult<json>> option_chain(std::string underlying);
+    asio::awaitable<ServeResult<json>> option_analytics(std::string                 underlying,
+                                                        Query<OptionAnalyticsQuery> query);
+    asio::awaitable<ServeResult<json>> kline_cache_status();
+    asio::awaitable<ServeResult<json>> tick_cache_status();
+    asio::awaitable<ServeResult<json>> quote(std::string symbol);
+    asio::awaitable<ServeResult<json>> quotes(Query<QuoteBatchQuery> query);
+    asio::awaitable<ServeResult<json>> ticks(std::string symbol, Query<TickQuery> query);
+    asio::awaitable<ServeResult<json>> trading_snapshot(Query<AccountQuery> query);
+    asio::awaitable<ServeResult<json>>
     kline(std::string symbol, std::int64_t duration_ns, Query<KlineQuery> query);
-    asio::awaitable<json> account(Query<AccountQuery> query);
-    asio::awaitable<json> orders(Query<AccountQuery> query);
-    asio::awaitable<json> trades(Query<AccountQuery> query);
-    asio::awaitable<json> positions(Query<AccountQuery> query);
-    asio::awaitable<json> insert_order(Query<AccountQuery> query, InsertOrderReq request);
-    asio::awaitable<json> cancel_order(std::string order_id, Query<AccountQuery> query);
-    asio::awaitable<json> target_create(Query<AccountQuery> query, TargetTaskRequest request);
-    asio::awaitable<json> target_delete(std::string task_id, Query<AccountQuery> query);
-    asio::awaitable<json> order_task_create(Query<AccountQuery> query, OrderTaskRequest request);
-    asio::awaitable<json> order_task_delete(std::string task_id, Query<AccountQuery> query);
-    asio::awaitable<json> tasks(Query<AccountQuery> query);
-    asio::awaitable<json> risk_status(Query<AccountQuery> query);
-    asio::awaitable<json> risk_clear(Query<AccountQuery> query);
-    asio::awaitable<json> risk_add(Query<AccountQuery> query, RiskRuleRequest request);
-    asio::awaitable<Response> websocket_upgrade();
+    asio::awaitable<ServeResult<json>> account(Query<AccountQuery> query);
+    asio::awaitable<ServeResult<json>> orders(Query<AccountQuery> query);
+    asio::awaitable<ServeResult<json>> trades(Query<AccountQuery> query);
+    asio::awaitable<ServeResult<json>> positions(Query<AccountQuery> query);
+    asio::awaitable<ServeResult<json>> insert_order(Query<AccountQuery> query,
+                                                    InsertOrderReq      request);
+    asio::awaitable<ServeResult<json>> cancel_order(std::string         order_id,
+                                                    Query<AccountQuery> query);
+    asio::awaitable<ServeResult<json>> target_create(Query<AccountQuery> query,
+                                                     TargetTaskRequest   request);
+    asio::awaitable<ServeResult<json>> target_delete(std::string         task_id,
+                                                     Query<AccountQuery> query);
+    asio::awaitable<ServeResult<json>> order_task_create(Query<AccountQuery> query,
+                                                         OrderTaskRequest    request);
+    asio::awaitable<ServeResult<json>> order_task_delete(std::string         task_id,
+                                                         Query<AccountQuery> query);
+    asio::awaitable<ServeResult<json>> tasks(Query<AccountQuery> query);
+    asio::awaitable<ServeResult<json>> risk_status(Query<AccountQuery> query);
+    asio::awaitable<ServeResult<json>> risk_clear(Query<AccountQuery> query);
+    asio::awaitable<ServeResult<json>> risk_add(Query<AccountQuery> query, RiskRuleRequest request);
+    asio::awaitable<Response>          websocket_upgrade();
 
     HttpServer&           owner;
     TqApi*&               api_;

@@ -66,6 +66,11 @@ struct Response {
 using HttpError = ServeError;
 
 /// 查询字符串提取器：形参写 Query<MyStruct> 即可把 ?a=1&b=x 映射成结构体。
+template <typename>
+inline constexpr bool is_expected_v = false;
+template <typename T, typename E>
+inline constexpr bool is_expected_v<std::expected<T, E>> = true;
+
 template <typename T>
 struct Query {
     using value_type = T;
@@ -300,7 +305,16 @@ call_extracted(F& f, RouteContext& ctx, std::tuple<A...>*, std::index_sequence<I
     // 文中使用 co_await，部分编译器不允许）。
     using Ret = decltype(std::apply(std::declval<F&>(), std::move(args)));
     using R   = typename Ret::value_type;
-    if constexpr (std::is_void_v<R>) {
+    if constexpr (is_expected_v<R>) {
+        auto result = co_await std::apply(f, std::move(args));
+        if (!result) {
+            Response out;
+            out.status = result.error().status;
+            out.body   = result.error().body;
+            co_return out;
+        }
+        co_return to_response(*std::move(result));
+    } else if constexpr (std::is_void_v<R>) {
         co_await std::apply(f, std::move(args));
         co_return to_response();
     } else {

@@ -17,7 +17,7 @@ namespace serve {
 /// 每个路由 handler 一个方法；setup_routes() 只保留路由表。
 /// RouteHandlers 通过 owner 访问 HttpServer 状态；handler 参数仍是显式传参。
 
-asio::awaitable<json> HttpServer::RouteHandlers::healthz() {
+asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::healthz() {
     co_return json{{"ok", true},
                    {"package", tqsdk::kPackageName},
                    {"version", tqsdk::kVersion},
@@ -33,11 +33,11 @@ asio::awaitable<Response> HttpServer::RouteHandlers::readyz() {
     co_return response;
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::metrics() {
+asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::metrics() {
     co_return api_->metrics_json();
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::accounts() {
+asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::accounts() {
     if (accounts_ == nullptr) {
         co_return json{
             {"default", "default"},
@@ -56,11 +56,12 @@ asio::awaitable<json> HttpServer::RouteHandlers::accounts() {
     co_return json{{"default", accounts_->default_account_id()}, {"accounts", std::move(out)}};
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::holiday_status() {
+asio::awaitable<ServeResult<json>> HttpServer::RouteHandlers::holiday_status() {
     co_return HolidayCalendar::global().status_json();
 }
 
-asio::awaitable<json> HttpServer::RouteHandlers::trading_status(Query<AccountQuery> query) {
+asio::awaitable<ServeResult<json>>
+HttpServer::RouteHandlers::trading_status(Query<AccountQuery> query) {
     TqApi* selected = account_api(query.value.account);
     co_return TradingStatus::from_phase(selected->session_phase()).to_json();
 }
