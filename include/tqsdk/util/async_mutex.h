@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tqsdk/pch.h"
+#include "tqsdk/util/panic.h"
 
 namespace tqsdk {
 
