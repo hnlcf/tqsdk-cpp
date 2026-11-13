@@ -155,14 +155,15 @@ int main(int argc, char** argv) {
     // 每连接 strand 上并行，进入路由 handler 前切回 core_ex。
     auto bootstrap = [&io, io_ex, core_ex, rt, &cfg]() -> asio::awaitable<void> {
         std::shared_ptr<TqApi> primary;
-        try {
-            primary = std::shared_ptr<TqApi>(
-                co_await make_tqapi(io, cfg.upstream, core_ex, rt->kline_store));
-        } catch (const std::exception& e) {
-            SPDLOG_CRITICAL("[node] failed to connect/init upstream gw: {}", e.what());
+        auto primary_result = co_await try_make_tqapi(io, cfg.upstream, core_ex, rt->kline_store);
+        if (!primary_result) {
+            SPDLOG_CRITICAL("[node] failed to connect/init upstream gw: {} ({})",
+                            primary_result.error().detail,
+                            gateway::gateway_error_name(primary_result.error().code));
             io.stop();
             co_return;
         }
+        primary                      = std::shared_ptr<TqApi>(std::move(*primary_result));
         rt->api                      = primary;
         rt->accounts                 = std::make_shared<MultiAccountManager>();
         const std::string primary_id = cfg.account_id.empty() ? "default" : cfg.account_id;
@@ -201,20 +202,23 @@ int main(int argc, char** argv) {
             account_cfg.md.tcp_port    = account.gw_port;
             account_cfg.td.tcp_host    = account.gw_host;
             account_cfg.td.tcp_port    = account.gw_port;
-            try {
-                auto extra =
-                    std::shared_ptr<TqApi>(co_await make_tqapi(io, account_cfg, core_ex, nullptr));
-                rt->accounts->add_account(account.id, extra);
-                for (const auto& sym : cfg.symbols) {
-                    extra->get_quote(sym);
-                }
-                SPDLOG_INFO("[node] account {} connected to gw {}:{}",
-                            account.id,
-                            account.gw_host,
-                            account.gw_port);
-            } catch (const std::exception& e) {
-                SPDLOG_ERROR("[node] account {} failed to connect: {}", account.id, e.what());
+            auto extra_result          = co_await try_make_tqapi(io, account_cfg, core_ex, nullptr);
+            if (!extra_result) {
+                SPDLOG_ERROR("[node] account {} failed to connect: {} ({})",
+                             account.id,
+                             extra_result.error().detail,
+                             gateway::gateway_error_name(extra_result.error().code));
+                continue;
             }
+            auto extra = std::shared_ptr<TqApi>(std::move(*extra_result));
+            rt->accounts->add_account(account.id, extra);
+            for (const auto& sym : cfg.symbols) {
+                extra->get_quote(sym);
+            }
+            SPDLOG_INFO("[node] account {} connected to gw {}:{}",
+                        account.id,
+                        account.gw_host,
+                        account.gw_port);
         }
 
         serve::WsOptions ws_opts;

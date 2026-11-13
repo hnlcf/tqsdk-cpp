@@ -13,7 +13,7 @@
 | `util/http_*` | `util::HttpError` / `HttpErrorCode` | URL、DNS、连接、TLS、HTTP 状态、读写 |
 | `config` | `config::ConfigError` / `ConfigErrorCode` | TOML 文件、语法、字段校验 |
 | `ipc` | `ipc::IpcError`（待迁移为 expected） | 帧、握手、会话、重连 |
-| `gateway` | `gateway::GatewayError`（待添加） | TQ/Sim/CTP 网关连接、登录、报单拒绝 |
+| `gateway` | `gateway::GatewayError` / `GatewayErrorCode` | TqApi 建连/握手、网关构造边界 |
 | `data` | `data::DataError`（待添加） | 缓存、持久化、反序列化、数据一致性 |
 | `serve` | `serve::ServeError`（待添加） | 参数提取、路由、HTTP 映射 |
 | `backtest` | `backtest::BacktestError`（待添加） | C ABI 参数、回测引擎输入 |
@@ -116,6 +116,8 @@ C ABI（`backtest_c_api.cpp`）例外：异常绝不允许跨 C ABI，必须在�
 - `config::load_gw_config/load_node_config/load_tqapi_config` 及
   `try_parse_*` → `ConfigResult<T>`；
 - `gw_main/node_main` 不再用异常捕获配置错误，改为 expected 分支；
+- 新增 `try_make_tqapi()`，把 gateway 初始化异常隔离为 `GatewayError`；
+- `node` 主账户和附加账户均使用 expected 边界；
 - HTTP 调用方（holiday/catalog/continuous/auth）已在本层处理错误；
 - 新增 `util::panic` 及 HTTP/config 独立错误类型；
 - 新增错误路径测试。
@@ -124,6 +126,6 @@ C ABI（`backtest_c_api.cpp`）例外：异常绝不允许跨 C ABI，必须在�
 
 - `ipc::IpcError` 从 `runtime_error` 改为帧/会话 expected；
 - `serve::HttpError` 从 throw 改为 handler `expected<Response, ServeError>`；
-- `gateway` 连接的异常在网关边界转换；
+- gateway 内部 TQ/CTP/Sim 异步操作继续向 GatewayError 细化；
 - `data` 的 SQLite/JSON 适配器统一 expected；
 - `backtest_c_api` 增加 C 错误码并清理所有 catch。

@@ -9,6 +9,7 @@
 #include "tqsdk/data/kline_store.h"
 #include "tqsdk/data/tick_store.h"
 #include "tqsdk/gateway/ctp/ctp_config.h"
+#include "tqsdk/gateway/gateway_error.h"
 #include "tqsdk/instrument/instrument_catalog.h"
 #include "tqsdk/ipc/protocol.h"
 #include "tqsdk/tqapi.h"
@@ -139,6 +140,13 @@ make_tqapi(asio::io_context&           ctx,
            const TqApiConfig&          cfg,
            asio::any_io_executor       core_ex     = {},
            std::shared_ptr<KlineStore> kline_store = nullptr);
+/// 与 make_tqapi 相同，但把建连/握手/配置异常隔离为本层 GatewayError。
+/// app 入口和 multi-account 边界应优先使用本函数。
+asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>
+try_make_tqapi(asio::io_context&           ctx,
+               const TqApiConfig&          cfg,
+               asio::any_io_executor       core_ex     = {},
+               std::shared_ptr<KlineStore> kline_store = nullptr) noexcept;
 
 // ============================================================================
 // 两进程（tqsdk-gw / tqsdk-node）的配置

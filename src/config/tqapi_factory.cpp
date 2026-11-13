@@ -423,6 +423,26 @@ asio::awaitable<std::unique_ptr<TqApi>> make_tqapi(asio::io_context&           c
     co_return api;
 }
 
+asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>
+try_make_tqapi(asio::io_context&           ctx,
+               const TqApiConfig&          cfg,
+               asio::any_io_executor       core_ex,
+               std::shared_ptr<KlineStore> kline_store) noexcept {
+    try {
+        co_return co_await make_tqapi(ctx, cfg, std::move(core_ex), std::move(kline_store));
+    } catch (const std::exception& e) {
+        co_return std::unexpected(gateway::GatewayError{
+            gateway::GatewayErrorCode::connect,
+            fmt::format("gateway initialization failed: {}", e.what()),
+        });
+    } catch (...) {
+        co_return std::unexpected(gateway::GatewayError{
+            gateway::GatewayErrorCode::unknown,
+            "gateway initialization failed: unknown error",
+        });
+    }
+}
+
 // ============================================================================
 // 两进程配置解析
 // ============================================================================
