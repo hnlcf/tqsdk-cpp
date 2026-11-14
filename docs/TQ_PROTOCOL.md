@@ -150,6 +150,8 @@ account_key = ""           # 默认等于 account_id
 
 - `TqTdGateway` 已实现 wss 连接、`req_login`、`confirm_settlement`、`peek_message`、
   `rtn_data`/`rtn_brokers` 处理、断线重连、Snapshot 恢复、1 手报单/撤单报文；
+- TQ OTG 端点要求客户端声明 `permessage-deflate`；网关握手显式写入该扩展并启用
+  Beast 压缩，否则服务端会以 HTTP 400 拒绝；
 - `TqMdGateway` 已改用 `tq::Message` 生成发送报文并用 `tq::parse` 解析服务端帧；
 - `TqProtocol` 单测覆盖全部 aid 和 `TqTdNormalization` 数据映射。
 

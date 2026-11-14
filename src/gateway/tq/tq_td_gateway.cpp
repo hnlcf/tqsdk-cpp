@@ -171,17 +171,24 @@ asio::awaitable<void> TqTdGateway::connect_once() {
     }
     ws_->next_layer().set_verify_callback(ssl::host_name_verification(parsed.host));
     ws_->set_option(beast::websocket::stream_base::timeout::suggested(beast::role_type::client));
+    beast::websocket::permessage_deflate compression;
+    compression.client_enable = true;
+    compression.server_enable = true;
+    ws_->set_option(compression);
     ws_->read_message_max(8u << 20);
-    if (!opts_.authorization.empty()) {
-        const auto authorization = opts_.authorization;
-        ws_->set_option(beast::websocket::stream_base::decorator(
-            [authorization](beast::websocket::request_type& req) {
-                req.set(http::field::user_agent,
-                        fmt::format("tqsdk-cpp {}", std::string(kClientAppId)));
+    const auto authorization = opts_.authorization;
+    ws_->set_option(beast::websocket::stream_base::decorator(
+        [authorization](beast::websocket::request_type& req) {
+            req.set(http::field::user_agent,
+                    fmt::format("tqsdk-cpp {}", std::string(kClientAppId)));
+            if (!authorization.empty()) {
                 req.set(http::field::authorization, authorization);
-                req.set(http::field::accept, "application/json");
-            }));
-    }
+            }
+            req.set(http::field::accept, "application/json");
+            // 该 OTG 端点要求客户端声明 permessage-deflate；仅设置
+            // Beast 的 permessage_deflate 选项不会自动写入握手头。
+            req.set("Sec-WebSocket-Extensions", "permessage-deflate; client_max_window_bits");
+        }));
 
     co_await ws_->next_layer().async_handshake(ssl::stream_base::client, use_awaitable);
     const auto host_header =
@@ -195,6 +202,9 @@ asio::awaitable<void> TqTdGateway::connect_once() {
             "[TqTd] handshake rejected: status={} body={}", response.result_int(), response.body());
         throw boost::system::system_error(handshake_ec);
     }
+    SPDLOG_DEBUG("[TqTd] handshake extensions={}",
+                 std::string(response[http::field::sec_websocket_extensions]));
+    SPDLOG_INFO("[TqTd] websocket connected: {}", parsed.host);
     connected_.store(true, std::memory_order_release);
 
     tq::LoginRequest login;
