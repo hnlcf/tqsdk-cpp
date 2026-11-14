@@ -46,10 +46,10 @@ using tcp = boost::asio::ip::tcp;
 
 // 依据配置构造真实网关；未知/不支持的种类返回 nullptr 并记警告。
 std::unique_ptr<MarketDataGateway>
-make_real_md(const TqApiConfig::Md& md, const CtpConfig& ctp, asio::any_io_executor ex) {
+make_real_md(const MdConfig& md, const CtpConfig& ctp, asio::any_io_executor ex) {
     switch (md.kind) {
     case MdKind::Tq:
-        return std::make_unique<TqMdGateway>(ex, md.host, md.port, md.path);
+        return std::make_unique<TqMdGateway>(ex, md.tq.host, md.tq.port, md.tq.path);
     case MdKind::Ctp:
 #ifdef TQSDK_ENABLE_CTP
         return std::make_unique<CtpMdGateway>(ex, ctp);
@@ -65,13 +65,13 @@ make_real_md(const TqApiConfig::Md& md, const CtpConfig& ctp, asio::any_io_execu
     return nullptr;
 }
 
-std::unique_ptr<TradingGateway> make_real_td(const TqApiConfig::Td& td,
-                                             const CtpConfig&       ctp,
-                                             const TqAuth::Config&  tq_auth,
-                                             asio::any_io_executor  ex) {
+std::unique_ptr<TradingGateway> make_real_td(const TdConfig&       td,
+                                             const CtpConfig&      ctp,
+                                             const TqAuth::Config& tq_auth,
+                                             asio::any_io_executor ex) {
     switch (td.kind) {
     case TdKind::Sim:
-        return std::make_unique<SimTdGateway>(ex, td.initial_balance);
+        return std::make_unique<SimTdGateway>(ex, td.sim.initial_balance);
     case TdKind::Ctp:
 #ifdef TQSDK_ENABLE_CTP
         return std::make_unique<CtpTdGateway>(ex, ctp);
@@ -151,7 +151,7 @@ int main(int argc, char** argv) {
                         config::config_error_name(cfg_result.error().code));
         return 1;
     }
-    GwConfig cfg = std::move(*cfg_result);
+    GatewayConfig cfg = std::move(*cfg_result);
 
     if (threads > 0) {
         cfg.runtime.threads = normalize_worker_threads(threads);
@@ -162,8 +162,8 @@ int main(int argc, char** argv) {
     auto ex = asio::make_strand(io);
 
     // 可选：通过 TqAuth 名称服务解析动态 MD URL。解析失败时保留静态配置。
-    TqApiConfig::Md md_cfg = cfg.md;
-    if (md_cfg.kind == MdKind::Tq && md_cfg.auto_url && cfg.tq_auth.enabled) {
+    MdConfig md_cfg = cfg.engine.md;
+    if (md_cfg.kind == MdKind::Tq && md_cfg.tq.auto_url && cfg.tq_auth.enabled) {
         TqAuth     auth(cfg.tq_auth);
         const auto auth_result = auth.login_result();
         if (!auth_result) {
@@ -173,9 +173,9 @@ int main(int argc, char** argv) {
         } else {
             DynamicEndpointResolver resolver(auth);
             if (auto endpoint = resolver.md()) {
-                md_cfg.host = endpoint->host;
-                md_cfg.port = std::to_string(endpoint->port);
-                md_cfg.path = endpoint->path;
+                md_cfg.tq.host = endpoint->host;
+                md_cfg.tq.port = std::to_string(endpoint->port);
+                md_cfg.tq.path = endpoint->path;
                 SPDLOG_INFO("[gw] dynamic md url resolved: {}", endpoint->to_string());
             } else {
                 SPDLOG_WARN("[gw] dynamic md url unavailable: {}", auth.last_error());
@@ -184,12 +184,12 @@ int main(int argc, char** argv) {
     }
 
     // 真实网关（进程生命周期内常驻，被所有连接共享）。
-    auto md = make_real_md(md_cfg, cfg.ctp, ex);
-    auto td = make_real_td(cfg.td, cfg.ctp, cfg.tq_auth, ex);
+    auto md = make_real_md(md_cfg, cfg.engine.ctp, ex);
+    auto td = make_real_td(cfg.engine.td, cfg.engine.ctp, cfg.tq_auth, ex);
 
     // 若交易网关是 Sim：按配置灌入合约规格与初始撮合价，使其可直接撮合。
     if (auto* sim = dynamic_cast<SimTdGateway*>(td.get()); sim != nullptr) {
-        for (const auto& s : cfg.specs) {
+        for (const auto& s : cfg.engine.td.sim.specs) {
             ContractSpec spec;
             spec.volume_multiple    = s.volume_multiple;
             spec.price_tick         = s.price_tick;
@@ -199,7 +199,7 @@ int main(int argc, char** argv) {
             sim->set_contract_spec(s.symbol, spec);
             SPDLOG_INFO("[gw] sim spec seeded: {}", s.symbol);
         }
-        for (const auto& [sym, px] : cfg.last_prices) {
+        for (const auto& [sym, px] : cfg.engine.td.sim.last_prices) {
             sim->on_tick(sym, px);
             SPDLOG_INFO("[gw] sim last_price seeded: {} = {}", sym, px);
         }
@@ -207,10 +207,11 @@ int main(int argc, char** argv) {
 
     if (!md) {
         SPDLOG_INFO("[gw] market-data gateway disabled (kind={})",
-                    magic_enum::enum_name(cfg.md.kind));
+                    magic_enum::enum_name(cfg.engine.md.kind));
     }
     if (!td) {
-        SPDLOG_INFO("[gw] trading gateway disabled (kind={})", magic_enum::enum_name(cfg.td.kind));
+        SPDLOG_INFO("[gw] trading gateway disabled (kind={})",
+                    magic_enum::enum_name(cfg.engine.td.kind));
     }
 
     // 启动网关（幂等协程，后台运行）。
@@ -251,11 +252,11 @@ int main(int argc, char** argv) {
                          TradingGateway*             td_p) {
         ipc::IpcSession::Options opts;
         opts.local_role         = ipc::IpcRole::Gateway; // gw 侧声明 Gateway
-        opts.local_name         = cfg.ipc.name;
-        opts.handshake_timeout  = cfg.ipc.handshake_timeout;
-        opts.heartbeat_interval = cfg.ipc.heartbeat_interval;
-        opts.heartbeat_timeout  = cfg.ipc.heartbeat_timeout;
-        opts.encoding           = cfg.ipc.encoding;
+        opts.local_name         = cfg.engine.ipc.name;
+        opts.handshake_timeout  = cfg.engine.ipc.handshake_timeout;
+        opts.heartbeat_interval = cfg.engine.ipc.heartbeat_interval;
+        opts.heartbeat_timeout  = cfg.engine.ipc.heartbeat_timeout;
+        opts.encoding           = cfg.engine.ipc.encoding;
 
         // 每条连接独立 strand；共享网关状态通过 gateway_ex=ex 串行化。
         auto srv_ex  = asio::make_strand(io_ex);
@@ -317,8 +318,8 @@ int main(int argc, char** argv) {
     std::shared_ptr<asio::local::stream_protocol::acceptor> uds_acc;
     std::shared_ptr<tcp::acceptor>                          tcp_acc;
 
-    if (cfg.ipc.transport == IpcTransport::Uds) {
-        const std::string path = cfg.ipc.socket;
+    if (cfg.engine.ipc.transport == IpcTransport::Uds) {
+        const std::string path = cfg.engine.ipc.socket;
         ::unlink(path.c_str());
         uds_acc = std::make_shared<asio::local::stream_protocol::acceptor>(
             io, asio::local::stream_protocol::endpoint(path));
@@ -346,10 +347,11 @@ int main(int argc, char** argv) {
             },
             "gw.accept.uds");
     } else {
-        tcp::endpoint ep{asio::ip::make_address(cfg.ipc.tcp_host), cfg.ipc.tcp_port};
+        tcp::endpoint ep{asio::ip::make_address(cfg.engine.ipc.tcp_host), cfg.engine.ipc.tcp_port};
         tcp_acc = std::make_shared<tcp::acceptor>(io, ep);
-        SPDLOG_INFO(
-            "[gw] listening on TCP {}:{}", cfg.ipc.tcp_host, tcp_acc->local_endpoint().port());
+        SPDLOG_INFO("[gw] listening on TCP {}:{}",
+                    cfg.engine.ipc.tcp_host,
+                    tcp_acc->local_endpoint().port());
 
         co_spawn_logged(
             ex,

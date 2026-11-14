@@ -70,10 +70,10 @@
 
 ## 2. 配置
 
-`tqsdk-node` 的 `[instruments]`：
+`tqsdk-node` 的 `[cache.instruments]`：
 
 ```toml
-[instruments]
+[cache.instruments]
 enabled = true
 file = "symbol.json"
 url = "https://openmd.shinnytech.com/t/md/symbols/symbol.json"

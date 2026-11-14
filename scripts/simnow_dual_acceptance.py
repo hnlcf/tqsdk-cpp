@@ -269,20 +269,22 @@ def gw_config(env: dict[str, str], port: int, name: str, flow: Path) -> str:
         return json.dumps(value)
 
     return f"""
-[listen]
+[gateway]
+ipc = "gw"
+
+[ipc.gw]
+name = {q(name)}
 transport = "tcp"
 tcp_host = "127.0.0.1"
 tcp_port = {port}
-
-[ipc]
 encoding = "json"
 handshake_timeout_ms = 5000
 heartbeat_interval_ms = 1000
 heartbeat_timeout_ms = 10000
-local_name = {q(name)}
 
 [md]
 kind = "tq"
+[md.tq]
 host = "free-openmd.shinnytech.com"
 port = "443"
 path = "/t/md/front/mobile"
@@ -311,26 +313,35 @@ def node_config(port: int, gw_a: int, gw_b: int, name: str, symbol: str) -> str:
         return json.dumps(value)
 
     return f"""
-account_id = "A"
+primary_account = "A"
 
-[ipc]
+[[accounts]]
+id = "A"
+ipc = "gw-a"
+
+[[accounts]]
+id = "B"
+ipc = "gw-b"
+
+[ipc.gw-a]
+name = {q(name)}
 transport = "tcp"
+tcp_host = "127.0.0.1"
+tcp_port = {gw_a}
 encoding = "json"
 handshake_timeout_ms = 5000
 heartbeat_interval_ms = 1000
 heartbeat_timeout_ms = 10000
-local_name = {q(name)}
 
-[md]
-kind = "remote"
+[ipc.gw-b]
+name = {q(name + "-b")}
+transport = "tcp"
 tcp_host = "127.0.0.1"
-tcp_port = {gw_a}
-
-[td]
-kind = "remote"
-tcp_host = "127.0.0.1"
-tcp_port = {gw_a}
-ack_timeout_ms = 10000
+tcp_port = {gw_b}
+encoding = "json"
+handshake_timeout_ms = 5000
+heartbeat_interval_ms = 1000
+heartbeat_timeout_ms = 10000
 
 [serve]
 bind = "127.0.0.1"
@@ -343,22 +354,18 @@ heartbeat_interval_ms = 30000
 max_clients = 32
 max_queue = 256
 
-[instruments]
+[cache]
+[cache.instruments]
 enabled = true
 file = {q(str(ROOT / "symbol.json"))}
 refresh_interval_sec = 21600
 initial_delay_sec = 3600
 
-[kline_cache]
+[cache.kline]
 enabled = false
 
-[tick_cache]
+[cache.tick]
 enabled = false
-
-[[accounts]]
-id = "B"
-gw_host = "127.0.0.1"
-gw_port = {gw_b}
 
 [runtime]
 threads = 2

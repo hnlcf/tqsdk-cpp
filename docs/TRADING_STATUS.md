@@ -31,6 +31,7 @@
 ```toml
 [md]
 kind = "tq"
+[md.tq]
 auto_url = true
 
 [tq_auth]

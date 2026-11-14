@@ -1,0 +1,6 @@
+# TQ market-data endpoint defaults (gw only).
+[md.tq]
+host = "free-openmd.shinnytech.com"
+port = "443"
+path = "/t/md/front/mobile"
+auto_url = false

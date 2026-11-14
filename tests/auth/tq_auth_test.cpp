@@ -29,6 +29,13 @@ TEST(TqAuth, SupportsModeAndUrlServiceWithoutLogin) {
 
 TEST(TqAuth, ParsesNodeAuthConfig) {
     const auto cfg = parse_node_config(R"(
+[[accounts]]
+id = "default"
+ipc = "gw-a"
+[ipc.gw-a]
+transport = "tcp"
+tcp_host = "127.0.0.1"
+tcp_port = 19001
 [tq_auth]
 enabled = true
 user_name = "tq_user"

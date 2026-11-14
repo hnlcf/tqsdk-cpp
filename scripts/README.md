@@ -26,8 +26,8 @@
 | `ctp_week_preflight.sh` | 连续交易周前的只读检查 |
 
 IPC 组在 `config/ipc/<key>.toml`，gw 用 `[gateway].ipc`、node 用
-`[[accounts]].ipc` 选择；TQ OTG 交易网关的配置见 `config/shared/tq.toml`，
-由 `config/gw.toml` 的 `[include]` 引入；其中
+`[[accounts]].ipc` 选择；TQ MD 见 `config/shared/tq_md.toml`，TQ OTG/TqAuth 见
+`config/shared/tq.toml`，由 `config/gw.toml` 的 `[include]` 引入；其中
 `broker_name`（天勤元数据键 / `req_login.bid`）与可选的 `broker_id`
 （前置柜台 id）不是同一个字段。
 

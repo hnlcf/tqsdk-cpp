@@ -46,10 +46,10 @@ GET /tick-cache/status                      # 缓存状态
 `TickStore` 把每条新 `Tick` 异步写入 SQLite（WAL），供重启后回放/分析：
 
 ```toml
-[market_cache]
+[cache]
 file = "market_cache.sqlite3"   # K 线与 tick 共用同一个 SQLite
 
-[tick_cache]
+[cache.tick]
 enabled = true
 max_ticks_per_series = 200000
 flush_interval_ms = 250
@@ -85,7 +85,7 @@ downloader.download_klines(kline_stream, "bars.csv");
 ## 4. 边界
 
 - tick 是 quote 快照，不是逐笔成交；同价位盘口变化是否产生新 tick 由指纹决定；
-- tick 默认不落盘；显式启用 `[tick_cache]` 后才写 SQLite，导出仍可用 DataDownloader；
+- tick 默认不落盘；显式启用 `[cache.tick]` 后才写 SQLite，导出仍可用 DataDownloader；
 - tick 容量由调用方控制，避免无界内存增长；
 - 高频合约建议使用较小的 view_width，并根据磁盘预算设置 `max_ticks_per_series`；
 - TickStore 存的是 quote 快照，不替代交易所逐笔成交明细。

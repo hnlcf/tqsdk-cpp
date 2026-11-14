@@ -91,32 +91,32 @@ def wait_port(port: int, timeout: float = 10.0) -> None:
 
 def gw_config(port: int, balance: float) -> str:
     return f"""
-[listen]
+[gateway]
+ipc = "gw"
+
+[ipc.gw]
+name = "gw-{port}"
 transport = "tcp"
 tcp_host = "127.0.0.1"
 tcp_port = {port}
-
-[ipc]
 encoding = "json"
 handshake_timeout_ms = 5000
 heartbeat_interval_ms = 1000
 heartbeat_timeout_ms = 5000
-local_name = "gw-{port}"
 
 [md]
 kind = "none"
 
 [td]
 kind = "sim"
+[td.sim]
 initial_balance = {balance}
-
-[td.specs."{SYMBOL}"]
+[td.sim.specs."{SYMBOL}"]
 volume_multiple = 10.0
 price_tick = 1.0
 margin_rate = 0.1
 commission_per_lot = 2.0
-
-[td.last_prices]
+[td.sim.last_prices]
 "{SYMBOL}" = 3800.0
 
 [runtime]
@@ -126,26 +126,35 @@ threads = 1
 
 def node_config(serve_port: int, md_port: int, extra_port: int) -> str:
     return f"""
-account_id = "A"
+primary_account = "A"
 
-[ipc]
+[[accounts]]
+id = "A"
+ipc = "gw-a"
+
+[[accounts]]
+id = "B"
+ipc = "gw-b"
+
+[ipc.gw-a]
+name = "node-multi-account-a"
 transport = "tcp"
+tcp_host = "127.0.0.1"
+tcp_port = {md_port}
 encoding = "json"
 handshake_timeout_ms = 5000
 heartbeat_interval_ms = 1000
 heartbeat_timeout_ms = 5000
-local_name = "node-multi-account-acceptance"
 
-[md]
-kind = "remote"
+[ipc.gw-b]
+name = "node-multi-account-b"
+transport = "tcp"
 tcp_host = "127.0.0.1"
-tcp_port = {md_port}
-
-[td]
-kind = "remote"
-tcp_host = "127.0.0.1"
-tcp_port = {md_port}
-ack_timeout_ms = 5000
+tcp_port = {extra_port}
+encoding = "json"
+handshake_timeout_ms = 5000
+heartbeat_interval_ms = 1000
+heartbeat_timeout_ms = 5000
 
 [serve]
 bind = "127.0.0.1"
@@ -158,19 +167,14 @@ heartbeat_interval_ms = 30000
 max_clients = 32
 max_queue = 256
 
-[instruments]
+[cache.instruments]
 enabled = false
 
-[kline_cache]
+[cache.kline]
 enabled = false
 
-[tick_cache]
+[cache.tick]
 enabled = false
-
-""".strip() + "\n\n" + f"""[[accounts]]
-id = "B"
-gw_host = "127.0.0.1"
-gw_port = {extra_port}
 
 [runtime]
 threads = 1

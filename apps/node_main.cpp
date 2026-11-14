@@ -87,13 +87,13 @@ int main(int argc, char** argv) {
     // objects, which produced a SIGSEGV during static teardown.
     tqsdk::HolidayCalendar::start_global();
 
-    if (cfg.auth.enabled) {
-        if (cfg.auth.token.empty() && !cfg.auth.token_env.empty()) {
-            if (const char* env = std::getenv(cfg.auth.token_env.c_str()); env != nullptr) {
-                cfg.auth.token = env;
+    if (cfg.serve.auth.enabled) {
+        if (cfg.serve.auth.token.empty() && !cfg.serve.auth.token_env.empty()) {
+            if (const char* env = std::getenv(cfg.serve.auth.token_env.c_str()); env != nullptr) {
+                cfg.serve.auth.token = env;
             }
         }
-        if (cfg.auth.token.empty()) {
+        if (cfg.serve.auth.token.empty()) {
             SPDLOG_CRITICAL("[node] serve auth enabled but no token/token_env is configured");
             return 1;
         }
@@ -117,22 +117,22 @@ int main(int argc, char** argv) {
                 cfg.tq_auth.user_name);
         }
     }
-    if (cfg.instruments.enabled) {
-        rt->catalog = std::make_shared<InstrumentCatalog>(cfg.instruments, rt->auth);
+    if (cfg.cache.instruments.enabled) {
+        rt->catalog = std::make_shared<InstrumentCatalog>(cfg.cache.instruments, rt->auth);
         if (!rt->catalog->load_local()) {
             SPDLOG_WARN(
                 "[node] instrument catalog not available yet; background refresh will retry");
         }
         rt->catalog->start_background_refresh();
     }
-    if (cfg.kline_cache.enabled) {
-        rt->kline_store = std::make_shared<KlineStore>(cfg.kline_cache);
+    if (cfg.cache.kline.enabled) {
+        rt->kline_store = std::make_shared<KlineStore>(cfg.cache.kline);
         if (!rt->kline_store->ready()) {
             SPDLOG_WARN("[node] kline cache unavailable; continuing without history cache");
         }
     }
-    if (cfg.continuous.enabled) {
-        rt->continuous = std::make_shared<ContinuousTable>(cfg.continuous);
+    if (cfg.cache.continuous.enabled) {
+        rt->continuous = std::make_shared<ContinuousTable>(cfg.cache.continuous);
         if (!rt->continuous->load_local()) {
             SPDLOG_WARN("[node] continuous table not available yet; background refresh will retry");
         }
@@ -146,8 +146,8 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
-    if (cfg.tick_cache.enabled) {
-        rt->tick_store = std::make_shared<TickStore>(cfg.tick_cache);
+    if (cfg.cache.tick.enabled) {
+        rt->tick_store = std::make_shared<TickStore>(cfg.cache.tick);
         if (!rt->tick_store->ready()) {
             SPDLOG_WARN("[node] tick cache unavailable; continuing without tick persistence");
         }
@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
         }
 
         std::shared_ptr<TqApi> primary;
-        auto primary_cfg    = make_remote_tqapi_config(primary_it->ipc, primary_it->id);
+        auto primary_cfg    = make_remote_engine_config(primary_it->ipc, primary_it->id);
         auto primary_result = co_await try_make_tqapi(io, primary_cfg, core_ex, rt->kline_store);
         if (!primary_result) {
             SPDLOG_CRITICAL("[node] failed to connect/init upstream gw: {} ({})",
@@ -199,7 +199,7 @@ int main(int argc, char** argv) {
         }
 
         // 预订阅：让服务启动后即持续有数据，便于 curl 直接读到。
-        for (const auto& sym : cfg.symbols) {
+        for (const auto& sym : cfg.serve.symbols) {
             primary->get_quote(sym); // 触发订阅（不存在则创建占位并订阅）
             // tick sink 只对已创建的 TickSeries 生效；开启持久化时预创建窗口。
             if (rt->tick_store) {
@@ -213,7 +213,7 @@ int main(int argc, char** argv) {
             if (account.id == primary_id || rt->accounts->find_account(account.id)) {
                 continue;
             }
-            auto account_cfg  = make_remote_tqapi_config(account.ipc, account.id);
+            auto account_cfg  = make_remote_engine_config(account.ipc, account.id);
             auto extra_result = co_await try_make_tqapi(io, account_cfg, core_ex, nullptr);
             if (!extra_result) {
                 SPDLOG_ERROR("[node] account {} failed to connect: {} ({})",
@@ -224,7 +224,7 @@ int main(int argc, char** argv) {
             }
             auto extra = std::shared_ptr<TqApi>(std::move(*extra_result));
             rt->accounts->add_account(account.id, extra);
-            for (const auto& sym : cfg.symbols) {
+            for (const auto& sym : cfg.serve.symbols) {
                 extra->get_quote(sym);
             }
             if (account.ipc.transport == IpcTransport::Tcp) {
@@ -239,17 +239,17 @@ int main(int argc, char** argv) {
         }
 
         serve::WsOptions ws_opts;
-        ws_opts.path               = cfg.ws.path;
-        ws_opts.heartbeat_interval = cfg.ws.heartbeat_interval;
-        ws_opts.max_clients        = cfg.ws.max_clients;
-        ws_opts.max_queue          = cfg.ws.max_queue;
-        ws_opts.coalesce           = cfg.ws.coalesce;
+        ws_opts.path               = cfg.serve.ws.path;
+        ws_opts.heartbeat_interval = cfg.serve.ws.heartbeat_interval;
+        ws_opts.max_clients        = cfg.serve.ws.max_clients;
+        ws_opts.max_queue          = cfg.serve.ws.max_queue;
+        ws_opts.coalesce           = cfg.serve.ws.coalesce;
 
         serve::AuthOptions auth_opts;
-        auth_opts.enabled           = cfg.auth.enabled;
-        auth_opts.token             = cfg.auth.token;
-        auth_opts.allow_query_token = cfg.auth.allow_query_token;
-        auth_opts.exempt_healthz    = cfg.auth.exempt_healthz;
+        auth_opts.enabled           = cfg.serve.auth.enabled;
+        auth_opts.token             = cfg.serve.auth.token;
+        auth_opts.allow_query_token = cfg.serve.auth.allow_query_token;
+        auth_opts.exempt_healthz    = cfg.serve.auth.exempt_healthz;
         rt->http                    = std::make_unique<serve::HttpServer>(rt->api.get(),
                                                                           io_ex,
                                                                           std::move(ws_opts),
@@ -260,7 +260,7 @@ int main(int argc, char** argv) {
                                                                           std::move(auth_opts),
                                                                           rt->audit,
                                                                           rt->continuous.get());
-        auto listen_result          = rt->http->listen(cfg.serve_bind, cfg.serve_port);
+        auto listen_result          = rt->http->listen(cfg.serve.bind, cfg.serve.port);
         if (!listen_result) {
             SPDLOG_CRITICAL("[node] HTTP serve failed: {} ({})",
                             listen_result.error().body.dump(),
@@ -269,10 +269,10 @@ int main(int argc, char** argv) {
             co_return;
         }
         SPDLOG_INFO("[node] HTTP serve on http://{}:{}/ (ws {}, auth {})",
-                    cfg.serve_bind,
+                    cfg.serve.bind,
                     rt->http->port(),
-                    cfg.ws.path,
-                    cfg.auth.enabled ? "enabled" : "disabled");
+                    cfg.serve.ws.path,
+                    cfg.serve.auth.enabled ? "enabled" : "disabled");
         co_return;
     };
 

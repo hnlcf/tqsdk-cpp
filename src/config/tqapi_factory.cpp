@@ -73,11 +73,11 @@ TdKind parse_td_kind(std::string_view s) {
     if (s == "ctp") {
         return TdKind::Ctp;
     }
-    if (s == "remote") {
-        return TdKind::Remote;
-    }
     if (s == "tq") {
         return TdKind::Tq;
+    }
+    if (s == "remote") {
+        return TdKind::Remote;
     }
     if (s == "mock") {
         return TdKind::Mock;
@@ -110,18 +110,8 @@ ipc::FrameEncoding parse_encoding(std::string_view s) {
     return ipc::FrameEncoding::Json;
 }
 
-ipc::IpcRole parse_role(std::string_view s) {
-    if (s.empty() || s == "gateway") {
-        return ipc::IpcRole::Gateway;
-    }
-    if (s == "node") {
-        return ipc::IpcRole::Node;
-    }
-    fail_parse(config::ConfigErrorCode::invalid_value, fmt::format("unknown [ipc].role = '{}'", s));
-    return ipc::IpcRole::Gateway;
-}
+// ---------- TOML getters ----------
 
-// 读取指定 table 的某键为 string（缺省返回 def）。
 std::string get_str(const toml::table& tbl, std::string_view key, std::string def = {}) {
     if (auto* v = tbl.get(key)) {
         if (auto s = v->value<std::string>()) {
@@ -179,7 +169,119 @@ const toml::table& require_table(const toml::table& root, std::string_view name)
     return t ? *t : empty;
 }
 
-CtpConfig parse_ctp_config(const toml::table& root) {
+// ---------- 结构解析 ----------
+
+IpcConfig parse_ipc_config(const toml::table& t, std::string_view fallback_name) {
+    IpcConfig cfg;
+    cfg.name              = get_str(t, "name", std::string(fallback_name));
+    cfg.transport         = parse_transport(get_str(t, "transport", "uds"));
+    cfg.socket            = get_str(t, "socket", cfg.socket);
+    cfg.tcp_host          = get_str(t, "tcp_host", cfg.tcp_host);
+    const auto tcp_port   = get_int(t, "tcp_port", cfg.tcp_port);
+    cfg.tcp_port          = static_cast<uint16_t>(std::clamp<int64_t>(tcp_port, 0, 65535));
+    cfg.encoding          = parse_encoding(get_str(t, "encoding", "json"));
+    cfg.handshake_timeout = std::chrono::milliseconds(
+        std::max<int64_t>(0, get_int(t, "handshake_timeout_ms", cfg.handshake_timeout.count())));
+    cfg.heartbeat_interval = std::chrono::milliseconds(
+        std::max<int64_t>(0, get_int(t, "heartbeat_interval_ms", cfg.heartbeat_interval.count())));
+    cfg.heartbeat_timeout = std::chrono::milliseconds(
+        std::max<int64_t>(0, get_int(t, "heartbeat_timeout_ms", cfg.heartbeat_timeout.count())));
+
+    if (cfg.transport == IpcTransport::Uds && cfg.socket.empty()) {
+        fail_parse(config::ConfigErrorCode::invalid_value,
+                   fmt::format("[ipc] '{}' requires socket for uds", cfg.name));
+    }
+    if (cfg.transport == IpcTransport::Tcp &&
+        (cfg.tcp_host.empty() || tcp_port <= 0 || tcp_port > 65535)) {
+        fail_parse(config::ConfigErrorCode::invalid_value,
+                   fmt::format("[ipc] '{}' requires tcp_host and tcp_port", cfg.name));
+    }
+    return cfg;
+}
+
+TqMdConfig parse_tq_md(const toml::table& t) {
+    TqMdConfig cfg;
+    cfg.host     = get_str(t, "host", cfg.host);
+    cfg.port     = get_str(t, "port", cfg.port);
+    cfg.path     = get_str(t, "path", cfg.path);
+    cfg.auto_url = get_bool(t, "auto_url", cfg.auto_url);
+    return cfg;
+}
+
+MdConfig parse_md(const toml::table& root) {
+    MdConfig cfg;
+    if (const auto& t = require_table(root, "md"); !t.empty()) {
+        cfg.kind = parse_md_kind(get_str(t, "kind", "none"));
+        if (const auto* tq = t.get("tq"); tq != nullptr && tq->is_table()) {
+            cfg.tq = parse_tq_md(*tq->as_table());
+        }
+    }
+    return cfg;
+}
+
+TqTdConfig parse_tq_td(const toml::table& t) {
+    TqTdConfig cfg;
+    cfg.broker_name = get_str(t, "broker_name", cfg.broker_name);
+    cfg.account_id  = get_str(t, "account_id", cfg.account_id);
+    cfg.password    = get_str(t, "password", cfg.password);
+    cfg.broker_id   = get_str(t, "broker_id", cfg.broker_id);
+    cfg.front_url   = get_str(t, "front_url", cfg.front_url);
+    cfg.td_url      = get_str(t, "td_url", cfg.td_url);
+    cfg.account_key = get_str(t, "account_key", cfg.account_key);
+    return cfg;
+}
+
+SimConfig parse_sim(const toml::table& t) {
+    SimConfig cfg;
+    cfg.initial_balance = get_double(t, "initial_balance", cfg.initial_balance);
+    if (auto* specs_tv = t.get("specs"); specs_tv != nullptr && specs_tv->is_table()) {
+        for (auto&& [k, v] : *specs_tv->as_table()) {
+            const auto* sub = v.as_table();
+            if (sub == nullptr) {
+                continue;
+            }
+            SimSpec spec;
+            spec.symbol          = std::string(k.str());
+            spec.volume_multiple = get_double(*sub, "volume_multiple", spec.volume_multiple);
+            spec.price_tick      = get_double(*sub, "price_tick", spec.price_tick);
+            spec.margin_rate     = get_double(*sub, "margin_rate", spec.margin_rate);
+            spec.commission_rate = get_double(*sub, "commission_rate", spec.commission_rate);
+            spec.commission_per_lot =
+                get_double(*sub, "commission_per_lot", spec.commission_per_lot);
+            cfg.specs.push_back(std::move(spec));
+        }
+    }
+    if (auto* lp_tv = t.get("last_prices"); lp_tv != nullptr && lp_tv->is_table()) {
+        for (auto&& [k, v] : *lp_tv->as_table()) {
+            if (auto d = v.value<double>()) {
+                cfg.last_prices[std::string(k.str())] = *d;
+            } else if (auto i = v.value<int64_t>()) {
+                cfg.last_prices[std::string(k.str())] = static_cast<double>(*i);
+            }
+        }
+    }
+    return cfg;
+}
+
+TdConfig parse_td(const toml::table& root) {
+    TdConfig cfg;
+    if (const auto& t = require_table(root, "td"); !t.empty()) {
+        cfg.kind        = parse_td_kind(get_str(t, "kind", "none"));
+        cfg.auto_url    = get_bool(t, "auto_url", cfg.auto_url);
+        cfg.ack_timeout = std::chrono::milliseconds(
+            std::max<int64_t>(0, get_int(t, "ack_timeout_ms", cfg.ack_timeout.count())));
+        cfg.shfe_market_as_limit = get_bool(t, "shfe_market_as_limit", cfg.shfe_market_as_limit);
+        if (const auto* sim = t.get("sim"); sim != nullptr && sim->is_table()) {
+            cfg.sim = parse_sim(*sim->as_table());
+        }
+        if (const auto* tq = t.get("tq"); tq != nullptr && tq->is_table()) {
+            cfg.tq = parse_tq_td(*tq->as_table());
+        }
+    }
+    return cfg;
+}
+
+CtpConfig parse_ctp(const toml::table& root) {
     CtpConfig ctp;
     if (const auto& t = require_table(root, "ctp"); !t.empty()) {
         ctp.broker_id = get_str(t, "broker_id", ctp.broker_id);
@@ -196,410 +298,6 @@ CtpConfig parse_ctp_config(const toml::table& root) {
             std::max<int64_t>(0, get_int(t, "front_timeout_ms", ctp.front_timeout.count())));
     }
     return ctp;
-}
-
-void parse_tq_td(const toml::table& t, TqApiConfig::Td::TqOptions& out) {
-    out.broker_name = get_str(t, "broker_name", out.broker_name);
-    out.account_id  = get_str(t, "account_id", out.account_id);
-    out.password    = get_str(t, "password", out.password);
-    out.broker_id   = get_str(t, "broker_id", out.broker_id);
-    out.front_url   = get_str(t, "front_url", out.front_url);
-    out.td_url      = get_str(t, "td_url", out.td_url);
-    out.account_key = get_str(t, "account_key", out.account_key);
-}
-
-IpcConfig parse_ipc_config(const toml::table& t, std::string_view fallback_name) {
-    IpcConfig cfg;
-    cfg.name              = get_str(t, "name", std::string(fallback_name));
-    cfg.transport         = parse_transport(get_str(t, "transport", "uds"));
-    cfg.socket            = get_str(t, "socket", cfg.socket);
-    cfg.tcp_host          = get_str(t, "tcp_host", cfg.tcp_host);
-    cfg.tcp_port          = static_cast<uint16_t>(get_int(t, "tcp_port", cfg.tcp_port));
-    cfg.encoding          = parse_encoding(get_str(t, "encoding", "json"));
-    cfg.handshake_timeout = std::chrono::milliseconds(
-        get_int(t, "handshake_timeout_ms", cfg.handshake_timeout.count()));
-    cfg.heartbeat_interval = std::chrono::milliseconds(
-        get_int(t, "heartbeat_interval_ms", cfg.heartbeat_interval.count()));
-    cfg.heartbeat_timeout = std::chrono::milliseconds(
-        get_int(t, "heartbeat_timeout_ms", cfg.heartbeat_timeout.count()));
-
-    if (cfg.transport == IpcTransport::Uds && cfg.socket.empty()) {
-        fail_parse(config::ConfigErrorCode::invalid_value,
-                   fmt::format("[ipc] '{}' requires socket for uds", cfg.name));
-    }
-    if (cfg.transport == IpcTransport::Tcp && (cfg.tcp_host.empty() || cfg.tcp_port == 0)) {
-        fail_parse(config::ConfigErrorCode::invalid_value,
-                   fmt::format("[ipc] '{}' requires tcp_host and tcp_port", cfg.name));
-    }
-    return cfg;
-}
-
-// 解析一份已加载的 TOML DOM 到 TqApiConfig。
-TqApiConfig build_from_toml(const toml::table& root) {
-    TqApiConfig cfg;
-
-    if (const auto& ipc_t = require_table(root, "ipc"); !ipc_t.empty()) {
-        cfg.ipc.transport = parse_transport(get_str(ipc_t, "transport", "uds"));
-        cfg.ipc.encoding  = parse_encoding(get_str(ipc_t, "encoding", "json"));
-        cfg.ipc.uds_dir   = get_str(ipc_t, "uds_dir", "/tmp");
-        cfg.ipc.handshake_timeout =
-            std::chrono::milliseconds(get_int(ipc_t, "handshake_timeout_ms", 5000));
-        cfg.ipc.heartbeat_interval =
-            std::chrono::milliseconds(get_int(ipc_t, "heartbeat_interval_ms", 5000));
-        cfg.ipc.heartbeat_timeout =
-            std::chrono::milliseconds(get_int(ipc_t, "heartbeat_timeout_ms", 15000));
-        cfg.ipc.role       = parse_role(get_str(ipc_t, "role", "gateway"));
-        cfg.ipc.local_name = get_str(ipc_t, "local_name", cfg.ipc.local_name);
-    }
-
-    if (const auto& md_t = require_table(root, "md"); !md_t.empty()) {
-        cfg.md.kind     = parse_md_kind(get_str(md_t, "kind", "none"));
-        cfg.md.host     = get_str(md_t, "host", cfg.md.host);
-        cfg.md.port     = get_str(md_t, "port", cfg.md.port);
-        cfg.md.path     = get_str(md_t, "path", cfg.md.path);
-        cfg.md.socket   = get_str(md_t, "socket", "");
-        cfg.md.tcp_host = get_str(md_t, "tcp_host", "");
-        cfg.md.tcp_port = static_cast<uint16_t>(get_int(md_t, "tcp_port", 0));
-        cfg.md.name     = get_str(md_t, "name", cfg.md.name);
-        cfg.md.auto_url = get_bool(md_t, "auto_url", cfg.md.auto_url);
-    }
-
-    if (const auto& td_t = require_table(root, "td"); !td_t.empty()) {
-        cfg.td.kind            = parse_td_kind(get_str(td_t, "kind", "none"));
-        cfg.td.initial_balance = get_double(td_t, "initial_balance", cfg.td.initial_balance);
-        cfg.td.socket          = get_str(td_t, "socket", "");
-        cfg.td.tcp_host        = get_str(td_t, "tcp_host", "");
-        cfg.td.tcp_port        = static_cast<uint16_t>(get_int(td_t, "tcp_port", 0));
-        cfg.td.name            = get_str(td_t, "name", cfg.td.name);
-        cfg.td.ack_timeout     = std::chrono::milliseconds(get_int(td_t, "ack_timeout_ms", 10000));
-        cfg.td.shfe_market_as_limit =
-            get_bool(td_t, "shfe_market_as_limit", cfg.td.shfe_market_as_limit);
-        cfg.td.auto_url = get_bool(td_t, "auto_url", cfg.td.auto_url);
-        if (const auto* tq_tv = td_t.get("tq"); tq_tv != nullptr && tq_tv->is_table()) {
-            parse_tq_td(*tq_tv->as_table(), cfg.td.tq);
-        }
-        if (auto* specs_tv = td_t.get("specs"); specs_tv && specs_tv->is_table()) {
-            const auto& specs_t = *specs_tv->as_table();
-            for (auto&& [k, v] : specs_t) {
-                const auto* sub = v.as_table();
-                if (!sub) {
-                    continue;
-                }
-                TqApiConfig::Td::Spec spec;
-                spec.symbol          = std::string(k.str());
-                spec.volume_multiple = get_double(*sub, "volume_multiple", spec.volume_multiple);
-                spec.price_tick      = get_double(*sub, "price_tick", spec.price_tick);
-                spec.margin_rate     = get_double(*sub, "margin_rate", spec.margin_rate);
-                spec.commission_rate = get_double(*sub, "commission_rate", spec.commission_rate);
-                spec.commission_per_lot =
-                    get_double(*sub, "commission_per_lot", spec.commission_per_lot);
-                cfg.td.specs.push_back(std::move(spec));
-            }
-        }
-        if (auto* lp_tv = td_t.get("last_prices"); lp_tv && lp_tv->is_table()) {
-            for (auto&& [k, v] : *lp_tv->as_table()) {
-                if (auto d = v.value<double>()) {
-                    cfg.td.last_prices[std::string(k.str())] = *d;
-                } else if (auto i = v.value<int64_t>()) {
-                    cfg.td.last_prices[std::string(k.str())] = static_cast<double>(*i);
-                }
-            }
-        }
-    }
-
-    cfg.ctp = parse_ctp_config(root);
-    return cfg;
-}
-
-// 用于远程连接的角色/端点参数。
-struct RemoteEndpoint {
-    std::string socket;
-    std::string tcp_host;
-    uint16_t    tcp_port = 0;
-};
-
-// 建立一条到 gw 的 IIpcChannel（UDS 或 TCP）。
-std::unique_ptr<ipc::IIpcChannel>
-connect_channel(asio::io_context& ctx, const TqApiConfig::Ipc& ipc_cfg, const RemoteEndpoint& ep) {
-    if (ipc_cfg.transport == IpcTransport::Uds) {
-        if (ep.socket.empty()) {
-            fail_parse(config::ConfigErrorCode::invalid_value,
-                       "uds transport requires socket path");
-            return nullptr;
-        }
-        return ipc::UdsChannel::connect(ctx, ep.socket);
-    }
-    if (ep.tcp_host.empty() || ep.tcp_port == 0) {
-        fail_parse(config::ConfigErrorCode::invalid_value, "tcp transport requires host and port");
-        return nullptr;
-    }
-    return ipc::TcpChannel::connect(ctx, ep.tcp_host, ep.tcp_port);
-}
-
-} // namespace
-
-config::ConfigResult<TqApiConfig> parse_tqapi_config(std::string_view toml_text) noexcept {
-    toml::table      root;
-    ConfigParseState state;
-    ParseGuard       guard(state);
-    try {
-        root = toml::parse(toml_text);
-    } catch (const toml::parse_error& e) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::parse,
-            fmt::format("toml parse error: {}", e.description().data()),
-        });
-    } catch (const std::exception& e) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::unknown,
-            fmt::format("toml parse error: {}", e.what()),
-        });
-    }
-    auto cfg = build_from_toml(root);
-    if (state.failed) {
-        return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
-    }
-    return cfg;
-}
-
-config::ConfigResult<TqApiConfig> load_tqapi_config(const std::string& path) noexcept {
-    std::error_code fs_ec;
-    if (!std::filesystem::exists(path, fs_ec)) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::file_io,
-            fmt::format("config file not found: {}", path),
-        });
-    }
-    try {
-        auto             root = toml::parse_file(path);
-        ConfigParseState state;
-        ParseGuard       guard(state);
-        auto             cfg = build_from_toml(root);
-        if (state.failed) {
-            return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
-        }
-        return cfg;
-    } catch (const toml::parse_error& e) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::parse,
-            fmt::format("parse '{}': {}", path, e.description().data()),
-        });
-    } catch (const std::exception& e) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::unknown,
-            fmt::format("load '{}': {}", path, e.what()),
-        });
-    } catch (...) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::unknown,
-            fmt::format("load '{}': unknown error", path),
-        });
-    }
-}
-
-config::ConfigResult<TqApiConfig> try_parse_tqapi_config(std::string_view toml_text) noexcept {
-    return parse_tqapi_config(toml_text);
-}
-
-TqApiConfig make_remote_tqapi_config(const IpcConfig& ipc, std::string account_id) {
-    TqApiConfig cfg;
-    cfg.ipc.transport          = ipc.transport;
-    cfg.ipc.encoding           = ipc.encoding;
-    cfg.ipc.handshake_timeout  = ipc.handshake_timeout;
-    cfg.ipc.heartbeat_interval = ipc.heartbeat_interval;
-    cfg.ipc.heartbeat_timeout  = ipc.heartbeat_timeout;
-    cfg.ipc.role               = ipc::IpcRole::Node;
-    cfg.ipc.local_name = fmt::format("node-{}", account_id.empty() ? "default" : account_id);
-
-    cfg.md.kind     = MdKind::Remote;
-    cfg.md.socket   = ipc.socket;
-    cfg.md.tcp_host = ipc.tcp_host;
-    cfg.md.tcp_port = ipc.tcp_port;
-
-    cfg.td.kind     = TdKind::Remote;
-    cfg.td.socket   = ipc.socket;
-    cfg.td.tcp_host = ipc.tcp_host;
-    cfg.td.tcp_port = ipc.tcp_port;
-    return cfg;
-}
-
-asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>
-make_tqapi(asio::io_context&           ctx,
-           const TqApiConfig&          cfg,
-           asio::any_io_executor       core_ex,
-           std::shared_ptr<KlineStore> kline_store) noexcept {
-    auto ex = core_ex ? std::move(core_ex) : asio::any_io_executor(ctx.get_executor());
-
-    const bool need_md_remote = cfg.md.kind == MdKind::Remote;
-    const bool need_td_remote = cfg.td.kind == TdKind::Remote;
-
-    // ---- 远程模式：建立共享的 IpcSession + IpcClient（md/td 共用一条连接）----
-    std::shared_ptr<ipc::IpcClient> client;
-    if (need_md_remote || need_td_remote) {
-        // md 与 td 必须指向同一个 gw 端点（一条连接同时承载行情与交易）。
-        RemoteEndpoint ep;
-        if (need_md_remote) {
-            ep = {cfg.md.socket, cfg.md.tcp_host, cfg.md.tcp_port};
-        }
-        if (need_td_remote) {
-            RemoteEndpoint td_ep{cfg.td.socket, cfg.td.tcp_host, cfg.td.tcp_port};
-            if (need_md_remote && (td_ep.socket != ep.socket || td_ep.tcp_host != ep.tcp_host ||
-                                   td_ep.tcp_port != ep.tcp_port)) {
-                co_return std::unexpected(gateway::GatewayError{
-                    gateway::GatewayErrorCode::config,
-                    "md and td remote endpoints differ; only one shared gw connection is supported",
-                });
-            }
-            ep = td_ep;
-        }
-
-        ipc::IpcSession::Options opts;
-        opts.local_role         = cfg.ipc.role;
-        opts.local_name         = cfg.ipc.local_name;
-        opts.handshake_timeout  = cfg.ipc.handshake_timeout;
-        opts.heartbeat_interval = cfg.ipc.heartbeat_interval;
-        opts.heartbeat_timeout  = cfg.ipc.heartbeat_timeout;
-        opts.encoding           = cfg.ipc.encoding;
-
-        auto ipc_cfg         = cfg.ipc;
-        auto endpoint        = ep;
-        auto session_factory = [&ctx, ex, ipc_cfg, endpoint, opts]()
-            -> asio::awaitable<ipc::IpcResult<std::unique_ptr<ipc::IpcSession>>> {
-            auto channel = connect_channel(ctx, ipc_cfg, endpoint);
-            if (!channel) {
-                co_return std::unexpected(
-                    ipc::IpcFailure{ipc::IpcErrorCode::connect, "cannot create IPC channel"});
-            }
-            auto session = std::make_unique<ipc::IpcSession>(std::move(channel), ex, opts);
-            auto started = co_await session->start();
-            if (!started) {
-                co_return std::unexpected(started.error());
-            }
-            co_return session;
-        };
-
-        client              = std::make_shared<ipc::IpcClient>(session_factory, ex);
-        auto connect_result = co_await client->connect();
-        if (!connect_result) {
-            co_return std::unexpected(gateway::GatewayError{
-                gateway::GatewayErrorCode::connect,
-                fmt::format("{} ({})",
-                            connect_result.error().detail,
-                            ipc::ipc_error_name(connect_result.error().code)),
-            });
-        }
-    }
-
-    // ---- 造行情网关 ----
-    std::unique_ptr<MarketDataGateway> md;
-    switch (cfg.md.kind) {
-    case MdKind::None:
-    case MdKind::Mock:
-        // Mock 需要外部注入：这里不造；调用方可自行构造后再包装。
-        md = nullptr;
-        break;
-    case MdKind::Tq:
-        md = std::make_unique<TqMdGateway>(ex, cfg.md.host, cfg.md.port, cfg.md.path);
-        break;
-    case MdKind::Ctp:
-        // CTP 只在 gw 进程（可选 tqsdk_ctp_gateway）中构造；node 直连模式不支持。
-        md = nullptr;
-        break;
-    case MdKind::Remote:
-        // 注册 md handler 进 client（在 client->start() 之前完成）。
-        md = std::make_unique<ipc::RemoteMdGateway>(client, ex);
-        break;
-    }
-
-    // ---- 造交易网关 ----
-    std::unique_ptr<TradingGateway> td;
-    switch (cfg.td.kind) {
-    case TdKind::None:
-    case TdKind::Mock:
-        td = nullptr;
-        break;
-    case TdKind::Sim: {
-        auto sim = std::make_unique<SimTdGateway>(ex, cfg.td.initial_balance);
-        for (const auto& seed : cfg.td.specs) {
-            ContractSpec spec;
-            spec.volume_multiple    = seed.volume_multiple;
-            spec.price_tick         = seed.price_tick;
-            spec.margin_rate        = seed.margin_rate;
-            spec.commission_rate    = seed.commission_rate;
-            spec.commission_per_lot = seed.commission_per_lot;
-            sim->set_contract_spec(seed.symbol, spec);
-        }
-        for (const auto& [symbol, price] : cfg.td.last_prices) {
-            sim->on_tick(symbol, price);
-        }
-        td = std::move(sim);
-        break;
-    }
-    case TdKind::Ctp:
-    case TdKind::Tq:
-        // CTP/TQ 交易网关只在 gw 进程中构造。
-        td = nullptr;
-        break;
-    case TdKind::Remote:
-        td = std::make_unique<ipc::RemoteTdGateway>(
-            client, ex, cfg.td.ack_timeout, cfg.td.shfe_market_as_limit);
-        break;
-    }
-
-    // 远程 client 的读循环：必须在 md/td 都注册完 handler 之后启动。
-    if (client) {
-        client->start();
-    }
-
-    auto api = std::make_unique<TqApi>(ex, std::move(md), std::move(td), std::move(kline_store));
-    // 远程模式：把共享 IpcClient 的关闭纳入 TqApi::close()，确保 close() 会
-    // 同步关闭 IPC 连接（进而唤醒读循环），调用方驱动 io 后即可安全析构。
-    if (client) {
-        auto c = client; // 拷贝 shared_ptr 到钩子，生命周期与 api 一致
-        api->add_close_hook([c]() { c->stop(); });
-    }
-    api->start();
-    co_return api;
-}
-
-asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>
-try_make_tqapi(asio::io_context&           ctx,
-               const TqApiConfig&          cfg,
-               asio::any_io_executor       core_ex,
-               std::shared_ptr<KlineStore> kline_store) noexcept {
-    co_return co_await make_tqapi(ctx, cfg, std::move(core_ex), std::move(kline_store));
-}
-
-// ============================================================================
-// 两进程配置解析
-// ============================================================================
-
-namespace {
-
-// 从 [md]/[td] 表里读出 real gateway 种类与参数（gw 进程用，只允许直连种类）。
-TqApiConfig::Md parse_gw_md(const toml::table& root) {
-    TqApiConfig::Md md;
-    if (const auto& t = require_table(root, "md"); !t.empty()) {
-        md.kind     = parse_md_kind(get_str(t, "kind", "none"));
-        md.host     = get_str(t, "host", md.host);
-        md.port     = get_str(t, "port", md.port);
-        md.path     = get_str(t, "path", md.path);
-        md.auto_url = get_bool(t, "auto_url", md.auto_url);
-    }
-    return md;
-}
-
-TqApiConfig::Td parse_gw_td(const toml::table& root) {
-    TqApiConfig::Td td;
-    if (const auto& t = require_table(root, "td"); !t.empty()) {
-        td.kind            = parse_td_kind(get_str(t, "kind", "none"));
-        td.initial_balance = get_double(t, "initial_balance", td.initial_balance);
-        td.auto_url        = get_bool(t, "auto_url", td.auto_url);
-        if (const auto* tq_tv = t.get("tq"); tq_tv != nullptr && tq_tv->is_table()) {
-            parse_tq_td(*tq_tv->as_table(), td.tq);
-        }
-    }
-    return td;
 }
 
 TqAuth::Config parse_tq_auth(const toml::table& root) {
@@ -631,76 +329,21 @@ RuntimeConfig parse_runtime(const toml::table& root) {
     return rt;
 }
 
-GwConfig build_gw_from_toml(toml::table root, IpcConfig ipc) {
-    GwConfig cfg;
-    cfg.ipc = std::move(ipc);
-    cfg.md  = parse_gw_md(root);
-    cfg.td  = parse_gw_td(root);
-    if (cfg.td.kind == TdKind::Tq && cfg.td.tq.broker_name.empty()) {
-        fail_parse(config::ConfigErrorCode::invalid_value,
-                   "[td.tq].broker_name is required when [td].kind = tq");
-    }
-    cfg.ctp     = parse_ctp_config(root);
-    cfg.tq_auth = parse_tq_auth(root);
-    cfg.runtime = parse_runtime(root);
-
-    // [td.specs."SYMBOL"] -> SpecSeed（仅 sim 用）
-    if (const auto& td_t = require_table(root, "td"); !td_t.empty()) {
-        if (auto* specs_tv = td_t.get("specs"); specs_tv && specs_tv->is_table()) {
-            const auto& specs_t = *specs_tv->as_table();
-            for (auto&& [k, v] : specs_t) {
-                const auto* sub = v.as_table();
-                if (!sub) {
-                    continue;
-                }
-                GwConfig::SpecSeed s;
-                s.symbol             = std::string(k.str());
-                s.volume_multiple    = get_double(*sub, "volume_multiple", s.volume_multiple);
-                s.price_tick         = get_double(*sub, "price_tick", s.price_tick);
-                s.margin_rate        = get_double(*sub, "margin_rate", s.margin_rate);
-                s.commission_rate    = get_double(*sub, "commission_rate", s.commission_rate);
-                s.commission_per_lot = get_double(*sub, "commission_per_lot", s.commission_per_lot);
-                cfg.specs.push_back(std::move(s));
-            }
-        }
-        // [td.last_prices] SYMBOL = price
-        if (auto* lp_tv = td_t.get("last_prices"); lp_tv && lp_tv->is_table()) {
-            const auto& lp_t = *lp_tv->as_table();
-            for (auto&& [k, v] : lp_t) {
-                if (auto d = v.value<double>()) {
-                    cfg.last_prices[std::string(k.str())] = *d;
-                } else if (auto i = v.value<int64_t>()) {
-                    cfg.last_prices[std::string(k.str())] = static_cast<double>(*i);
+ServeConfig parse_serve(const toml::table& root) {
+    ServeConfig cfg;
+    const auto& s = require_table(root, "serve");
+    if (!s.empty()) {
+        cfg.bind = get_str(s, "bind", cfg.bind);
+        cfg.port =
+            static_cast<uint16_t>(std::clamp<int64_t>(get_int(s, "port", cfg.port), 0, 65535));
+        if (auto* arr = s.get("symbols"); arr != nullptr && arr->is_array()) {
+            for (auto&& v : *arr->as_array()) {
+                if (auto sv = v.value<std::string>()) {
+                    cfg.symbols.push_back(*sv);
                 }
             }
         }
-    }
-    return cfg;
-}
-
-NodeConfig build_node_from_toml(const toml::table&                       root,
-                                std::vector<NodeConfig::AccountEndpoint> accounts,
-                                std::string                              primary_account) {
-    NodeConfig cfg;
-    cfg.accounts        = std::move(accounts);
-    cfg.primary_account = std::move(primary_account);
-    if (cfg.primary_account.empty() && !cfg.accounts.empty()) {
-        cfg.primary_account = cfg.accounts.front().id;
-    }
-
-    if (const auto& s = require_table(root, "serve"); !s.empty()) {
-        cfg.serve_bind = get_str(s, "bind", cfg.serve_bind);
-        cfg.serve_port = static_cast<uint16_t>(get_int(s, "port", cfg.serve_port));
-        if (auto* arr = s.get("symbols")) {
-            if (auto* a = arr->as_array()) {
-                for (auto&& v : *a) {
-                    if (auto sv = v.value<std::string>()) {
-                        cfg.symbols.push_back(*sv);
-                    }
-                }
-            }
-        }
-        if (auto* auth_tv = s.get("auth"); auth_tv && auth_tv->is_table()) {
+        if (const auto* auth_tv = s.get("auth"); auth_tv != nullptr && auth_tv->is_table()) {
             const auto& a      = *auth_tv->as_table();
             cfg.auth.enabled   = get_bool(a, "enabled", cfg.auth.enabled);
             cfg.auth.token     = get_str(a, "token", cfg.auth.token);
@@ -709,12 +352,12 @@ NodeConfig build_node_from_toml(const toml::table&                       root,
                 get_bool(a, "allow_query_token", cfg.auth.allow_query_token);
             cfg.auth.exempt_healthz = get_bool(a, "exempt_healthz", cfg.auth.exempt_healthz);
         }
-        if (auto* ws_tv = s.get("ws"); ws_tv && ws_tv->is_table()) {
+        if (const auto* ws_tv = s.get("ws"); ws_tv != nullptr && ws_tv->is_table()) {
             const auto& w             = *ws_tv->as_table();
             cfg.ws.path               = get_str(w, "path", cfg.ws.path);
-            cfg.ws.heartbeat_interval = std::chrono::milliseconds(
-                get_int(w, "heartbeat_interval_ms", cfg.ws.heartbeat_interval.count()));
-            cfg.ws.max_clients = static_cast<std::size_t>(
+            cfg.ws.heartbeat_interval = std::chrono::milliseconds(std::max<int64_t>(
+                0, get_int(w, "heartbeat_interval_ms", cfg.ws.heartbeat_interval.count())));
+            cfg.ws.max_clients        = static_cast<std::size_t>(
                 std::max<int64_t>(1, get_int(w, "max_clients", cfg.ws.max_clients)));
             cfg.ws.max_queue = static_cast<std::size_t>(
                 std::max<int64_t>(1, get_int(w, "max_queue", cfg.ws.max_queue)));
@@ -722,8 +365,19 @@ NodeConfig build_node_from_toml(const toml::table&                       root,
                 std::max<int64_t>(0, get_int(w, "coalesce_ms", cfg.ws.coalesce.count())));
         }
     }
-    if (const auto& t = require_table(root, "instruments"); !t.empty()) {
-        cfg.instruments.enabled          = get_bool(t, "enabled", true);
+    return cfg;
+}
+
+CacheConfig parse_cache(const toml::table& root) {
+    CacheConfig cfg;
+    const auto& c = require_table(root, "cache");
+    if (c.empty()) {
+        return cfg;
+    }
+    cfg.file = get_str(c, "file", cfg.file);
+
+    if (const auto& t = require_table(c, "instruments"); !t.empty()) {
+        cfg.instruments.enabled          = get_bool(t, "enabled", cfg.instruments.enabled);
         cfg.instruments.file             = get_str(t, "file", cfg.instruments.file);
         cfg.instruments.url              = get_str(t, "url", cfg.instruments.url);
         cfg.instruments.refresh_interval = std::chrono::seconds(
@@ -731,72 +385,73 @@ NodeConfig build_node_from_toml(const toml::table&                       root,
         cfg.instruments.initial_delay = std::chrono::seconds(
             get_int(t, "initial_delay_sec", cfg.instruments.initial_delay.count()));
     }
+
     bool kline_file_set = false;
-    bool tick_file_set  = false;
-    if (const auto& t = require_table(root, "kline_cache"); !t.empty()) {
-        cfg.kline_cache.enabled = get_bool(t, "enabled", true);
-        if (auto* file = t.get("file")) {
-            cfg.kline_cache.file = file->value<std::string>().value_or(cfg.kline_cache.file);
-            kline_file_set       = true;
+    if (const auto& t = require_table(c, "kline"); !t.empty()) {
+        cfg.kline.enabled = get_bool(t, "enabled", cfg.kline.enabled);
+        if (auto* file = t.get("file"); file != nullptr) {
+            cfg.kline.file = file->value<std::string>().value_or(cfg.kline.file);
+            kline_file_set = true;
         }
-        cfg.kline_cache.max_bars_per_series = static_cast<int>(std::max<int64_t>(
-            1, get_int(t, "max_bars_per_series", cfg.kline_cache.max_bars_per_series)));
-        cfg.kline_cache.flush_interval_ms   = static_cast<int>(std::max<int64_t>(
-            1, get_int(t, "flush_interval_ms", cfg.kline_cache.flush_interval_ms)));
-        cfg.kline_cache.max_pending_bars    = static_cast<std::size_t>(
-            std::max<int64_t>(1, get_int(t, "max_pending_bars", cfg.kline_cache.max_pending_bars)));
-        cfg.kline_cache.fresh_after_sec =
-            std::max<int64_t>(0, get_int(t, "fresh_after_sec", cfg.kline_cache.fresh_after_sec));
+        cfg.kline.max_bars_per_series = static_cast<int>(
+            std::max<int64_t>(1, get_int(t, "max_bars_per_series", cfg.kline.max_bars_per_series)));
+        cfg.kline.flush_interval_ms = static_cast<int>(
+            std::max<int64_t>(1, get_int(t, "flush_interval_ms", cfg.kline.flush_interval_ms)));
+        cfg.kline.max_pending_bars = static_cast<std::size_t>(
+            std::max<int64_t>(1, get_int(t, "max_pending_bars", cfg.kline.max_pending_bars)));
+        cfg.kline.fresh_after_sec =
+            std::max<int64_t>(0, get_int(t, "fresh_after_sec", cfg.kline.fresh_after_sec));
     }
-    if (const auto& t = require_table(root, "tick_cache"); !t.empty()) {
-        cfg.tick_cache.enabled = get_bool(t, "enabled", cfg.tick_cache.enabled);
-        if (auto* file = t.get("file")) {
-            cfg.tick_cache.file = file->value<std::string>().value_or(cfg.tick_cache.file);
-            tick_file_set       = true;
+
+    bool tick_file_set = false;
+    if (const auto& t = require_table(c, "tick"); !t.empty()) {
+        cfg.tick.enabled = get_bool(t, "enabled", cfg.tick.enabled);
+        if (auto* file = t.get("file"); file != nullptr) {
+            cfg.tick.file = file->value<std::string>().value_or(cfg.tick.file);
+            tick_file_set = true;
         }
-        cfg.tick_cache.max_ticks_per_series = static_cast<std::size_t>(std::max<int64_t>(
-            1, get_int(t, "max_ticks_per_series", cfg.tick_cache.max_ticks_per_series)));
-        cfg.tick_cache.flush_interval_ms    = static_cast<int>(std::max<int64_t>(
-            1, get_int(t, "flush_interval_ms", cfg.tick_cache.flush_interval_ms)));
-        cfg.tick_cache.max_pending_ticks    = static_cast<std::size_t>(std::max<int64_t>(
-            1, get_int(t, "max_pending_ticks", cfg.tick_cache.max_pending_ticks)));
+        cfg.tick.max_ticks_per_series = static_cast<std::size_t>(std::max<int64_t>(
+            1, get_int(t, "max_ticks_per_series", cfg.tick.max_ticks_per_series)));
+        cfg.tick.flush_interval_ms    = static_cast<int>(
+            std::max<int64_t>(1, get_int(t, "flush_interval_ms", cfg.tick.flush_interval_ms)));
+        cfg.tick.max_pending_ticks = static_cast<std::size_t>(
+            std::max<int64_t>(1, get_int(t, "max_pending_ticks", cfg.tick.max_pending_ticks)));
     }
-    if (const auto& m = require_table(root, "market_cache"); !m.empty()) {
-        cfg.market_cache_file = get_str(m, "file", cfg.market_cache_file);
-    }
+
     if (!kline_file_set) {
-        cfg.kline_cache.file = cfg.market_cache_file;
+        cfg.kline.file = cfg.file;
     }
     if (!tick_file_set) {
-        cfg.tick_cache.file = cfg.market_cache_file;
+        cfg.tick.file = cfg.file;
     }
-    if (const auto& c = require_table(root, "continuous"); !c.empty()) {
-        cfg.continuous.enabled = get_bool(c, "enabled", cfg.continuous.enabled);
-        cfg.continuous.url     = get_str(c, "url", cfg.continuous.url);
-        cfg.continuous.file    = get_str(c, "file", cfg.continuous.file);
+
+    if (const auto& t = require_table(c, "continuous"); !t.empty()) {
+        cfg.continuous.enabled = get_bool(t, "enabled", cfg.continuous.enabled);
+        cfg.continuous.url     = get_str(t, "url", cfg.continuous.url);
+        cfg.continuous.file    = get_str(t, "file", cfg.continuous.file);
         cfg.continuous.refresh_interval =
-            std::chrono::seconds(std::max<int64_t>(60, get_int(c, "refresh_interval_sec", 86400)));
+            std::chrono::seconds(std::max<int64_t>(60, get_int(t, "refresh_interval_sec", 86400)));
         cfg.continuous.initial_delay =
-            std::chrono::seconds(std::max<int64_t>(0, get_int(c, "initial_delay_sec", 1)));
+            std::chrono::seconds(std::max<int64_t>(0, get_int(t, "initial_delay_sec", 1)));
     }
-    if (const auto& a = require_table(root, "audit"); !a.empty()) {
-        cfg.audit.enabled   = get_bool(a, "enabled", cfg.audit.enabled);
-        cfg.audit.file      = get_str(a, "file", cfg.audit.file);
-        cfg.audit.max_bytes = static_cast<std::size_t>(
-            std::max<int64_t>(1024, get_int(a, "max_bytes", cfg.audit.max_bytes)));
-        cfg.audit.max_files = static_cast<std::size_t>(
-            std::max<int64_t>(1, get_int(a, "max_files", cfg.audit.max_files)));
-    }
-    cfg.tq_auth = parse_tq_auth(root);
-    cfg.runtime = parse_runtime(root);
     return cfg;
 }
 
-// 配置文件支持 [include].files = ["shared/tq.toml", ...]：
-// - 路径相对于当前文件；
-// - 后 include 覆盖先 include，入口文件最后覆盖所有 fragment；
-// - TOML table 递归合并，标量/数组替换；
-// - 禁止循环 include。
+audit::Options parse_audit(const toml::table& root) {
+    audit::Options cfg;
+    if (const auto& t = require_table(root, "audit"); !t.empty()) {
+        cfg.enabled   = get_bool(t, "enabled", cfg.enabled);
+        cfg.file      = get_str(t, "file", cfg.file);
+        cfg.max_bytes = static_cast<std::size_t>(
+            std::max<int64_t>(1024, get_int(t, "max_bytes", cfg.max_bytes)));
+        cfg.max_files =
+            static_cast<std::size_t>(std::max<int64_t>(1, get_int(t, "max_files", cfg.max_files)));
+    }
+    return cfg;
+}
+
+// ---------- include 合并 ----------
+
 void merge_toml_table(toml::table& dst, const toml::table& src) {
     for (auto&& [k, v] : src) {
         const auto key      = std::string(k.str());
@@ -929,8 +584,6 @@ std::filesystem::path config_entry_path(const std::string& path, std::string_vie
     return std::filesystem::path(path);
 }
 
-} // namespace
-
 config::ConfigResult<IpcConfig> resolve_ipc_group(const toml::table&           root,
                                                   const std::filesystem::path& base_dir,
                                                   std::string_view             key) noexcept {
@@ -950,7 +603,7 @@ config::ConfigResult<IpcConfig> resolve_ipc_group(const toml::table&           r
     if (base_dir.empty()) {
         return std::unexpected(config::ConfigError{
             config::ConfigErrorCode::invalid_value,
-            fmt::format("ipc group '{}' is not inline; load from a config directory", key),
+            fmt::format("ipc group '{}' is not inline; use load_gw_config/load_node_config", key),
         });
     }
 
@@ -977,127 +630,261 @@ config::ConfigResult<IpcConfig> resolve_ipc_group(const toml::table&           r
     return parse_ipc_config(group_table, key);
 }
 
-IpcConfig legacy_gw_ipc(const toml::table& root) {
-    const auto& listen = require_table(root, "listen");
-    const auto& ipc    = require_table(root, "ipc");
-    IpcConfig   cfg;
-    cfg.name              = get_str(ipc, "local_name", "tqsdk-gw");
-    cfg.transport         = parse_transport(get_str(listen, "transport", "uds"));
-    cfg.socket            = get_str(listen, "socket", cfg.socket);
-    cfg.tcp_host          = get_str(listen, "tcp_host", cfg.tcp_host);
-    cfg.tcp_port          = static_cast<uint16_t>(get_int(listen, "tcp_port", cfg.tcp_port));
-    cfg.encoding          = parse_encoding(get_str(ipc, "encoding", "json"));
-    cfg.handshake_timeout = std::chrono::milliseconds(
-        get_int(ipc, "handshake_timeout_ms", cfg.handshake_timeout.count()));
-    cfg.heartbeat_interval = std::chrono::milliseconds(
-        get_int(ipc, "heartbeat_interval_ms", cfg.heartbeat_interval.count()));
-    cfg.heartbeat_timeout = std::chrono::milliseconds(
-        get_int(ipc, "heartbeat_timeout_ms", cfg.heartbeat_timeout.count()));
-    return cfg;
-}
-
-NodeConfig::AccountEndpoint legacy_node_account(const toml::table& root) {
-    const auto& ipc = require_table(root, "ipc");
-    const auto& md  = require_table(root, "md");
-    const auto& td  = require_table(root, "td");
-
-    NodeConfig::AccountEndpoint ep;
-    ep.id            = get_str(root, "account_id", "default");
-    ep.ipc.name      = get_str(ipc, "local_name", ep.id);
-    ep.ipc.transport = parse_transport(get_str(ipc, "transport", "uds"));
-    ep.ipc.encoding  = parse_encoding(get_str(ipc, "encoding", "json"));
-    ep.ipc.socket =
-        !get_str(md, "socket", "").empty() ? get_str(md, "socket", "") : get_str(td, "socket", "");
-    ep.ipc.tcp_host = !get_str(md, "tcp_host", "").empty() ? get_str(md, "tcp_host", "")
-                                                           : get_str(td, "tcp_host", "");
-    ep.ipc.tcp_port = static_cast<uint16_t>(get_int(md, "tcp_port", get_int(td, "tcp_port", 0)));
-    ep.ipc.handshake_timeout = std::chrono::milliseconds(
-        get_int(ipc, "handshake_timeout_ms", ep.ipc.handshake_timeout.count()));
-    ep.ipc.heartbeat_interval = std::chrono::milliseconds(
-        get_int(ipc, "heartbeat_interval_ms", ep.ipc.heartbeat_interval.count()));
-    ep.ipc.heartbeat_timeout = std::chrono::milliseconds(
-        get_int(ipc, "heartbeat_timeout_ms", ep.ipc.heartbeat_timeout.count()));
-    return ep;
-}
-
 config::ConfigResult<IpcConfig>
 gateway_ipc_from_root(const toml::table& root, const std::filesystem::path& base_dir) noexcept {
     const auto& gateway = require_table(root, "gateway");
     const auto  key     = get_str(gateway, "ipc", "");
-    if (!key.empty()) {
-        return resolve_ipc_group(root, base_dir, key);
+    if (key.empty()) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::invalid_value,
+            "[gateway].ipc is required",
+        });
     }
-    return legacy_gw_ipc(root);
+    return resolve_ipc_group(root, base_dir, key);
 }
 
 config::ConfigResult<std::vector<NodeConfig::AccountEndpoint>>
 node_accounts_from_root(const toml::table& root, const std::filesystem::path& base_dir) noexcept {
     std::vector<NodeConfig::AccountEndpoint> accounts;
     std::set<std::string>                    ids;
-    if (auto* arr = root.get("accounts"); arr != nullptr && arr->is_array()) {
-        for (auto&& item : *arr->as_array()) {
-            const auto* t = item.as_table();
-            if (t == nullptr) {
-                continue;
-            }
-            NodeConfig::AccountEndpoint ep;
-            ep.id = get_str(*t, "id", "");
-            if (ep.id.empty()) {
-                return std::unexpected(config::ConfigError{
-                    config::ConfigErrorCode::invalid_value,
-                    "[[accounts]].id must not be empty",
-                });
-            }
-            if (!ids.insert(ep.id).second) {
-                return std::unexpected(config::ConfigError{
-                    config::ConfigErrorCode::invalid_value,
-                    fmt::format("duplicate account id '{}'", ep.id),
-                });
-            }
-
-            const auto ipc_key = get_str(*t, "ipc", "");
-            if (!ipc_key.empty()) {
-                auto group = resolve_ipc_group(root, base_dir, ipc_key);
-                if (!group) {
-                    return std::unexpected(std::move(group.error()));
-                }
-                ep.ipc = std::move(*group);
-            } else if (const auto old_port = get_int(*t, "gw_port", 0); old_port > 0) {
-                // 兼容旧 [[accounts]] gw_host/gw_port；新配置应使用 ipc key。
-                ep.ipc.name              = ep.id;
-                ep.ipc.transport         = IpcTransport::Tcp;
-                ep.ipc.tcp_host          = get_str(*t, "gw_host", "127.0.0.1");
-                ep.ipc.tcp_port          = static_cast<uint16_t>(old_port);
-                const auto& ipc          = require_table(root, "ipc");
-                ep.ipc.encoding          = parse_encoding(get_str(ipc, "encoding", "json"));
-                ep.ipc.handshake_timeout = std::chrono::milliseconds(
-                    get_int(ipc, "handshake_timeout_ms", ep.ipc.handshake_timeout.count()));
-                ep.ipc.heartbeat_interval = std::chrono::milliseconds(
-                    get_int(ipc, "heartbeat_interval_ms", ep.ipc.heartbeat_interval.count()));
-                ep.ipc.heartbeat_timeout = std::chrono::milliseconds(
-                    get_int(ipc, "heartbeat_timeout_ms", ep.ipc.heartbeat_timeout.count()));
-            } else {
-                return std::unexpected(config::ConfigError{
-                    config::ConfigErrorCode::invalid_value,
-                    fmt::format("[[accounts]] '{}' requires ipc key", ep.id),
-                });
-            }
-            accounts.push_back(std::move(ep));
-        }
+    const auto*                              arr = root.get("accounts");
+    if (arr == nullptr || !arr->is_array()) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::invalid_value,
+            "[[accounts]] is required",
+        });
     }
 
-    // 兼容旧单上游配置：没有 accounts 时从 [ipc]/[md]/[td] 构造默认账户。
-    if (accounts.empty()) {
-        const auto& md = require_table(root, "md");
-        const auto& td = require_table(root, "td");
-        if (get_str(md, "kind", "none") == "remote" || get_str(td, "kind", "none") == "remote") {
-            accounts.push_back(legacy_node_account(root));
+    for (auto&& item : *arr->as_array()) {
+        const auto* t = item.as_table();
+        if (t == nullptr) {
+            continue;
         }
+        NodeConfig::AccountEndpoint ep;
+        ep.id = get_str(*t, "id", "");
+        if (ep.id.empty()) {
+            return std::unexpected(config::ConfigError{
+                config::ConfigErrorCode::invalid_value,
+                "[[accounts]].id must not be empty",
+            });
+        }
+        if (!ids.insert(ep.id).second) {
+            return std::unexpected(config::ConfigError{
+                config::ConfigErrorCode::invalid_value,
+                fmt::format("duplicate account id '{}'", ep.id),
+            });
+        }
+        const auto ipc_key = get_str(*t, "ipc", "");
+        if (ipc_key.empty()) {
+            return std::unexpected(config::ConfigError{
+                config::ConfigErrorCode::invalid_value,
+                fmt::format("[[accounts]] '{}' requires ipc key", ep.id),
+            });
+        }
+        auto group = resolve_ipc_group(root, base_dir, ipc_key);
+        if (!group) {
+            return std::unexpected(std::move(group.error()));
+        }
+        ep.ipc = std::move(*group);
+        accounts.push_back(std::move(ep));
+    }
+
+    if (accounts.empty()) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::invalid_value,
+            "at least one [[accounts]] entry is required",
+        });
     }
     return accounts;
 }
 
-config::ConfigResult<GwConfig> parse_gw_config(std::string_view toml_text) noexcept {
+GatewayConfig build_gateway_config(toml::table root, IpcConfig ipc) {
+    GatewayConfig cfg;
+    cfg.engine.ipc = std::move(ipc);
+    cfg.engine.md  = parse_md(root);
+    cfg.engine.td  = parse_td(root);
+    cfg.engine.ctp = parse_ctp(root);
+    cfg.tq_auth    = parse_tq_auth(root);
+    cfg.runtime    = parse_runtime(root);
+
+    if (cfg.engine.td.kind == TdKind::Tq && cfg.engine.td.tq.broker_name.empty()) {
+        fail_parse(config::ConfigErrorCode::invalid_value,
+                   "[td.tq].broker_name is required when [td].kind = tq");
+    }
+    return cfg;
+}
+
+NodeConfig build_node_config(toml::table                              root,
+                             std::vector<NodeConfig::AccountEndpoint> accounts,
+                             std::string                              primary_account) {
+    NodeConfig cfg;
+    cfg.accounts        = std::move(accounts);
+    cfg.primary_account = std::move(primary_account);
+    if (cfg.primary_account.empty()) {
+        cfg.primary_account = cfg.accounts.front().id;
+    }
+
+    const auto primary = std::find_if(cfg.accounts.begin(), cfg.accounts.end(), [&](const auto& a) {
+        return a.id == cfg.primary_account;
+    });
+    if (primary == cfg.accounts.end()) {
+        fail_parse(config::ConfigErrorCode::invalid_value,
+                   fmt::format("primary_account '{}' not found", cfg.primary_account));
+    }
+
+    cfg.serve   = parse_serve(root);
+    cfg.cache   = parse_cache(root);
+    cfg.tq_auth = parse_tq_auth(root);
+    cfg.audit   = parse_audit(root);
+    cfg.runtime = parse_runtime(root);
+    return cfg;
+}
+
+// ---------- IPC channel ----------
+
+std::unique_ptr<ipc::IIpcChannel> connect_channel(asio::io_context& ctx, const IpcConfig& cfg) {
+    if (cfg.transport == IpcTransport::Uds) {
+        if (cfg.socket.empty()) {
+            fail_parse(config::ConfigErrorCode::invalid_value,
+                       "uds transport requires socket path");
+            return nullptr;
+        }
+        return ipc::UdsChannel::connect(ctx, cfg.socket);
+    }
+    if (cfg.tcp_host.empty() || cfg.tcp_port == 0) {
+        fail_parse(config::ConfigErrorCode::invalid_value, "tcp transport requires host and port");
+        return nullptr;
+    }
+    return ipc::TcpChannel::connect(ctx, cfg.tcp_host, cfg.tcp_port);
+}
+
+} // namespace
+
+EngineConfig make_remote_engine_config(const IpcConfig& ipc, std::string account_id) {
+    EngineConfig cfg;
+    cfg.ipc      = ipc;
+    cfg.ipc.name = fmt::format("node-{}", account_id.empty() ? "default" : std::move(account_id));
+    cfg.md.kind  = MdKind::Remote;
+    cfg.td.kind  = TdKind::Remote;
+    return cfg;
+}
+
+asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>
+make_tqapi(asio::io_context&           ctx,
+           const EngineConfig&         cfg,
+           asio::any_io_executor       core_ex,
+           std::shared_ptr<KlineStore> kline_store) noexcept {
+    auto ex = core_ex ? std::move(core_ex) : asio::any_io_executor(ctx.get_executor());
+
+    const bool need_md_remote = cfg.md.kind == MdKind::Remote;
+    const bool need_td_remote = cfg.td.kind == TdKind::Remote;
+
+    std::shared_ptr<ipc::IpcClient> client;
+    if (need_md_remote || need_td_remote) {
+        ipc::IpcSession::Options opts;
+        opts.local_role         = ipc::IpcRole::Node;
+        opts.local_name         = cfg.ipc.name;
+        opts.handshake_timeout  = cfg.ipc.handshake_timeout;
+        opts.heartbeat_interval = cfg.ipc.heartbeat_interval;
+        opts.heartbeat_timeout  = cfg.ipc.heartbeat_timeout;
+        opts.encoding           = cfg.ipc.encoding;
+
+        auto endpoint        = cfg.ipc;
+        auto session_factory = [&ctx, ex, endpoint, opts]()
+            -> asio::awaitable<ipc::IpcResult<std::unique_ptr<ipc::IpcSession>>> {
+            auto channel = connect_channel(ctx, endpoint);
+            if (!channel) {
+                co_return std::unexpected(
+                    ipc::IpcFailure{ipc::IpcErrorCode::connect, "cannot create IPC channel"});
+            }
+            auto session = std::make_unique<ipc::IpcSession>(std::move(channel), ex, opts);
+            auto started = co_await session->start();
+            if (!started) {
+                co_return std::unexpected(started.error());
+            }
+            co_return session;
+        };
+
+        client              = std::make_shared<ipc::IpcClient>(session_factory, ex);
+        auto connect_result = co_await client->connect();
+        if (!connect_result) {
+            co_return std::unexpected(gateway::GatewayError{
+                gateway::GatewayErrorCode::connect,
+                fmt::format("{} ({})",
+                            connect_result.error().detail,
+                            ipc::ipc_error_name(connect_result.error().code)),
+            });
+        }
+    }
+
+    std::unique_ptr<MarketDataGateway> md;
+    switch (cfg.md.kind) {
+    case MdKind::None:
+    case MdKind::Mock:
+    case MdKind::Ctp:
+        md = nullptr;
+        break;
+    case MdKind::Tq:
+        md = std::make_unique<TqMdGateway>(ex, cfg.md.tq.host, cfg.md.tq.port, cfg.md.tq.path);
+        break;
+    case MdKind::Remote:
+        md = std::make_unique<ipc::RemoteMdGateway>(client, ex);
+        break;
+    }
+
+    std::unique_ptr<TradingGateway> td;
+    switch (cfg.td.kind) {
+    case TdKind::None:
+    case TdKind::Mock:
+    case TdKind::Ctp:
+    case TdKind::Tq:
+        td = nullptr;
+        break;
+    case TdKind::Sim: {
+        auto sim = std::make_unique<SimTdGateway>(ex, cfg.td.sim.initial_balance);
+        for (const auto& seed : cfg.td.sim.specs) {
+            ContractSpec spec;
+            spec.volume_multiple    = seed.volume_multiple;
+            spec.price_tick         = seed.price_tick;
+            spec.margin_rate        = seed.margin_rate;
+            spec.commission_rate    = seed.commission_rate;
+            spec.commission_per_lot = seed.commission_per_lot;
+            sim->set_contract_spec(seed.symbol, spec);
+        }
+        for (const auto& [symbol, price] : cfg.td.sim.last_prices) {
+            sim->on_tick(symbol, price);
+        }
+        td = std::move(sim);
+        break;
+    }
+    case TdKind::Remote:
+        td = std::make_unique<ipc::RemoteTdGateway>(
+            client, ex, cfg.td.ack_timeout, cfg.td.shfe_market_as_limit);
+        break;
+    }
+
+    if (client) {
+        client->start();
+    }
+
+    auto api = std::make_unique<TqApi>(ex, std::move(md), std::move(td), std::move(kline_store));
+    if (client) {
+        auto c = client;
+        api->add_close_hook([c]() { c->stop(); });
+    }
+    api->start();
+    co_return api;
+}
+
+asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>
+try_make_tqapi(asio::io_context&           ctx,
+               const EngineConfig&         cfg,
+               asio::any_io_executor       core_ex,
+               std::shared_ptr<KlineStore> kline_store) noexcept {
+    co_return co_await make_tqapi(ctx, cfg, std::move(core_ex), std::move(kline_store));
+}
+
+config::ConfigResult<GatewayConfig> parse_gw_config(std::string_view toml_text) noexcept {
     toml::table      root;
     ConfigParseState state;
     ParseGuard       guard(state);
@@ -1118,7 +905,7 @@ config::ConfigResult<GwConfig> parse_gw_config(std::string_view toml_text) noexc
     if (!ipc) {
         return std::unexpected(std::move(ipc.error()));
     }
-    auto cfg = build_gw_from_toml(std::move(root), std::move(*ipc));
+    auto cfg = build_gateway_config(std::move(root), std::move(*ipc));
     if (state.failed) {
         return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
     }
@@ -1147,14 +934,14 @@ config::ConfigResult<NodeConfig> parse_node_config(std::string_view toml_text) n
         return std::unexpected(std::move(accounts.error()));
     }
     auto primary = get_str(root, "primary_account", "");
-    auto cfg     = build_node_from_toml(std::move(root), std::move(*accounts), std::move(primary));
+    auto cfg     = build_node_config(std::move(root), std::move(*accounts), std::move(primary));
     if (state.failed) {
         return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
     }
     return cfg;
 }
 
-config::ConfigResult<GwConfig> load_gw_config(const std::string& path) noexcept {
+config::ConfigResult<GatewayConfig> load_gw_config(const std::string& path) noexcept {
     const auto            entry = config_entry_path(path, "gw.toml");
     std::set<std::string> stack;
     auto                  root = load_toml_with_includes(entry, stack, 0);
@@ -1168,27 +955,11 @@ config::ConfigResult<GwConfig> load_gw_config(const std::string& path) noexcept 
     if (!ipc) {
         return std::unexpected(std::move(ipc.error()));
     }
-    auto cfg = build_gw_from_toml(std::move(*root), std::move(*ipc));
+    auto cfg = build_gateway_config(std::move(*root), std::move(*ipc));
     if (state.failed) {
         return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
     }
     return cfg;
-}
-
-config::ConfigResult<GwConfig> try_parse_gw_config(std::string_view toml_text) noexcept {
-    try {
-        return parse_gw_config(toml_text);
-    } catch (const std::exception& e) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::parse,
-            fmt::format("gw config parse: {}", e.what()),
-        });
-    } catch (...) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::unknown,
-            "gw config parse: unknown error",
-        });
-    }
 }
 
 config::ConfigResult<NodeConfig> load_node_config(const std::string& path) noexcept {
@@ -1206,11 +977,27 @@ config::ConfigResult<NodeConfig> load_node_config(const std::string& path) noexc
         return std::unexpected(std::move(accounts.error()));
     }
     auto primary = get_str(*root, "primary_account", "");
-    auto cfg     = build_node_from_toml(std::move(*root), std::move(*accounts), std::move(primary));
+    auto cfg     = build_node_config(std::move(*root), std::move(*accounts), std::move(primary));
     if (state.failed) {
         return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
     }
     return cfg;
+}
+
+config::ConfigResult<GatewayConfig> try_parse_gw_config(std::string_view toml_text) noexcept {
+    try {
+        return parse_gw_config(toml_text);
+    } catch (const std::exception& e) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::parse,
+            fmt::format("gw config parse: {}", e.what()),
+        });
+    } catch (...) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            "gw config parse: unknown error",
+        });
+    }
 }
 
 config::ConfigResult<NodeConfig> try_parse_node_config(std::string_view toml_text) noexcept {

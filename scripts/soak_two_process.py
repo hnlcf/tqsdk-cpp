@@ -86,33 +86,33 @@ def make_configs(tmp: Path, gw_port: int, node_port: int) -> tuple[Path, Path]:
     gw = tmp / "gw.toml"
     gw.write_text(
         f"""
-[listen]
+[gateway]
+ipc = "gw-soak"
+
+[ipc.gw-soak]
+name = "gw-soak"
 transport = "tcp"
 tcp_host = "127.0.0.1"
 tcp_port = {gw_port}
-
-[ipc]
 encoding = "json"
 handshake_timeout_ms = 5000
 heartbeat_interval_ms = 1000
 heartbeat_timeout_ms = 5000
-local_name = "gw-soak"
 
 [md]
 kind = "none"
 
 [td]
 kind = "sim"
+[td.sim]
 initial_balance = 1000000000.0
-
-[td.specs."SHFE.rb2610"]
+[td.sim.specs."SHFE.rb2610"]
 volume_multiple = 10.0
 price_tick = 1.0
 margin_rate = 0.1
 commission_rate = 0.0
 commission_per_lot = 2.0
-
-[td.last_prices]
+[td.sim.last_prices]
 "SHFE.rb2610" = 3800.0
 
 [runtime]
@@ -125,24 +125,21 @@ threads = 4
     node = tmp / "node.toml"
     node.write_text(
         f"""
-[ipc]
+primary_account = "default"
+
+[[accounts]]
+id = "default"
+ipc = "gw-soak"
+
+[ipc.gw-soak]
+name = "node-soak"
 transport = "tcp"
+tcp_host = "127.0.0.1"
+tcp_port = {gw_port}
 encoding = "json"
 handshake_timeout_ms = 5000
 heartbeat_interval_ms = 1000
 heartbeat_timeout_ms = 5000
-local_name = "node-soak"
-
-# TD-only soak: the gateway has no market-data kind. Do not create a remote
-# MD gateway with no upstream, otherwise /readyz is permanently false.
-[md]
-kind = "none"
-
-[td]
-kind = "remote"
-tcp_host = "127.0.0.1"
-tcp_port = {gw_port}
-ack_timeout_ms = 5000
 
 [serve]
 bind = "127.0.0.1"

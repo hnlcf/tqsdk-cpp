@@ -83,7 +83,8 @@ $EDITOR config/live.local.env
 ./build-ui/tqsdk-node -c config
 ```
 
-配置布局和 include 规则见 [docs/CONFIG.md](docs/CONFIG.md)。
+配置模型集中在 `include/tqsdk/config/model.h`；布局、IPC 组和 include 规则见
+[docs/CONFIG.md](docs/CONFIG.md)。
 
 只启动 gw/node：
 
@@ -168,7 +169,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/FLOWS.md](docs/FLOWS.md) — 行情/交易/订阅/重连信息流
 - [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) — 进程、订单、连接状态机
 - [docs/PROTOCOLS.md](docs/PROTOCOLS.md) — IPC/REST/WS 协议
-- [docs/CONFIG.md](docs/CONFIG.md) — 配置目录、IPC 组、include 和共享配置
+- [docs/CONFIG.md](docs/CONFIG.md) — 配置模型、IPC 组、serve/cache 和 include
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — 构建、运行、验收、诊断
 
 常用专题：
@@ -188,7 +189,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 ## 当前状态
 
 - 最新 Release：`v0.4.0`（错误处理重构、C++23 GCC 14 构建、12 个 assets）；
-- `ctest`：387/387（2 项 TqMdNetwork 网络测试按环境跳过）；
+- `ctest`：370/370（2 项 TqMdNetwork 网络测试按环境跳过）；
 - Python：21/21；Web typecheck/test/build 和 Playwright E2E 通过；
 - 本地 Clang 23 与 GCC 16.2.1 构建通过；
 - 错误处理：公共 API 使用 expected/noexcept，详见 [docs/ERROR_HANDLING.md](docs/ERROR_HANDLING.md)；

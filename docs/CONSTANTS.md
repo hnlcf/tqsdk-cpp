@@ -33,8 +33,8 @@
 TickSeries series("SHFE.rb2701", tqsdk::constants::kDefaultTickCapacity);
 ```
 
-配置中的 `[market_cache].file` 优先决定 SQLite 文件；只有显式设置
-`[kline_cache].file` / `[tick_cache].file` 时才覆盖共享文件。
+配置中的 `[cache].file` 优先决定 SQLite 文件；只有显式设置
+`[cache.kline].file` / `[cache.tick].file` 时才覆盖共享文件。
 
 ## 4. 边界
 

@@ -104,6 +104,8 @@ TQSDK_RPMBUILD=/path/to/rpmbuild ./scripts/package_release.sh --formats rpm
 /usr/share/doc/tqsdk/
 /etc/tqsdk/gw.toml.example
 /etc/tqsdk/node.toml.example
+/etc/tqsdk/ipc/*.toml
+/etc/tqsdk/shared/*.toml
 /etc/tqsdk/tqsdk.env.example
 ```
 

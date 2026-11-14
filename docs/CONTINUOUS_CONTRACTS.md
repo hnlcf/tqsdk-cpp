@@ -34,7 +34,7 @@ https://files.shinnytech.com/continuous_table.json
 配置：
 
 ```toml
-[continuous]
+[cache.continuous]
 enabled = true
 url = "https://files.shinnytech.com/continuous_table.json"
 file = "continuous_table.json"

@@ -322,6 +322,13 @@ TEST(WsStream, AppLevelPingPong) {
 // [serve.ws] 配置解析。
 TEST(WsStreamConfig, ParseServeWsSection) {
     auto cfg = parse_node_config(R"(
+        [[accounts]]
+        id = "default"
+        ipc = "gw-a"
+        [ipc.gw-a]
+        transport = "tcp"
+        tcp_host = "127.0.0.1"
+        tcp_port = 19001
         [serve]
         bind = "0.0.0.0"
         port = 9000
@@ -335,13 +342,13 @@ TEST(WsStreamConfig, ParseServeWsSection) {
     )")
                    .value();
 
-    EXPECT_EQ(cfg.serve_bind, "0.0.0.0");
-    EXPECT_EQ(cfg.serve_port, 9000);
-    EXPECT_EQ(cfg.ws.path, "/ws");
-    EXPECT_EQ(cfg.ws.heartbeat_interval, std::chrono::milliseconds(1500));
-    EXPECT_EQ(cfg.ws.max_clients, 7u);
-    EXPECT_EQ(cfg.ws.max_queue, 9u);
-    EXPECT_EQ(cfg.ws.coalesce, std::chrono::milliseconds(12));
+    EXPECT_EQ(cfg.serve.bind, "0.0.0.0");
+    EXPECT_EQ(cfg.serve.port, 9000);
+    EXPECT_EQ(cfg.serve.ws.path, "/ws");
+    EXPECT_EQ(cfg.serve.ws.heartbeat_interval, std::chrono::milliseconds(1500));
+    EXPECT_EQ(cfg.serve.ws.max_clients, 7u);
+    EXPECT_EQ(cfg.serve.ws.max_queue, 9u);
+    EXPECT_EQ(cfg.serve.ws.coalesce, std::chrono::milliseconds(12));
 }
 
 // 只发 symbols 不带 topics 时，服务端不应默认推送 account/orders/trades/positions。

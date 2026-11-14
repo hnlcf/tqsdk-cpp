@@ -1,13 +1,13 @@
 # Shared SimTd seed settings (gw only).
-[td]
+[td.sim]
 initial_balance = 1000000.0
 
-[td.specs."SHFE.rb2610"]
+[td.sim.specs."SHFE.rb2610"]
 volume_multiple = 10.0   # 每点 10 元
 price_tick = 1.0
 margin_rate = 0.1        # 10% 保证金
 commission_rate = 0.0
 commission_per_lot = 2.0 # 每手 2 元
 
-[td.last_prices]
+[td.sim.last_prices]
 "SHFE.rb2610" = 3800.0

@@ -8,7 +8,7 @@
 
 ```text
 gw_main
-  ├─ 解析 GwConfig
+  ├─ 解析 GatewayConfig
   ├─ 创建真实 MD/TD 网关
   ├─ 启动 CTP TaskQueue / Tq MD
   ├─ listen IPC TCP/UDS

@@ -204,10 +204,10 @@ util/http_download.*              低频同步 HTTP(S) GET
 
 `src/config/tqapi_factory.cpp`：
 
-- TOML -> `TqApiConfig` / `GwConfig` / `NodeConfig`；
-- 选择网关 kind；
-- 构造本地或远程 TqApi；
-- CTP 参数、serve、instruments、kline cache、ws。
+- `include/tqsdk/config/model.h` 集中定义 `IpcConfig` / `EngineConfig` /
+  `GatewayConfig` / `NodeConfig` / `ServeConfig` / `CacheConfig`；
+- `tqapi_factory` 负责 TOML 解析、include 合并、IPC 组解析；
+- 选择网关 kind 并构造本地/远程 TqApi。
 
 配置文件入口：
 

@@ -4,7 +4,8 @@
 #   ./build-ui/tqsdk-gw -c config
 # 入口通过 gateway.ipc 选择一个 IPC 组（config/ipc/<key>.toml）。
 # 共享网关配置：
-#   shared/tq.toml    TQ MD 默认地址、TqAuth、TQ TD 账户
+#   shared/tq.toml    TqAuth、TQ TD 账户
+#   shared/tq_md.toml TQ MD 默认地址
 #   shared/ctp.toml   CTP 前置和账户
 #   shared/sim.toml   SimTd 规格/初始价格
 #
@@ -18,11 +19,12 @@ ipc = "gw-a"
 [include]
 files = [
     "shared/tq.toml",
+    "shared/tq_md.toml",
     "shared/ctp.toml",
     "shared/sim.toml",
 ]
 
-# TQ MD 默认地址来自 shared/tq.toml；这里只选择 kind。
+# TQ MD 默认地址来自 shared/tq_md.toml；这里只选择 kind。
 [md]
 kind = "tq"
 
