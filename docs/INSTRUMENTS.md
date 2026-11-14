@@ -11,9 +11,9 @@
 > - `https://openmd.shinnytech.com/t/md/symbols/latest.json`（约 350MB，
 >   含历史合约/更完整的字段）
 >
-> 文件均不入库；由 node 在本地加载，空闲时下载更新。带 `[tq_auth]`
-> 配置时，HTTP 下载会携带 `Authorization: Bearer <access_token>`；详见
-> [TQ_AUTH.md](TQ_AUTH.md)。
+> 文件均不入库；由 node 在本地加载，空闲时下载更新。TqAuth 由 gw 持有，
+> node 通过 IPC auth service 取得只读快照；下载时携带 `Authorization: Bearer
+> <access_token>`。详见 [TQ_AUTH.md](TQ_AUTH.md)。
 
 ## 1. 目录格式
 

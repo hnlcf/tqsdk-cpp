@@ -6,7 +6,6 @@
 # IPC 组文件在 config/ipc/<key>.toml，包含 transport/endpoint/超时/name。
 [include]
 files = [
-    "shared/tq.toml",
     "shared/cache.toml",
 ]
 

@@ -37,8 +37,9 @@ token 的 `exp` 从 JWT payload 读取，不校验签名；读取失败时使用
 
 ## 3. 配置
 
-目录式配置中放在 `config/shared/tq.toml`（由 `config/node.toml` /
-`config/gw.toml` 的 `[include]` 引入）：
+目录式配置中放在 `config/shared/tq.toml`，只由 `config/gw.toml` include。
+node 配置不再包含 `[tq_auth]`；如果出现该 section，配置加载会报
+`invalid_value`。
 
 ```toml
 [tq_auth]
@@ -62,20 +63,26 @@ TQ_AUTH_PASSWORD=your_tq_password
 TQ_AUTH_URL=https://auth.shinnytech.com
 ```
 
-`run_live.sh` 会把这些值写入 `run/live/node.toml`（`run/` 已被 `.gitignore` 忽略）。
+`run_live.sh` 会把这些值写入 `run/live/gw.toml`（`run/` 已被 `.gitignore` 忽略）。
 
 ## 4. 使用位置
 
-`tqsdk-node` 启动时：
+`tqsdk-gw` 启动时：
 
 1. 读取 `[tq_auth]`；
-2. 调用 `TqAuth::login()`；
-3. 把 `TqAuth` 注入 `InstrumentCatalog`；
-4. 后台下载合约目录时自动附加：
-   - `Authorization: Bearer ...`；
-   - `User-Agent: tqsdk-cpp/<version>`。
+2. 创建唯一 `TqAuth` 并登录；
+3. 把 `TqAuthService` 注册到 `GatewayHost`；
+4. 真实 MD/TD 直接复用该认证。
 
-登录失败不会阻止行情/交易进程启动；目录刷新会继续尝试，并在日志中记录原因。
+`tqsdk-node` 启动时：
+
+1. 通过 IPC 调用 `auth::snapshot`；
+2. `RemoteAuthService` 缓存只读快照；
+3. `InstrumentCatalog` 只依赖 `AuthTokenSource` 接口；
+4. 下载合约目录时附加 `Authorization` 和 `User-Agent`。
+
+node 不接触账号密码，也不创建 TqAuth。登录失败不会阻止行情/交易进程启动；
+auth service 会持续提供 `last_error`，目录刷新继续尝试。
 
 ## 5. 与官方 auth.py 对齐的能力
 
@@ -184,9 +191,10 @@ include/tqsdk/constants.h  kTqBrokerUrlPrefix
 ## 8. 安全
 
 - 账号密码不得提交到仓库；
-- `run/live/node.toml`、`config/live.local.env` 不进入版本控制；
+- 账号密码只存在于 gw 的 TqAuth；node 不解析、不持有；
+- `run/live/gw.toml`、`config/live.local.env` 不进入版本控制；
 - 日志不打印密码和 token；
-- 当前 access token 只保存在 node 进程内存；
+- access token 保存在 gw 内存，并通过本机 IPC 以只读快照形式提供给 node；
 - 建议下一步将 token 缓存加密到本机，并支持只读 token 文件。
 
 ## 9. 验证
@@ -199,6 +207,8 @@ ctest --test-dir build-ui -R TqAuth --output-on-failure
 
 - base64url JWT payload 解码；
 - 未启用认证不生成 Bearer header；
-- `[tq_auth]` TOML 解析。
+- `[tq_auth]` TOML 解析；
+- `GatewayIpcServerTest.RoutesAuthServiceSnapshot`：node 通过 IPC 取 auth 快照；
+- `Protocol.ServiceRequestResponseRoundtrip`：ServiceRequest/Response 编解码。
 
 真实登录需要有效的快期账号，不能使用 mock 代替。

@@ -355,3 +355,31 @@ TEST(ProtocolCodec, EncodeFrameHelper) {
 } // namespace
 } // namespace ipc
 } // namespace tqsdk
+
+TEST(Protocol, ServiceRequestResponseRoundtrip) {
+    tqsdk::ipc::ServiceRequest req;
+    req.rid                         = 42;
+    req.service                     = "auth";
+    req.method                      = "snapshot";
+    req.params                      = nlohmann::json{{"account_id", "A"}};
+    auto                      bytes = tqsdk::ipc::encode_body(req);
+    tqsdk::ipc::ReceivedFrame frame{
+        tqsdk::ipc::FrameType::ServiceRequest, tqsdk::ipc::FrameEncoding::Json, bytes};
+    const auto decoded = tqsdk::ipc::decode_as<tqsdk::ipc::FrameType::ServiceRequest>(frame);
+    EXPECT_EQ(decoded.rid, 42u);
+    EXPECT_EQ(decoded.service, "auth");
+    EXPECT_EQ(decoded.method, "snapshot");
+    EXPECT_EQ(decoded.params.at("account_id"), "A");
+
+    tqsdk::ipc::ServiceResponse resp;
+    resp.rid                         = 42;
+    resp.ok                          = false;
+    resp.error                       = "denied";
+    auto                      rbytes = tqsdk::ipc::encode_body(resp);
+    tqsdk::ipc::ReceivedFrame rframe{
+        tqsdk::ipc::FrameType::ServiceResponse, tqsdk::ipc::FrameEncoding::Json, rbytes};
+    const auto rdecoded = tqsdk::ipc::decode_as<tqsdk::ipc::FrameType::ServiceResponse>(rframe);
+    EXPECT_EQ(rdecoded.rid, 42u);
+    EXPECT_FALSE(rdecoded.ok);
+    EXPECT_EQ(rdecoded.error, "denied");
+}

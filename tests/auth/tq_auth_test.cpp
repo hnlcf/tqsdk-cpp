@@ -27,15 +27,18 @@ TEST(TqAuth, SupportsModeAndUrlServiceWithoutLogin) {
     EXPECT_FALSE(auth.add_account("account"));
 }
 
-TEST(TqAuth, ParsesNodeAuthConfig) {
-    const auto cfg = parse_node_config(R"(
-[[accounts]]
-id = "default"
+TEST(TqAuth, ParsesGatewayAuthConfig) {
+    const auto cfg = parse_gw_config(R"(
+[gateway]
 ipc = "gw-a"
 [ipc.gw-a]
 transport = "tcp"
 tcp_host = "127.0.0.1"
 tcp_port = 19001
+[md]
+kind = "none"
+[td]
+kind = "none"
 [tq_auth]
 enabled = true
 user_name = "tq_user"

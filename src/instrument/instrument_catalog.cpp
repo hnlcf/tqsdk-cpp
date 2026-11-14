@@ -1,6 +1,6 @@
 #include "tqsdk/instrument/instrument_catalog.h"
 
-#include "tqsdk/auth/tq_auth.h"
+#include "tqsdk/auth/auth_token_source.h"
 
 #include "tqsdk/util/http_download.h"
 #include "tqsdk/util/json_value.h"
@@ -22,7 +22,7 @@ std::string lower_ascii(std::string value) {
 
 } // namespace
 
-InstrumentCatalog::InstrumentCatalog(Config cfg, std::shared_ptr<TqAuth> auth)
+InstrumentCatalog::InstrumentCatalog(Config cfg, std::shared_ptr<AuthTokenSource> auth)
     : cfg_(std::move(cfg)),
       auth_(std::move(auth)) {}
 

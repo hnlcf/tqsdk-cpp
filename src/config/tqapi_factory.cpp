@@ -724,6 +724,11 @@ NodeConfig build_node_config(toml::table                              root,
         cfg.primary_account = cfg.accounts.front().id;
     }
 
+    if (root.contains("tq_auth")) {
+        fail_parse(config::ConfigErrorCode::invalid_value,
+                   "node config no longer accepts [tq_auth]; configure it in gw");
+    }
+
     const auto primary = std::find_if(cfg.accounts.begin(), cfg.accounts.end(), [&](const auto& a) {
         return a.id == cfg.primary_account;
     });
@@ -734,7 +739,6 @@ NodeConfig build_node_config(toml::table                              root,
 
     cfg.serve   = parse_serve(root);
     cfg.cache   = parse_cache(root);
-    cfg.tq_auth = parse_tq_auth(root);
     cfg.audit   = parse_audit(root);
     cfg.runtime = parse_runtime(root);
     return cfg;
@@ -769,11 +773,14 @@ EngineConfig make_remote_engine_config(const IpcConfig& ipc, std::string account
     return cfg;
 }
 
-asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>
-make_tqapi(asio::io_context&           ctx,
-           const EngineConfig&         cfg,
-           asio::any_io_executor       core_ex,
-           std::shared_ptr<KlineStore> kline_store) noexcept {
+namespace {
+
+asio::awaitable<gateway::GatewayResult<EngineRuntime>>
+make_engine_runtime_impl(asio::io_context&           ctx,
+                         const EngineConfig&         cfg,
+                         asio::any_io_executor       core_ex,
+                         std::shared_ptr<KlineStore> kline_store,
+                         bool                        expose_auth) noexcept {
     auto ex = core_ex ? std::move(core_ex) : asio::any_io_executor(ctx.get_executor());
 
     const bool need_md_remote = cfg.md.kind == MdKind::Remote;
@@ -867,13 +874,41 @@ make_tqapi(asio::io_context&           ctx,
         client->start();
     }
 
-    auto api = std::make_unique<TqApi>(ex, std::move(md), std::move(td), std::move(kline_store));
+    EngineRuntime runtime;
+    runtime.api = std::make_unique<TqApi>(ex, std::move(md), std::move(td), std::move(kline_store));
     if (client) {
         auto c = client;
-        api->add_close_hook([c]() { c->stop(); });
+        runtime.api->add_close_hook([c]() { c->stop(); });
+        if (expose_auth) {
+            runtime.auth = std::make_shared<auth::RemoteAuthService>(client, ex);
+        }
     }
-    api->start();
-    co_return api;
+    runtime.api->start();
+    co_return runtime;
+}
+
+} // namespace
+
+asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>
+make_tqapi(asio::io_context&           ctx,
+           const EngineConfig&         cfg,
+           asio::any_io_executor       core_ex,
+           std::shared_ptr<KlineStore> kline_store) noexcept {
+    auto result = co_await make_engine_runtime_impl(
+        ctx, cfg, std::move(core_ex), std::move(kline_store), false);
+    if (!result) {
+        co_return std::unexpected(std::move(result.error()));
+    }
+    co_return std::move(result->api);
+}
+
+asio::awaitable<gateway::GatewayResult<EngineRuntime>>
+make_engine_runtime(asio::io_context&           ctx,
+                    const EngineConfig&         cfg,
+                    asio::any_io_executor       core_ex,
+                    std::shared_ptr<KlineStore> kline_store) noexcept {
+    co_return co_await make_engine_runtime_impl(
+        ctx, cfg, std::move(core_ex), std::move(kline_store), true);
 }
 
 asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>

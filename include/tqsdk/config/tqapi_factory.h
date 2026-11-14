@@ -2,6 +2,7 @@
 
 #include "tqsdk/pch.h"
 
+#include "tqsdk/auth/remote_auth_service.h"
 #include "tqsdk/config/config_error.h"
 #include "tqsdk/config/model.h"
 #include "tqsdk/gateway/gateway_error.h"
@@ -11,6 +12,12 @@ namespace tqsdk {
 
 /// 用一组 IPC 端点构造 node 侧 Remote 引擎配置。
 EngineConfig make_remote_engine_config(const IpcConfig& ipc, std::string account_id);
+
+/// 远程引擎 + 同一条 IPC 上的附属服务。
+struct EngineRuntime {
+    std::unique_ptr<TqApi>                   api;
+    std::shared_ptr<auth::RemoteAuthService> auth;
+};
 
 /// 依据运行时引擎配置构造一个 TqApi。
 ///
@@ -30,6 +37,14 @@ try_make_tqapi(asio::io_context&           ctx,
                const EngineConfig&         cfg,
                asio::any_io_executor       core_ex     = {},
                std::shared_ptr<KlineStore> kline_store = nullptr) noexcept;
+
+/// 与 make_tqapi 相同，但额外返回共享 IPC 上的 RemoteAuthService。
+/// node 用它读取 GatewayHost 的 TqAuth 快照，不需要持有 TqAuth。
+asio::awaitable<gateway::GatewayResult<EngineRuntime>>
+make_engine_runtime(asio::io_context&           ctx,
+                    const EngineConfig&         cfg,
+                    asio::any_io_executor       core_ex     = {},
+                    std::shared_ptr<KlineStore> kline_store = nullptr) noexcept;
 
 /// 解析 gw 配置（TOML 文本；IPC 组需内联在 [ipc.<key>]）。
 config::ConfigResult<GatewayConfig> parse_gw_config(std::string_view toml_text) noexcept;

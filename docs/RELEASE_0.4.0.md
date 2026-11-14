@@ -63,7 +63,7 @@ auto api = std::move(*result);
 
 ## 验证
 
-- CTest：发布时 365/365（2 项网络测试按环境跳过）；当前分支为 370/370
+- CTest：发布时 365/365（2 项网络测试按环境跳过）；当前分支为 373/373
 - Python tests：21/21
 - GCC 本地构建：通过
 - `tqsdk-node --help`：0

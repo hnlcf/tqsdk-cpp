@@ -320,6 +320,78 @@ asio::awaitable<IpcResult<CommandAck>> IpcClient::send_command_and_wait(
     }
 }
 
+asio::awaitable<IpcResult<ServiceResponse>>
+IpcClient::request_service(const ServiceRequest&     request,
+                           std::chrono::milliseconds timeout) noexcept {
+    try {
+        if (!session_ || !session_->is_open()) {
+            co_return std::unexpected(
+                IpcFailure{IpcErrorCode::closed, "IpcClient::request_service: session closed"});
+        }
+
+        ServiceRequest body = request;
+        if (body.rid == 0) {
+            body.rid = next_service_rid_++;
+        }
+        const auto rid = body.rid;
+
+        ServiceWaiter waiter(ex_);
+        {
+            std::lock_guard<std::mutex> lk(ack_mutex_);
+            pending_services_[rid] = &waiter;
+        }
+        struct EraseGuard {
+            std::unordered_map<uint64_t, ServiceWaiter*>& m;
+            std::mutex&                                   mu;
+            uint64_t                                      rid;
+            ~EraseGuard() {
+                std::lock_guard<std::mutex> lk(mu);
+                m.erase(rid);
+            }
+        } guard{pending_services_, ack_mutex_, rid};
+
+        auto bytes = encode_body(body, encoding_);
+        auto sent  = co_await send_bytes(FrameType::ServiceRequest, bytes);
+        if (!sent) {
+            co_return std::unexpected(sent.error());
+        }
+
+        waiter.timer.expires_after(timeout);
+        boost::system::error_code ec;
+        co_await waiter.timer.async_wait(asio::redirect_error(asio::use_awaitable, ec));
+        if (waiter.result.has_value()) {
+            co_return *waiter.result;
+        }
+        if (ec == asio::error::operation_aborted) {
+            co_return std::unexpected(
+                IpcFailure{IpcErrorCode::closed,
+                           "IpcClient::request_service: session closed while waiting response"});
+        }
+        co_return std::unexpected(
+            IpcFailure{IpcErrorCode::timeout, "IpcClient::request_service: response timeout"});
+    } catch (const std::exception& e) {
+        co_return std::unexpected(IpcFailure{
+            IpcErrorCode::protocol,
+            fmt::format("IpcClient::request_service failed: {}", e.what()),
+        });
+    } catch (...) {
+        co_return std::unexpected(IpcFailure{
+            IpcErrorCode::unknown,
+            "IpcClient::request_service failed: unknown error",
+        });
+    }
+}
+
+void IpcClient::complete_service(const ServiceResponse& response) noexcept {
+    std::lock_guard<std::mutex> lk(ack_mutex_);
+    auto                        it = pending_services_.find(response.rid);
+    if (it == pending_services_.end() || it->second == nullptr) {
+        return;
+    }
+    it->second->result = response;
+    it->second->timer.cancel();
+}
+
 void IpcClient::complete_ack(const OrderId& rid, const CommandAck& ack) noexcept {
     std::lock_guard<std::mutex> lk(ack_mutex_);
     auto                        it = pending_acks_.find(rid);
@@ -436,6 +508,14 @@ asio::awaitable<void> IpcClient::read_loop() {
                 break;
             }
 
+            case FrameType::ServiceResponse:
+                try {
+                    complete_service(decode_as<FrameType::ServiceResponse>(f));
+                } catch (const std::exception& e) {
+                    SPDLOG_WARN("IpcClient: bad ServiceResponse: {}", e.what());
+                }
+                break;
+
             case FrameType::GatewayEvent:
                 // 连接状态事件同时影响 md 与 td 两侧。
                 if (md_handler_) {
@@ -473,8 +553,13 @@ asio::awaitable<void> IpcClient::read_loop() {
         SPDLOG_WARN("IpcClient: read exception: {}", e.what());
     }
 
-    // 读循环结束：唤醒所有仍在等待 ack 的请求。
+    // 读循环结束：唤醒所有仍在等待 ack/service 的请求。
     for (auto& [rid, w] : pending_acks_) {
+        if (w != nullptr) {
+            w->timer.cancel();
+        }
+    }
+    for (auto& [rid, w] : pending_services_) {
         if (w != nullptr) {
             w->timer.cancel();
         }
@@ -491,6 +576,11 @@ void IpcClient::stop() noexcept {
 
     // 唤醒所有 pending 请求（session 关闭后 read_loop 也会做一次）。
     for (auto& [rid, w] : pending_acks_) {
+        if (w != nullptr) {
+            w->timer.cancel();
+        }
+    }
+    for (auto& [rid, w] : pending_services_) {
         if (w != nullptr) {
             w->timer.cancel();
         }

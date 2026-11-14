@@ -28,26 +28,30 @@ namespace ipc {
 /// | `0x11` | `Resume`        | node → gateway | 重连后恢复 seq | `ResumeAck` | 必达 |
 /// | `0x12` | `ResumeAck`     | gateway → node | 恢复策略（replay/snapshot） | — | 必达 |
 /// | `0x13` | `TradeSnapshot` | gateway → node | 交易状态对账 | — | 必达 |
+/// | `0x14` | `ServiceRequest` | node → gateway | 通用服务调用 | `ServiceResponse` | 必达 |
+/// | `0x15` | `ServiceResponse` | gateway → node | 服务结果 | — | 必达 |
 enum class FrameType : uint8_t {
-    Hello          = 0x01,
-    HelloAck       = 0x02,
-    Subscribe      = 0x03,
-    SubscribeAck   = 0x04,
-    Snapshot       = 0x05,
-    Diff           = 0x06,
-    Command        = 0x07,
-    CommandAck     = 0x08,
-    GatewayEvent   = 0x09,
-    MarketDataPush = 0x0A,
-    TradePush      = 0x0B,
-    QueryOrders    = 0x0C,
-    QueryOrdersAck = 0x0D,
-    Heartbeat      = 0x0E,
-    HeartbeatAck   = 0x0F,
-    Goodbye        = 0x10,
-    Resume         = 0x11,
-    ResumeAck      = 0x12,
-    TradeSnapshot  = 0x13,
+    Hello           = 0x01,
+    HelloAck        = 0x02,
+    Subscribe       = 0x03,
+    SubscribeAck    = 0x04,
+    Snapshot        = 0x05,
+    Diff            = 0x06,
+    Command         = 0x07,
+    CommandAck      = 0x08,
+    GatewayEvent    = 0x09,
+    MarketDataPush  = 0x0A,
+    TradePush       = 0x0B,
+    QueryOrders     = 0x0C,
+    QueryOrdersAck  = 0x0D,
+    Heartbeat       = 0x0E,
+    HeartbeatAck    = 0x0F,
+    Goodbye         = 0x10,
+    Resume          = 0x11,
+    ResumeAck       = 0x12,
+    TradeSnapshot   = 0x13,
+    ServiceRequest  = 0x14,
+    ServiceResponse = 0x15,
 };
 
 enum class FrameEncoding : uint8_t {

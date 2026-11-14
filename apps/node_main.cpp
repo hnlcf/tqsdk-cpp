@@ -39,15 +39,15 @@ using namespace tqsdk;
 
 // 持有运行期全部对象，保证生命周期覆盖 io.run()。
 struct NodeRuntime {
-    std::shared_ptr<TqAuth>              auth;
-    std::shared_ptr<InstrumentCatalog>   catalog;
-    std::shared_ptr<KlineStore>          kline_store;
-    std::shared_ptr<TickStore>           tick_store;
-    std::shared_ptr<audit::Log>          audit;
-    std::shared_ptr<ContinuousTable>     continuous;
-    std::shared_ptr<TqApi>               api;
-    std::shared_ptr<MultiAccountManager> accounts;
-    std::unique_ptr<serve::HttpServer>   http;
+    std::shared_ptr<auth::RemoteAuthService> remote_auth;
+    std::shared_ptr<InstrumentCatalog>       catalog;
+    std::shared_ptr<KlineStore>              kline_store;
+    std::shared_ptr<TickStore>               tick_store;
+    std::shared_ptr<audit::Log>              audit;
+    std::shared_ptr<ContinuousTable>         continuous;
+    std::shared_ptr<TqApi>                   api;
+    std::shared_ptr<MultiAccountManager>     accounts;
+    std::unique_ptr<serve::HttpServer>       http;
 };
 
 } // namespace
@@ -104,27 +104,6 @@ int main(int argc, char** argv) {
     auto             core_ex = asio::make_strand(io);
     auto             rt      = std::make_shared<NodeRuntime>();
 
-    if (cfg.tq_auth.enabled) {
-        rt->auth               = std::make_shared<TqAuth>(cfg.tq_auth);
-        const auto auth_result = rt->auth->login_result();
-        if (!auth_result) {
-            SPDLOG_WARN("[node] TqAuth login failed: {} ({}); catalog will request without token",
-                        auth_result.error().detail,
-                        auth::auth_error_name(auth_result.error().code));
-        } else {
-            SPDLOG_INFO(
-                "[node] TqAuth logged in as {} (catalog/latest downloads will use Bearer token)",
-                cfg.tq_auth.user_name);
-        }
-    }
-    if (cfg.cache.instruments.enabled) {
-        rt->catalog = std::make_shared<InstrumentCatalog>(cfg.cache.instruments, rt->auth);
-        if (!rt->catalog->load_local()) {
-            SPDLOG_WARN(
-                "[node] instrument catalog not available yet; background refresh will retry");
-        }
-        rt->catalog->start_background_refresh();
-    }
     if (cfg.cache.kline.enabled) {
         rt->kline_store = std::make_shared<KlineStore>(cfg.cache.kline);
         if (!rt->kline_store->ready()) {
@@ -173,18 +152,45 @@ int main(int argc, char** argv) {
             co_return;
         }
 
-        std::shared_ptr<TqApi> primary;
-        auto primary_cfg    = make_remote_engine_config(primary_it->ipc, primary_it->id);
-        auto primary_result = co_await try_make_tqapi(io, primary_cfg, core_ex, rt->kline_store);
-        if (!primary_result) {
+        auto primary_cfg = make_remote_engine_config(primary_it->ipc, primary_it->id);
+        auto runtime_result =
+            co_await make_engine_runtime(io, primary_cfg, core_ex, rt->kline_store);
+        if (!runtime_result) {
             SPDLOG_CRITICAL("[node] failed to connect/init upstream gw: {} ({})",
-                            primary_result.error().detail,
-                            gateway::gateway_error_name(primary_result.error().code));
+                            runtime_result.error().detail,
+                            gateway::gateway_error_name(runtime_result.error().code));
             io.stop();
             co_return;
         }
-        primary                      = std::shared_ptr<TqApi>(std::move(*primary_result));
-        rt->api                      = primary;
+        auto primary    = std::shared_ptr<TqApi>(std::move(runtime_result->api));
+        rt->api         = primary;
+        rt->remote_auth = std::move(runtime_result->auth);
+
+        // auth 属于 gw；node 只取只读快照，用于 InstrumentCatalog 的 Bearer token。
+        if (rt->remote_auth) {
+            const auto auth_refresh = co_await rt->remote_auth->refresh();
+            if (!auth_refresh) {
+                SPDLOG_WARN("[node] auth service snapshot failed: {} ({})",
+                            auth_refresh.error().detail,
+                            ipc::ipc_error_name(auth_refresh.error().code));
+            } else {
+                const auto snap = rt->remote_auth->snapshot();
+                SPDLOG_INFO("[node] auth snapshot: enabled={} logged_in={} user={}",
+                            snap.enabled,
+                            snap.logged_in,
+                            snap.user_name);
+            }
+            rt->remote_auth->start();
+        }
+        if (cfg.cache.instruments.enabled) {
+            rt->catalog =
+                std::make_shared<InstrumentCatalog>(cfg.cache.instruments, rt->remote_auth);
+            if (!rt->catalog->load_local()) {
+                SPDLOG_WARN(
+                    "[node] instrument catalog not available yet; background refresh will retry");
+            }
+            rt->catalog->start_background_refresh();
+        }
         rt->accounts                 = std::make_shared<MultiAccountManager>();
         const std::string primary_id = primary_it->id;
         if (!rt->accounts->add_account(primary_id, primary)) {
@@ -293,6 +299,9 @@ int main(int argc, char** argv) {
     // 收尾：关闭 serve 与 TqApi，驱动 io 跑完后台协程后再析构。
     if (rt->http) {
         rt->http->stop();
+    }
+    if (rt->remote_auth) {
+        rt->remote_auth->stop();
     }
     if (rt->accounts) {
         rt->accounts->close();

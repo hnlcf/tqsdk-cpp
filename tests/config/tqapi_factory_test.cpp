@@ -396,3 +396,20 @@ TEST(TqApiFactoryTest, InvalidTransportReported) {
     ASSERT_FALSE(cfg);
     EXPECT_EQ(cfg.error().code, config::ConfigErrorCode::invalid_value);
 }
+
+TEST(TqApiConfigTest, NodeRejectsTqAuthSection) {
+    const auto cfg = parse_node_config(R"(
+        [[accounts]]
+        id = "default"
+        ipc = "gw-a"
+        [ipc.gw-a]
+        transport = "tcp"
+        tcp_host = "127.0.0.1"
+        tcp_port = 19001
+        [tq_auth]
+        enabled = true
+    )");
+    ASSERT_FALSE(cfg);
+    EXPECT_EQ(cfg.error().code, config::ConfigErrorCode::invalid_value);
+    EXPECT_NE(cfg.error().detail.find("tq_auth"), std::string::npos);
+}

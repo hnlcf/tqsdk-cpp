@@ -1,5 +1,7 @@
 #include "tqsdk/ipc/gateway_server.h"
 
+#include "tqsdk/gateway/gateway_host.h"
+
 #include "tqsdk/util/spawn_logged.h"
 
 #include <boost/asio/experimental/awaitable_operators.hpp>
@@ -162,11 +164,54 @@ asio::awaitable<void> GatewayIpcServer::control_loop() {
         case FrameType::Resume:
             co_await handle_resume(*frame);
             break;
+        case FrameType::ServiceRequest:
+            co_await handle_service_request(*frame);
+            break;
         default:
             SPDLOG_WARN("[Gw.control] unexpected frame type {}", static_cast<int>(frame->type));
             break;
         }
     }
+    co_return;
+}
+
+asio::awaitable<void> GatewayIpcServer::handle_service_request(const ReceivedFrame& frame) {
+    ServiceRequest  request;
+    bool            decode_ok = true;
+    ServiceResponse decode_error;
+    try {
+        request = decode_as<FrameType::ServiceRequest>(frame);
+    } catch (const std::exception& e) {
+        decode_ok          = false;
+        decode_error.error = fmt::format("bad ServiceRequest: {}", e.what());
+    }
+    if (!decode_ok) {
+        try {
+            co_await session_->send_body<FrameType::ServiceResponse>(decode_error);
+        } catch (const std::exception& send_error) {
+            SPDLOG_WARN("[Gw.service] send decode error failed: {}", send_error.what());
+        }
+        co_return;
+    }
+
+    if (host_ == nullptr) {
+        ServiceResponse response{
+            request.rid, false, json::object(), "gateway host is not attached"};
+        co_await session_->send_body<FrameType::ServiceResponse>(response);
+        co_return;
+    }
+
+    // 所有连接共享同一个 registry/service；在 gateway core strand 上串行化 dispatch。
+    co_await asio::dispatch(gateway_ex_, asio::use_awaitable);
+    auto response = co_await host_->services().dispatch(request);
+    co_await asio::dispatch(ex_, asio::use_awaitable);
+    try {
+        co_await session_->send_body<FrameType::ServiceResponse>(response);
+    } catch (const std::exception& e) {
+        SPDLOG_WARN("[Gw.service] send ServiceResponse failed: {}", e.what());
+        co_return;
+    }
+    SPDLOG_DEBUG("[Gw.service] {}::{} ok={}", request.service, request.method, response.ok);
     co_return;
 }
 

@@ -106,14 +106,18 @@ web/                    TQSDK Board：SolidJS + pnpm + Lightweight Charts
 gw process:
   io_context workers
     └─ gateway core strand
+         ├─ GatewayHost（md/td + service registry）
          ├─ CTP TaskQueue 消费
          ├─ 查询/订单/回调处理
          └─ IPC pump/control
+              ├─ Subscribe/Command -> md/td
+              └─ ServiceRequest -> auth/其他服务
 
 node process:
   io_context workers
     ├─ core strand
     │    ├─ TqApi md_loop / td_loop
+    │    ├─ RemoteAuthService（仅缓存 gw 的 TqAuth 快照）
     │    ├─ DiffMergeEngine -> DataManager
     │    ├─ WebSocketHub push_loop / broadcast
     │    └─ HTTP route data access

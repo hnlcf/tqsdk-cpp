@@ -142,13 +142,17 @@ ipc_session.*          握手/心跳/seq/路由
 ipc_client.*           node -> gw 客户端
 gateway_server.*       生命周期
 gateway_server_pumps.* md/td 上行泵
-gateway_server_control.* 订阅/命令/Resume
+gateway_server_control.* 订阅/命令/Resume/Service 路由
+gateway_service.*      GatewayServiceRegistry + IGatewayService
 remote_md_gateway.*    MarketDataGateway 远程代理
 remote_td_gateway.*    TradingGateway 远程代理
 gateway_subscription_book.h 连接级订阅引用账本
 command_ack_cache.h     Command 幂等缓存
 event_bus.h            多 node 扇出
 stream_seq.h            seq/replay
+auth/remote_auth_service.* node 侧 TqAuth 只读 IPC 代理
+gateway/gateway_host.*     顶层 GatewayHost(md/td + services)
+gateway/tq_auth_service.*  gw 侧 TqAuth worker 服务
 ```
 
 `GatewaySubscriptionBook` 让 quote/K 线共享 symbol 引用计数，且显式 subscribe

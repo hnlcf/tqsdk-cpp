@@ -7,7 +7,7 @@
 
 namespace tqsdk {
 
-class TqAuth;
+class AuthTokenSource;
 
 /// 标准合约目录（天勤 openmd symbol.json / latest.json）。
 ///
@@ -71,7 +71,7 @@ public:
         int         puts            = 0;
     };
 
-    explicit InstrumentCatalog(Config cfg, std::shared_ptr<TqAuth> auth = nullptr);
+    explicit InstrumentCatalog(Config cfg, std::shared_ptr<AuthTokenSource> auth = nullptr);
     ~InstrumentCatalog();
 
     InstrumentCatalog(const InstrumentCatalog&)            = delete;
@@ -106,7 +106,7 @@ private:
     void        refresh_loop(std::stop_token stop);
 
     Config                                       cfg_;
-    std::shared_ptr<TqAuth>                      auth_;
+    std::shared_ptr<AuthTokenSource>             auth_;
     mutable std::shared_mutex                    mutex_;
     std::vector<Instrument>                      items_;
     std::unordered_map<std::string, std::size_t> index_;

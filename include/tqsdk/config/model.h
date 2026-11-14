@@ -154,7 +154,6 @@ struct NodeConfig {
 
     ServeConfig    serve;
     CacheConfig    cache;
-    TqAuth::Config tq_auth;
     audit::Options audit;
     RuntimeConfig  runtime;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tqsdk/auth/auth_error.h"
+#include "tqsdk/auth/auth_token_source.h"
 #include "tqsdk/constants.h"
 #include "tqsdk/pch.h"
 
@@ -17,7 +18,7 @@ namespace tqsdk {
 /// - 获取到期时间、期货公司交易网关、行情网关地址。
 ///
 /// 该类只负责认证与地址服务，不直接建立行情/交易连接。
-class TqAuth {
+class TqAuth : public AuthTokenSource {
 public:
     struct Config {
         bool                 enabled = false;

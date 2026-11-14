@@ -397,6 +397,44 @@ inline void from_json(const json& j, CommandAckBody& m) {
 }
 
 // ---------------------------------------------------------------------------
+// 通用服务调用（TqAuth / 其他网关附属组件）
+// ---------------------------------------------------------------------------
+
+/// node -> gateway：按服务名与方法调用网关侧组件。
+/// gateway 顶层负责把请求路由到 md/td 之外的 service registry。
+struct ServiceRequest {
+    uint64_t    rid = 0;
+    std::string service;
+    std::string method;
+    json        params = json::object();
+};
+inline void to_json(json& j, const ServiceRequest& m) {
+    j = json{{"rid", m.rid}, {"service", m.service}, {"method", m.method}, {"params", m.params}};
+}
+inline void from_json(const json& j, ServiceRequest& m) {
+    m.rid     = j.value("rid", uint64_t{0});
+    m.service = j.value("service", std::string{});
+    m.method  = j.value("method", std::string{});
+    m.params  = j.value("params", json::object());
+}
+
+struct ServiceResponse {
+    uint64_t    rid    = 0;
+    bool        ok     = false;
+    json        result = json::object();
+    std::string error;
+};
+inline void to_json(json& j, const ServiceResponse& m) {
+    j = json{{"rid", m.rid}, {"ok", m.ok}, {"result", m.result}, {"error", m.error}};
+}
+inline void from_json(const json& j, ServiceResponse& m) {
+    m.rid    = j.value("rid", uint64_t{0});
+    m.ok     = j.value("ok", false);
+    m.result = j.value("result", json::object());
+    m.error  = j.value("error", std::string{});
+}
+
+// ---------------------------------------------------------------------------
 // 心跳 / 关闭
 // ---------------------------------------------------------------------------
 
@@ -453,7 +491,9 @@ using FrameBody = std::variant<HelloBody,
                                CommandAckBody,
                                GatewayEventBody,
                                HeartbeatBody,
-                               GoodbyeBody>;
+                               GoodbyeBody,
+                               ServiceRequest,
+                               ServiceResponse>;
 
 /// 与 FrameType 一一对应的 body 类型（含保留帧用 OpaqueBody）。
 template <FrameType T>
@@ -513,6 +553,14 @@ struct BodyFor<FrameType::HeartbeatAck> {
 template <>
 struct BodyFor<FrameType::Goodbye> {
     using type = GoodbyeBody;
+};
+template <>
+struct BodyFor<FrameType::ServiceRequest> {
+    using type = ServiceRequest;
+};
+template <>
+struct BodyFor<FrameType::ServiceResponse> {
+    using type = ServiceResponse;
 };
 // 保留帧（尚未落地）：统一 OpaqueBody 透传
 template <>

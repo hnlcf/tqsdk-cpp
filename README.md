@@ -118,7 +118,8 @@ Tq 行情  /  CTP TD  /  Sim TD
               │
               ▼
        tqsdk-gw（接入进程）
-       ├─ 真实行情/交易网关
+       ├─ GatewayHost(md/td + auth service)
+       ├─ 唯一 TqAuth，账号密码只在这里
        ├─ IPC server + seq/replay
        └─ CTP SPI -> Asio 桥接
               │
@@ -126,7 +127,7 @@ Tq 行情  /  CTP TD  /  Sim TD
               │
               ▼
       tqsdk-node（数据与 API 进程）
-       ├─ RemoteMd / RemoteTd
+       ├─ RemoteMd / RemoteTd / RemoteAuthService
        ├─ TqApi + DataManager + DiffMerge
        ├─ InstrumentCatalog / KlineStore
        └─ HTTP / WebSocket
@@ -189,7 +190,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 ## 当前状态
 
 - 最新 Release：`v0.4.0`（错误处理重构、C++23 GCC 14 构建、12 个 assets）；
-- `ctest`：370/370（2 项 TqMdNetwork 网络测试按环境跳过）；
+- `ctest`：373/373（2 项 TqMdNetwork 网络测试按环境跳过）；
 - Python：21/21；Web typecheck/test/build 和 Playwright E2E 通过；
 - 本地 Clang 23 与 GCC 16.2.1 构建通过；
 - 错误处理：公共 API 使用 expected/noexcept，详见 [docs/ERROR_HANDLING.md](docs/ERROR_HANDLING.md)；

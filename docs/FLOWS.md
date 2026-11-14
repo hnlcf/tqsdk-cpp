@@ -9,16 +9,19 @@
 ```text
 gw_main
   ├─ 解析 GatewayConfig
+  ├─ 创建唯一 TqAuth（账号密码只在 gw）
   ├─ 创建真实 MD/TD 网关
+  ├─ 创建 GatewayHost(md, td, auth service)
   ├─ 启动 CTP TaskQueue / Tq MD
   ├─ listen IPC TCP/UDS
   └─ 等待 node 连接
 
 node_main
-  ├─ 解析 NodeConfig
-  ├─ 启动 InstrumentCatalog / HolidayCalendar / KlineStore
+  ├─ 解析 NodeConfig（无 tq_auth）
   ├─ 连接 IPC，握手 (Hello)
-  ├─ RemoteMd / RemoteTd 开始消费
+  ├─ make_engine_runtime -> RemoteMd / RemoteTd + RemoteAuthService
+  ├─ 通过 IPC ServiceRequest(auth::snapshot) 取只读认证快照
+  ├─ 启动 InstrumentCatalog / HolidayCalendar / KlineStore
   ├─ TqApi.start()
   ├─ 等待初始行情/交易 snapshot
   ├─ HttpServer.listen()

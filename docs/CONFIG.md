@@ -11,7 +11,7 @@
 IpcConfig       一组 gw/node IPC 交互
 EngineConfig    运行时引擎：ipc + md + td + ctp
 GatewayConfig   gw：engine + tq_auth + runtime
-NodeConfig      node：accounts + serve + cache + tq_auth + audit + runtime
+NodeConfig      node：accounts + serve + cache + audit + runtime
 ```
 
 - `EngineConfig` 是 `make_tqapi()` 的输入，不是独立配置文件入口；
@@ -200,7 +200,7 @@ refresh_interval_sec = 86400
 | gw 监听、真实网关选择 | `gw.toml` + `[gateway].ipc` |
 | node 账户/IPC 选择 | `node.toml` + `[[accounts]]` |
 | TQ MD endpoint | `shared/tq_md.toml` | gw only |
-| TQ TD/TqAuth | `shared/tq.toml` | gw 与 node 目录认证共用 TqAuth |
+| TQ TD/TqAuth | `shared/tq.toml` | 仅 gw；node 通过 IPC auth service 取快照 |
 | CTP | `shared/ctp.toml` |
 | Sim 规格/初始价格 | `shared/sim.toml` |
 | serve/audit/runtime | `node.toml` |
@@ -226,7 +226,29 @@ chmod 600 config.local/shared/tq.toml config.local/shared/ctp.toml
 
 `config.local/` 已 gitignore。
 
-## 9. 验证
+## 9. TqAuth 服务
+
+TqAuth 只在 gw 进程持有。gw 的 `GatewayHost` 拥有 md/td 和 auth service：
+
+```text
+GatewayHost
+  ├─ MarketDataGateway
+  ├─ TradingGateway
+  └─ GatewayServiceRegistry
+       └─ TqAuthService
+```
+
+node 通过同一 IPC 连接调用 `auth::snapshot`，得到只读结果：
+
+```text
+enabled / logged_in / user_agent / authorization / auth_id / expire_days / last_error
+```
+
+node 的 `RemoteAuthService` 缓存该快照，InstrumentCatalog 下载合约目录时使用
+Bearer token。node 不需要账号密码，也不创建 TqAuth；node 配置中出现
+`[tq_auth]` 会直接报 `invalid_value`。
+
+## 10. 验证
 
 ```bash
 ctest --test-dir build-ui -R 'TqApiConfigTest|TqApiFactoryTest' --output-on-failure

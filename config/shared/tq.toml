@@ -1,4 +1,4 @@
-# TQ auth + OTG trading account (gw/node). TQ MD defaults are in tq_md.toml.
+# TQ auth + OTG trading account (gw only). TQ MD defaults are in tq_md.toml.
 # `broker_name` is the TQ metadata key / req_login.bid; optional `broker_id`
 # is the front broker id in req_login.broker_id.
 [tq_auth]

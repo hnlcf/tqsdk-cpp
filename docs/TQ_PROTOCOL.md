@@ -188,5 +188,5 @@ ctest --test-dir build-ui -R "TqApiConfigTest|TqApiFactoryTest" --output-on-fail
 - `MachineId` 覆盖本机 MAC 格式。
 
 ```text
-本地最终结果：CTest 370/370（2 项网络测试按环境跳过），Python 21/21。
+本地最终结果：CTest 373/373（2 项网络测试按环境跳过），Python 21/21。
 ```

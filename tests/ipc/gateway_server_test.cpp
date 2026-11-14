@@ -1,5 +1,8 @@
 #include "tqsdk/pch.h"
 
+#include "tqsdk/auth/remote_auth_service.h"
+#include "tqsdk/auth/tq_auth.h"
+#include "tqsdk/gateway/gateway_host.h"
 #include "tqsdk/gateway/market_data_gateway.h"
 #include "tqsdk/gateway/sim/sim_td_gateway.h"
 #include "tqsdk/ipc/gateway_server.h"
@@ -79,6 +82,64 @@ InsertOrderReq market_buy(const char* sym, uint64_t vol) {
 // 1) 下单：node --Command--> gw(SimTd) 回 CommandAck(success)；
 //    成交 diff 以 TradePush 回到 node 的 RemoteTdGateway.event_output()。
 // ---------------------------------------------------------------------------
+
+// 顶层 GatewayHost 的 auth service：node 通过同一 IPC 连接取只读快照，
+// 不再在 node 进程创建 TqAuth。
+TEST(GatewayIpcServerTest, RoutesAuthServiceSnapshot) {
+    const std::string path = make_uds_path("auth");
+    asio::io_context  io;
+    auto              pair = make_uds_pair(io, path);
+
+    auto        auth = std::make_shared<TqAuth>(TqAuth::Config{});
+    GatewayHost host(std::unique_ptr<MarketDataGateway>{},
+                     std::unique_ptr<TradingGateway>{},
+                     auth,
+                     io.get_executor());
+
+    auto gw_sess = std::make_unique<IpcSession>(
+        std::move(pair.srv), io.get_executor(), opt(IpcRole::Gateway, "gw-auth"));
+    auto gw_start =
+        test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await gw_sess->start(); });
+    auto node_sess = std::make_unique<IpcSession>(
+        std::move(pair.cli), io.get_executor(), opt(IpcRole::Node, "node-auth"));
+    auto node_start =
+        test::spawn_joined(io, [&]() -> asio::awaitable<void> { co_await node_sess->start(); });
+    test::wait_all(io, std::chrono::seconds(2), gw_start, node_start);
+    gw_start.get();
+    node_start.get();
+
+    auto gw_server = std::make_shared<GatewayIpcServer>(std::move(gw_sess),
+                                                        &host,
+                                                        io.get_executor(),
+                                                        io.get_executor(),
+                                                        GatewayIpcServer::Options{});
+    gw_server->start();
+
+    auto client = std::make_shared<IpcClient>(std::move(node_sess), io.get_executor());
+    auth::RemoteAuthService remote(client, io.get_executor());
+    client->start();
+
+    bool refreshed = false;
+    auto task      = test::spawn_joined(io, [&]() -> asio::awaitable<void> {
+        auto result = co_await remote.refresh();
+        if (!result) {
+            throw std::runtime_error(result.error().detail);
+        }
+        refreshed = true;
+    });
+    test::wait_all(io, std::chrono::seconds(3), task);
+    task.get();
+    EXPECT_TRUE(refreshed);
+    EXPECT_FALSE(remote.snapshot().enabled);
+    EXPECT_TRUE(remote.snapshot().authorization.empty());
+
+    remote.stop();
+    client->stop();
+    gw_server->close();
+    test::drive_for(io, std::chrono::milliseconds(50));
+    ::unlink(path.c_str());
+}
+
 TEST(GatewayIpcServerTest, InsertOrderRoundtripAndFill) {
     const std::string path = make_uds_path("order");
     asio::io_context  io;

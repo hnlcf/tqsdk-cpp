@@ -1,5 +1,7 @@
 #include "tqsdk/ipc/gateway_server.h"
 
+#include "tqsdk/gateway/gateway_host.h"
+
 #include "tqsdk/util/spawn_logged.h"
 
 #include <boost/asio/experimental/awaitable_operators.hpp>
@@ -31,6 +33,25 @@ GatewayIpcServer::GatewayIpcServer(std::unique_ptr<IpcSession> session,
     : session_(std::move(session)),
       md_(md),
       td_(td),
+      ex_(std::move(ex)),
+      gateway_ex_(std::move(gateway_ex)),
+      md_sink_(std::make_shared<Channel<MarketDataEvent>>(ex_, 2048)),
+      td_sink_(std::make_shared<Channel<TradeEvent>>(ex_, 2048)),
+      stream_epoch_(make_stream_epoch("gw")),
+      md_stream_(StreamKind::Md, stream_epoch_, options.md_replay),
+      td_stream_(StreamKind::Td, stream_epoch_, options.td_replay),
+      md_stop_timer_(ex_),
+      td_stop_timer_(ex_) {}
+
+GatewayIpcServer::GatewayIpcServer(std::unique_ptr<IpcSession> session,
+                                   GatewayHost*                host,
+                                   asio::any_io_executor       ex,
+                                   asio::any_io_executor       gateway_ex,
+                                   Options                     options)
+    : session_(std::move(session)),
+      host_(host),
+      md_(host != nullptr ? host->md() : nullptr),
+      td_(host != nullptr ? host->td() : nullptr),
       ex_(std::move(ex)),
       gateway_ex_(std::move(gateway_ex)),
       md_sink_(std::make_shared<Channel<MarketDataEvent>>(ex_, 2048)),

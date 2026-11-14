@@ -192,8 +192,9 @@ TQ_AUTH_PASSWORD=your_tq_password
 TQ_AUTH_URL=https://auth.shinnytech.com
 ```
 
-`run_live.sh` 会生成 `[tq_auth]`，node 在下载合约目录时携带
-`Authorization: Bearer ...`。详见 [TQ_AUTH.md](TQ_AUTH.md)。
+`run_live.sh` 会把 `[tq_auth]` 写入 **gw** 配置。node 不持有 TqAuth；它通过
+IPC `auth` service 获取只读快照，再用快照中的 Bearer token 下载合约目录。
+详见 [TQ_AUTH.md](TQ_AUTH.md)。
 
 ### 手工启动
 

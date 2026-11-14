@@ -51,6 +51,7 @@ add_library(tqsdk_core SHARED
     src/ipc/remote_md_gateway.cpp
     src/ipc/remote_td_gateway.cpp
     src/ipc/gateway_server.cpp
+    src/ipc/gateway_service.cpp
     src/ipc/gateway_subscription_book.cpp
     src/ipc/gateway_server_pumps.cpp
     src/ipc/gateway_server_control.cpp
@@ -89,6 +90,9 @@ add_library(tqsdk_core SHARED
     src/util/http_download.cpp
     src/auth/tq_auth.cpp
     src/auth/dynamic_endpoint.cpp
+    src/auth/remote_auth_service.cpp
+    src/gateway/gateway_host.cpp
+    src/gateway/tq_auth_service.cpp
     src/trading/holiday_calendar.cpp
     src/trading/risk_manager.cpp
     src/trading/order_tasks.cpp

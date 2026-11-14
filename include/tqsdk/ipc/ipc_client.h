@@ -110,6 +110,12 @@ public:
                                                                  std::chrono::milliseconds timeout,
                                                                  int max_attempts = 1) noexcept;
 
+    /// 调用 GatewayHost 注册的通用 service（例如 auth）。
+    /// rid 由 IpcClient 分配；超时/断线返回 IpcFailure。
+    asio::awaitable<IpcResult<ServiceResponse>>
+    request_service(const ServiceRequest&     request,
+                    std::chrono::milliseconds timeout = std::chrono::seconds(10)) noexcept;
+
     /// 优雅关闭：发 Goodbye + 关闭 session；唤醒所有 pending 请求。
     void stop() noexcept;
 
@@ -121,13 +127,13 @@ public:
     FrameEncoding encoding() const noexcept { return encoding_; }
 
 private:
-    asio::awaitable<void> read_loop();
-    asio::awaitable<void> run_loop();
-    asio::awaitable<IpcResult<void>> send_bytes(FrameType type,
+    asio::awaitable<void>            read_loop();
+    asio::awaitable<void>            run_loop();
+    asio::awaitable<IpcResult<void>> send_bytes(FrameType                   type,
                                                 const std::vector<uint8_t>& payload) noexcept;
     asio::awaitable<IpcResult<void>> send_resume_if_possible() noexcept;
-    void                  notify_disconnected();
-    asio::awaitable<void> wait_backoff(std::chrono::milliseconds delay);
+    void                             notify_disconnected();
+    asio::awaitable<void>            wait_backoff(std::chrono::milliseconds delay);
 
     // 等待 ack 的挂起者：用 timer 当一次性"信号量"，close 时 cancel 唤醒。
     struct AckWaiter {
@@ -141,6 +147,7 @@ private:
     };
 
     void complete_ack(const OrderId& rid, const CommandAck& ack) noexcept;
+    void complete_service(const ServiceResponse& response) noexcept;
 
     /// 跟踪一条入站 push 的 seq；duplicate 返回 false（调用方可丢弃）。
     bool
@@ -168,8 +175,20 @@ private:
     Metrics       metrics_;
 
     // rid -> 挂起中的命令等待者
-    std::unordered_map<OrderId, AckWaiter*> pending_acks_;
-    // 保护 pending_acks_：命令在 send 前登记、读循环/stop 在外部派发，均加锁。
+    struct ServiceWaiter {
+        asio::steady_timer             timer;
+        std::optional<ServiceResponse> result;
+
+        explicit ServiceWaiter(asio::any_io_executor ex)
+            : timer(std::move(ex)) {
+            timer.expires_at(std::chrono::steady_clock::time_point::max());
+        }
+    };
+
+    std::unordered_map<OrderId, AckWaiter*>      pending_acks_;
+    std::unordered_map<uint64_t, ServiceWaiter*> pending_services_;
+    uint64_t                                     next_service_rid_ = 1;
+    // 保护 pending_*：请求在 send 前登记、读循环/stop 在外部派发，均加锁。
     // 单 io 线程下并非数据竞争必需，但 "先登记后发送" 的时序正确性依赖它，
     // 且能避免将来多线程执行器下出错。
     std::mutex ack_mutex_;

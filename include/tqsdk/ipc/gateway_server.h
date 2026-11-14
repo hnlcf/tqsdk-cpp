@@ -12,6 +12,9 @@
 #include "tqsdk/ipc/stream_seq.h"
 
 namespace tqsdk {
+
+class GatewayHost;
+
 namespace ipc {
 
 /// GatewayIpcServer —— 接入进程（gw）侧：把**真实网关**桥接成一条 IPC 连接。
@@ -78,6 +81,14 @@ public:
                      asio::any_io_executor       gateway_ex,
                      Options                     options);
 
+    /// 顶层 GatewayHost 版本：md/td 由 host 提供，ServiceRequest 路由到
+    /// host->services()。host 生命周期须覆盖本连接。
+    GatewayIpcServer(std::unique_ptr<IpcSession> session,
+                     GatewayHost*                host,
+                     asio::any_io_executor       ex,
+                     asio::any_io_executor       gateway_ex,
+                     Options                     options);
+
     ~GatewayIpcServer();
 
     GatewayIpcServer(const GatewayIpcServer&)            = delete;
@@ -125,6 +136,8 @@ private:
     asio::awaitable<void> handle_command(const ReceivedFrame& frame);
     /// 处理一条 Resume：按 epoch/seq 决定 replay 或要求 resync/reconcile。
     asio::awaitable<void> handle_resume(const ReceivedFrame& frame);
+    /// 通用服务请求：路由到 GatewayHost::services()。
+    asio::awaitable<void> handle_service_request(const ReceivedFrame& frame);
 
     /// 给 md/td push 分配 seq、记录 replay buffer、发送。
     asio::awaitable<void> send_md_push(MarketDataPushBody body);
@@ -137,6 +150,7 @@ private:
     bool filter_md_for_connection(MarketDataEvent& ev) const;
 
     std::unique_ptr<IpcSession> session_;
+    GatewayHost*                host_{nullptr};
     MarketDataGateway*          md_;
     TradingGateway*             td_;
     asio::any_io_executor       ex_;         // 本连接 strand

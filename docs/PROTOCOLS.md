@@ -40,6 +40,20 @@
 | `0x11` | Resume | 重连恢复 |
 | `0x12` | ResumeAck | 恢复策略 |
 | `0x13` | TradeSnapshot | 交易对账快照 |
+| `0x14` | ServiceRequest | node -> gateway，通用服务调用（如 auth） |
+| `0x15` | ServiceResponse | gateway -> node，服务结果 |
+
+### 服务路由
+
+`GatewayHost` 顶层拥有 md/td 和 service registry：
+
+- `Subscribe` -> MD 服务；
+- `Command` -> TD 服务；
+- `ServiceRequest` -> 按 `service` 名路由到 `GatewayServiceRegistry`；
+- 当前注册 `auth` 服务（TqAuth 只读快照、login、refresh、md_url、td_url、add_account）。
+
+`ServiceRequest.params` 是服务私有参数，`ServiceResponse.result/error` 是服务结果；
+`rid` 由 node 侧 `IpcClient::request_service()` 分配并关联响应。
 
 ### Seq / Epoch / Resume
 

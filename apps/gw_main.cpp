@@ -3,6 +3,7 @@
 #include "tqsdk/auth/dynamic_endpoint.h"
 #include "tqsdk/auth/tq_auth.h"
 #include "tqsdk/config/tqapi_factory.h"
+#include "tqsdk/gateway/gateway_host.h"
 #include "tqsdk/gateway/sim/sim_td_gateway.h"
 #include "tqsdk/gateway/tq/tq_md_gateway.h"
 #include "tqsdk/gateway/tq/tq_td_gateway.h"
@@ -65,10 +66,10 @@ make_real_md(const MdConfig& md, const CtpConfig& ctp, asio::any_io_executor ex)
     return nullptr;
 }
 
-std::unique_ptr<TradingGateway> make_real_td(const TdConfig&       td,
-                                             const CtpConfig&      ctp,
-                                             const TqAuth::Config& tq_auth,
-                                             asio::any_io_executor ex) {
+std::unique_ptr<TradingGateway> make_real_td(const TdConfig&                td,
+                                             const CtpConfig&               ctp,
+                                             const std::shared_ptr<TqAuth>& tq_auth,
+                                             asio::any_io_executor          ex) {
     switch (td.kind) {
     case TdKind::Sim:
         return std::make_unique<SimTdGateway>(ex, td.sim.initial_balance);
@@ -87,25 +88,17 @@ std::unique_ptr<TradingGateway> make_real_td(const TdConfig&       td,
         std::string url = td.tq.td_url;
         std::string authorization;
         if (url.empty()) {
-            if (!tq_auth.enabled) {
+            if (!tq_auth || !tq_auth->config().enabled) {
                 SPDLOG_ERROR("[gw] td.kind=tq needs [td.tq].td_url or [tq_auth].enabled");
                 return nullptr;
             }
-            TqAuth     auth(tq_auth);
-            const auto login = auth.login_result();
-            if (!login) {
-                SPDLOG_ERROR("[gw] tq td auth failed: {} ({})",
-                             login.error().detail,
-                             auth::auth_error_name(login.error().code));
-                return nullptr;
-            }
-            const auto endpoint = auth.get_td_url(td.tq.broker_name, td.tq.account_id);
+            const auto endpoint = tq_auth->get_td_url(td.tq.broker_name, td.tq.account_id);
             if (!endpoint) {
-                SPDLOG_ERROR("[gw] tq td url unavailable: {}", auth.last_error());
+                SPDLOG_ERROR("[gw] tq td url unavailable: {}", tq_auth->last_error());
                 return nullptr;
             }
             url           = endpoint->url;
-            authorization = auth.authorization_header();
+            authorization = tq_auth->authorization_header();
         }
         TqTdGateway::Options options;
         options.url           = std::move(url);
@@ -161,31 +154,37 @@ int main(int argc, char** argv) {
     // 所有网关/会话共享同一条 core strand：多 worker 下状态更新严格串行。
     auto ex = asio::make_strand(io);
 
+    // TqAuth 只属于 gw。同一实例既服务真实 MD/TD，也通过 GatewayHost
+    // 的 auth service 向 node 暴露只读快照；node 不再创建 TqAuth。
+    auto tq_auth = std::make_shared<TqAuth>(cfg.tq_auth);
+    if (cfg.tq_auth.enabled) {
+        const auto login = tq_auth->login_result();
+        if (!login) {
+            SPDLOG_WARN("[gw] TqAuth login failed: {} ({})",
+                        login.error().detail,
+                        auth::auth_error_name(login.error().code));
+        } else {
+            SPDLOG_INFO("[gw] TqAuth logged in as {}", cfg.tq_auth.user_name);
+        }
+    }
+
     // 可选：通过 TqAuth 名称服务解析动态 MD URL。解析失败时保留静态配置。
     MdConfig md_cfg = cfg.engine.md;
     if (md_cfg.kind == MdKind::Tq && md_cfg.tq.auto_url && cfg.tq_auth.enabled) {
-        TqAuth     auth(cfg.tq_auth);
-        const auto auth_result = auth.login_result();
-        if (!auth_result) {
-            SPDLOG_WARN("[gw] dynamic md url: TqAuth login failed: {} ({})",
-                        auth_result.error().detail,
-                        auth::auth_error_name(auth_result.error().code));
+        DynamicEndpointResolver resolver(*tq_auth);
+        if (auto endpoint = resolver.md()) {
+            md_cfg.tq.host = endpoint->host;
+            md_cfg.tq.port = std::to_string(endpoint->port);
+            md_cfg.tq.path = endpoint->path;
+            SPDLOG_INFO("[gw] dynamic md url resolved: {}", endpoint->to_string());
         } else {
-            DynamicEndpointResolver resolver(auth);
-            if (auto endpoint = resolver.md()) {
-                md_cfg.tq.host = endpoint->host;
-                md_cfg.tq.port = std::to_string(endpoint->port);
-                md_cfg.tq.path = endpoint->path;
-                SPDLOG_INFO("[gw] dynamic md url resolved: {}", endpoint->to_string());
-            } else {
-                SPDLOG_WARN("[gw] dynamic md url unavailable: {}", auth.last_error());
-            }
+            SPDLOG_WARN("[gw] dynamic md url unavailable: {}", tq_auth->last_error());
         }
     }
 
     // 真实网关（进程生命周期内常驻，被所有连接共享）。
     auto md = make_real_md(md_cfg, cfg.engine.ctp, ex);
-    auto td = make_real_td(cfg.engine.td, cfg.engine.ctp, cfg.tq_auth, ex);
+    auto td = make_real_td(cfg.engine.td, cfg.engine.ctp, tq_auth, ex);
 
     // 若交易网关是 Sim：按配置灌入合约规格与初始撮合价，使其可直接撮合。
     if (auto* sim = dynamic_cast<SimTdGateway*>(td.get()); sim != nullptr) {
@@ -214,26 +213,32 @@ int main(int argc, char** argv) {
                     magic_enum::enum_name(cfg.engine.td.kind));
     }
 
+    // 顶层接入网关：md/td + auth service 由同一个 GatewayHost 拥有。
+    auto gateway_host = std::make_shared<GatewayHost>(std::move(md), std::move(td), tq_auth, ex);
+
     // 启动网关（幂等协程，后台运行）。
-    if (md) {
+    if (gateway_host->md()) {
+        auto* md_p = gateway_host->md();
         co_spawn_logged(
-            ex, [&md]() -> asio::awaitable<void> { co_await md->start(); }, "gw.md.start");
+            ex, [md_p]() -> asio::awaitable<void> { co_await md_p->start(); }, "gw.md.start");
     }
-    if (td) {
+    if (gateway_host->td()) {
+        auto* td_p = gateway_host->td();
         co_spawn_logged(
-            ex, [&td]() -> asio::awaitable<void> { co_await td->start(); }, "gw.td.start");
+            ex, [td_p]() -> asio::awaitable<void> { co_await td_p->start(); }, "gw.td.start");
     }
 
     // 单消费者网关输出 -> 多连接 sink 的扇出层。多个 node 同时连接时，
     // 每个连接收到同一份事件，而不是互相抢 Channel。
     std::shared_ptr<ipc::EventBus<MarketDataEvent>> md_bus;
     std::shared_ptr<ipc::EventBus<TradeEvent>>      td_bus;
-    if (md) {
-        md_bus = std::make_shared<ipc::EventBus<MarketDataEvent>>(md->output(), ex);
+    if (gateway_host->md()) {
+        md_bus = std::make_shared<ipc::EventBus<MarketDataEvent>>(gateway_host->md()->output(), ex);
         md_bus->start();
     }
-    if (td) {
-        td_bus = std::make_shared<ipc::EventBus<TradeEvent>>(td->event_output(), ex);
+    if (gateway_host->td()) {
+        td_bus =
+            std::make_shared<ipc::EventBus<TradeEvent>>(gateway_host->td()->event_output(), ex);
         td_bus->start();
     }
 
@@ -244,12 +249,10 @@ int main(int argc, char** argv) {
 
     // 处理一条已建立的 channel：握手 -> 建 Server -> 登记 -> 自持运行。
     // 每条连接一个 strand；共享网关状态仍统一 dispatch 到 ex（core strand）。
-    auto on_accept = [&cfg, ex, io_ex = io.get_executor(), md_bus, td_bus](
+    auto on_accept = [&cfg, ex, io_ex = io.get_executor(), gateway_host, md_bus, td_bus](
                          std::unique_ptr<ipc::IIpcChannel> channel,
                          std::shared_ptr<std::vector<std::shared_ptr<ipc::GatewayIpcServer>>> live,
-                         std::shared_ptr<std::mutex> live_mu,
-                         MarketDataGateway*          md_p,
-                         TradingGateway*             td_p) {
+                         std::shared_ptr<std::mutex> live_mu) {
         ipc::IpcSession::Options opts;
         opts.local_role         = ipc::IpcRole::Gateway; // gw 侧声明 Gateway
         opts.local_name         = cfg.engine.ipc.name;
@@ -268,8 +271,7 @@ int main(int argc, char** argv) {
              gateway_ex = ex,
              live,
              live_mu,
-             md_p,
-             td_p,
+             gateway_host,
              md_bus,
              td_bus]() mutable -> asio::awaitable<void> {
                 auto started = co_await session->start();
@@ -283,8 +285,7 @@ int main(int argc, char** argv) {
 
                 auto srv =
                     std::make_shared<ipc::GatewayIpcServer>(std::move(session),
-                                                            md_p,
-                                                            td_p,
+                                                            gateway_host.get(),
                                                             srv_ex,
                                                             gateway_ex,
                                                             ipc::GatewayIpcServer::Options{});
@@ -327,8 +328,7 @@ int main(int argc, char** argv) {
 
         co_spawn_logged(
             ex,
-            [uds_acc, ex, on_accept, live_servers, live_mutex, md = md.get(), td = td.get()]()
-                -> asio::awaitable<void> {
+            [uds_acc, ex, on_accept, live_servers, live_mutex]() -> asio::awaitable<void> {
                 for (;;) {
                     boost::system::error_code ec;
                     auto                      sock = co_await uds_acc->async_accept(
@@ -342,7 +342,7 @@ int main(int argc, char** argv) {
                     }
                     SPDLOG_INFO("[gw] accepted UDS connection");
                     auto ch = std::make_unique<ipc::UdsChannel>(std::move(sock));
-                    on_accept(std::move(ch), live_servers, live_mutex, md, td);
+                    on_accept(std::move(ch), live_servers, live_mutex);
                 }
             },
             "gw.accept.uds");
@@ -355,8 +355,7 @@ int main(int argc, char** argv) {
 
         co_spawn_logged(
             ex,
-            [tcp_acc, ex, on_accept, live_servers, live_mutex, md = md.get(), td = td.get()]()
-                -> asio::awaitable<void> {
+            [tcp_acc, ex, on_accept, live_servers, live_mutex]() -> asio::awaitable<void> {
                 for (;;) {
                     boost::system::error_code ec;
                     auto                      sock = co_await tcp_acc->async_accept(
@@ -370,7 +369,7 @@ int main(int argc, char** argv) {
                     }
                     SPDLOG_INFO("[gw] accepted TCP connection");
                     auto ch = std::make_unique<ipc::TcpChannel>(std::move(sock));
-                    on_accept(std::move(ch), live_servers, live_mutex, md, td);
+                    on_accept(std::move(ch), live_servers, live_mutex);
                 }
             },
             "gw.accept.tcp");
