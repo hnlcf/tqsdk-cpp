@@ -94,11 +94,12 @@ ws://127.0.0.1:18081/stream
 ```bash
 ctest --test-dir build-ui --output-on-failure
 python3 scripts/test_simnow_acceptance.py
-python3 scripts/p0_simnow_acceptance.py  # P0 高级报单/任务/风控探针
+./scripts/ci_local.sh
 ```
 
 真实 SimNow 写测试必须显式确认，见
-[docs/SIMNOW_ACCEPTANCE.md](docs/SIMNOW_ACCEPTANCE.md)。
+[docs/SIMNOW_ACCEPTANCE.md](docs/SIMNOW_ACCEPTANCE.md)；
+脚本入口见 [scripts/README.md](scripts/README.md)。
 
 ## 进程拓扑
 
@@ -150,84 +151,44 @@ docs/             架构、模块、信息流、状态机、运维、专题
 
 ## 文档入口
 
-先读：
+先读 canonical 文档：
 
-- [docs/README.md](docs/README.md) — 文档索引与阅读顺序
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 总体架构、线程与数据所有权
-- [docs/MODULES.md](docs/MODULES.md) — 模块实现和文件边界
+- [docs/README.md](docs/README.md) — 精简索引与阅读顺序
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 进程拓扑、分层、线程和数据所有权
+- [docs/MODULES.md](docs/MODULES.md) — 模块职责和文件边界
 - [docs/FLOWS.md](docs/FLOWS.md) — 行情/交易/订阅/重连信息流
-- [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) — 进程、订单、连接、交易日状态机
+- [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) — 进程、订单、连接状态机
 - [docs/PROTOCOLS.md](docs/PROTOCOLS.md) — IPC/REST/WS 协议
-- [docs/ERROR_HANDLING.md](docs/ERROR_HANDLING.md) — std::expected、模块错误与异常隔离
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — 构建、配置、运行、验收、诊断
-- [docs/ROADMAP.md](docs/ROADMAP.md) — 后续计划
-- [docs/PERFORMANCE_BASELINE.md](docs/PERFORMANCE_BASELINE.md) — WASM/HTTP/WS 性能基线
-- [docs/REFACTOR_ASSESSMENT.md](docs/REFACTOR_ASSESSMENT.md) — 前后端重构评估
 
-专题：
+常用专题：
 
-- [docs/CTP.md](docs/CTP.md)
-- [docs/WEB_FRONTEND.md](docs/WEB_FRONTEND.md)
-- [docs/WEB_INDICATORS.md](docs/WEB_INDICATORS.md)
-- [docs/TQ_AUTH.md](docs/TQ_AUTH.md)
-- [web/README.md](web/README.md)
-- [docs/archive/UI_QT_LEGACY.md](docs/archive/UI_QT_LEGACY.md)（历史）
-- [docs/archive/INDICATOR_PLUGINS_QT_LEGACY.md](docs/archive/INDICATOR_PLUGINS_QT_LEGACY.md)（历史）
-- [docs/INSTRUMENTS.md](docs/INSTRUMENTS.md)
-- [docs/KLINE_CACHE.md](docs/KLINE_CACHE.md)
-- [docs/SIMNOW_ACCEPTANCE.md](docs/SIMNOW_ACCEPTANCE.md)
-- [docs/P0_SIMNOW_TEST_PLAN.md](docs/P0_SIMNOW_TEST_PLAN.md)
-- [docs/ORDER_TASKS.md](docs/ORDER_TASKS.md)
-- [docs/RISK_CONTROL.md](docs/RISK_CONTROL.md)
-- [docs/TICK_DATA.md](docs/TICK_DATA.md)
-- [docs/OPTION_ANALYTICS.md](docs/OPTION_ANALYTICS.md)
-- [docs/TRADING_STATUS.md](docs/TRADING_STATUS.md)
-- [docs/MULTI_ACCOUNT_ACCEPTANCE.md](docs/MULTI_ACCOUNT_ACCEPTANCE.md)
-- [docs/SOAK_AUTOMATION.md](docs/SOAK_AUTOMATION.md)
-- [docs/MULTI_ACCOUNT_BACKTEST.md](docs/MULTI_ACCOUNT_BACKTEST.md)
-- [docs/SOAK_PERF.md](docs/SOAK_PERF.md)
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-- [docs/PACKAGING.md](docs/PACKAGING.md)
-- [docs/CONTAINERS.md](docs/CONTAINERS.md)
-- [docs/CONTINUOUS_CONTRACTS.md](docs/CONTINUOUS_CONTRACTS.md)
-- [docs/STRATEGY_EMA60_DONCHIAN.md](docs/STRATEGY_EMA60_DONCHIAN.md)
-- [docs/STRATEGY_SCAN_20261111.md](docs/STRATEGY_SCAN_20261111.md)
-- [docs/DAILY_STRATEGY_BACKTEST.md](docs/DAILY_STRATEGY_BACKTEST.md)
-- [docs/DAILY_BACKTEST_DATA.md](docs/DAILY_BACKTEST_DATA.md)
-- [docs/PYTHON_BACKTEST.md](docs/PYTHON_BACKTEST.md)
-- [docs/PYTHON_LIVE_TRADING.md](docs/PYTHON_LIVE_TRADING.md)
-- [docs/PYTHON_LIBRARY.md](docs/PYTHON_LIBRARY.md)
-- [docs/PYTHON_PACKAGING.md](docs/PYTHON_PACKAGING.md)
-- [docs/RELEASE_0.1.0.md](docs/RELEASE_0.1.0.md)
-- [docs/CTP_SINGLE_ACCOUNT_STRATEGY.md](docs/CTP_SINGLE_ACCOUNT_STRATEGY.md)
-- [docs/CTP_TRADE_MATRIX.md](docs/CTP_TRADE_MATRIX.md)
-- [docs/CTP_WEEKLY_TEST_PLAN.md](docs/CTP_WEEKLY_TEST_PLAN.md)
-- [docs/P6_AUTOMATION.md](docs/P6_AUTOMATION.md)
+- [docs/CTP.md](docs/CTP.md) — CTP 接入和报单映射
+- [docs/SIMNOW_ACCEPTANCE.md](docs/SIMNOW_ACCEPTANCE.md) — 单账户 CTP/SimNow 验收
+- [docs/SIMNOW_DUAL_ACCOUNT.md](docs/SIMNOW_DUAL_ACCOUNT.md) — 双 SimNow 账户验收
+- [docs/ERROR_HANDLING.md](docs/ERROR_HANDLING.md) — `std::expected` 和错误边界
+- [docs/TQ_PROTOCOL.md](docs/TQ_PROTOCOL.md) — TQ OTG 消息与 TqTdGateway
+- [docs/TQ_AUTH.md](docs/TQ_AUTH.md) — 快期账户认证和动态 URL
+- [docs/WEB_FRONTEND.md](docs/WEB_FRONTEND.md) / [docs/WEB_CUSTOM_INDICATORS.md](docs/WEB_CUSTOM_INDICATORS.md) — Web 前端和 WASM 指标
+- [docs/ROADMAP.md](docs/ROADMAP.md) — 当前计划
 
-旧版设计/评审文档已归档到 [docs/archive/](docs/archive/)，只用于历史追溯；
-新实现以本 README 和上述 canonical docs 为准。
+数据/策略/回测和 Python 文档在 [docs/README.md](docs/README.md) 中按主题列出。
+不再维护按日期堆积的 campaign 文档；一次性结果写入 `artifacts/`。
 
 ## 当前状态
 
-- `./scripts/package_release.sh`：生成 DEB/RPM/TGZ；详见 docs/PACKAGING.md；
 - 最新 Release：`v0.4.0`（错误处理重构、C++23 GCC 14 构建、12 个 assets）；
-- `ctest`：379 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
-- Web：`pnpm typecheck`、`pnpm test`（28 项）、`pnpm build`、Playwright E2E 通过；
-- 日线回测 helper：`python3 scripts/test_backtest_daily.py`（4/4）；
-- Python 策略/绑定：`python3 -m unittest discover -s python/tests`（21/21）；
-  K 线/分时/WASM 指标/盘口/三键下单/合并持仓/委托/成交/权益已完成浏览器验证；
-- 多账户：REST/WS/task/risk 均支持 `?account=`，双 Sim 账户集成测试通过；
-- 指标配置/启用状态/输出样式/动态均线和 panel 尺寸浏览器本地持久化；
-- 合约目录：支持 TqAuth Bearer 下载；本地全量目录加载 29,439 条已验证；
-- SimTd 24h soak：完成，`http_err=0`、`ws_err=0`、`fatal=""`；
-- P7.5 基线：WASM 7 插件约 0.48ms/5000 根，HTTP/WS 数据见
-  [docs/PERFORMANCE_BASELINE.md](docs/PERFORMANCE_BASELINE.md)；
-- SimNow CTP 写验收：15/15 PASS；
-- 平昨自动化：已完成；
-- 错误处理：公共 API 已使用 expected/noexcept，详见 docs/ERROR_HANDLING.md；
-- CTP session monitor：支持结算预期断线；
-- Windows CTP、连续 5 个交易日 CTP soak 仍待后续验证；
-- 已准备 `ctp_week_soak.py` / `ctp_daily_reconcile.py` / `ctp_week_preflight.sh`。
+- `ctest`：379/379（2 项 TqMdNetwork 网络测试按环境跳过）；
+- Python：21/21；Web typecheck/test/build 和 Playwright E2E 通过；
+- 本地 Clang 23 与 GCC 16.2.1 构建通过；
+- 错误处理：公共 API 使用 expected/noexcept，详见 [docs/ERROR_HANDLING.md](docs/ERROR_HANDLING.md)；
+- 多账户：REST/WS/task/risk 支持 `?account=`；双 Sim 进程级验收通过；
+- TQ：全部 aid 的结构化消息、TqMdGateway 迁移、TqTdGateway 登录/peek/重连/报单协议已完成；
+  真实 TQ TD 账户登录后的持仓/报单验收仍待交易时段执行；
+- SimTd 两进程测试和短 soak 通过；CTP 连续交易周/7 天 soak 仍在运行，
+  完成前不宣称连续周验证通过；
+- 性能基线见 [docs/PERFORMANCE_BASELINE.md](docs/PERFORMANCE_BASELINE.md)；
+- 打包：`./scripts/package_release.sh` 生成 DEB/RPM/TGZ，详见 [docs/PACKAGING.md](docs/PACKAGING.md)。
 
 ## 安全
 

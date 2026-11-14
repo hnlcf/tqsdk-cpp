@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# P6.3 ASan build + core tests, launched detached by p6_campaign_start.sh.
+# ASan build + core tests. Output stays under artifacts/asan by default.
 set -u
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-DIR=${P6_CAMPAIGN_DIR:-$ROOT/artifacts/p6_campaign_20261109}
-BUILD=${P6_ASAN_BUILD_DIR:-$DIR/build-asan}
+BUILD=${TQSDK_ASAN_BUILD_DIR:-$ROOT/artifacts/asan/build}
 VCPKG_ROOT=${VCPKG_ROOT:-/home/hnlcf/dev/vcpkg}
-LOG=${P6_ASAN_LOG:-$DIR/p63_asan_build.log}
-mkdir -p "$DIR"
+LOG=${TQSDK_ASAN_LOG:-$ROOT/artifacts/asan/asan.log}
+mkdir -p "$(dirname "$LOG")" "$BUILD"
 exec >>"$LOG" 2>&1
 echo "[$(date -Is)] ASan build start root=$ROOT build=$BUILD"
 echo "VCPKG_ROOT=$VCPKG_ROOT"

@@ -1,463 +1,74 @@
 # Soak 与性能基线
 
-> 专题文档。总体架构/模块/信息流/状态机以 [ARCHITECTURE.md](ARCHITECTURE.md)、
-> [MODULES.md](MODULES.md)、[FLOWS.md](FLOWS.md)、[STATE_MACHINES.md](STATE_MACHINES.md)
-> 和 [PROTOCOLS.md](PROTOCOLS.md) 为准。
+本文记录长稳/交易时段 soak 的入口、判定标准和当前状态。架构见
+[ARCHITECTURE.md](ARCHITECTURE.md)，性能细节见
+[PERFORMANCE_BASELINE.md](PERFORMANCE_BASELINE.md)。
 
-## 1. Soak 工具
-
-`scripts/soak_two_process.py` 是可配置的两进程长稳工具，默认时长 24h：
+## 1. 两进程 soak
 
 ```bash
-python3 scripts/soak_two_process.py
 # 短时验证
-python3 scripts/soak_two_process.py \
-  --duration 30 --reconnect-interval 8 --load-threads 16 --order-interval 1 \
-  --gw-bin ./build-release/tqsdk-gw --node-bin ./build-release/tqsdk-node
+./scripts/soak_long_job.sh --duration 60 --reconnect-interval 10
+
+# 24h / 72h
+./scripts/soak_long_job.sh --duration 86400
+./scripts/soak_long_job.sh --duration 259200
 ```
 
-它同时施加：
+底层是 `scripts/soak_two_process.py`，会同时施加：
 
-- 8/16 个 keep-alive HTTP 线程持续 GET `/healthz`、`/account`；
-- WebSocket 客户端 subscribe + 应用层 ping，断线自动重连；
-- 周期性限价报单 + 撤单；
-- 周期性 kill/restart gw，驱动 node 的 Resume + TradeSnapshot 恢复；
-- 每秒采集 node/gw 的 RSS、FD 数、线程数，输出 CSV + JSON summary。
+- keep-alive HTTP `/healthz`、`/account` 负载；
+- WebSocket subscribe + ping，断线重连；
+- 周期限价报单/撤单；
+- 周期 kill/restart gateway，驱动 Resume 和交易快照恢复；
+- 采集 RSS/FD/线程数，输出 CSV + JSON summary。
 
-产物：
-
-```text
-artifacts/soak_YYYYmmdd_HHMMSS.csv
-artifacts/soak_YYYYmmdd_HHMMSS.json
-```
-
-CSV 列：`t,node_rss_kb,node_fds,node_threads,gw_rss_kb,gw_fds,gw_threads,
-node_alive,gw_alive,http_ok,http_err,order_ok,order_err,ws_messages,ws_err,reconnects`。
-
-验收建议：
+产物默认在 `artifacts/soak_<timestamp>/`。通过标准：
 
 - `fatal` 为空，node 全程存活；
-- node/gw RSS 在预热后不持续单调增长；
-- FD/线程数稳定，不随重连次数线性增长；
-- `http_ok > 0`，交易/WS 错误只集中在 gw 重启窗口。
+- 预热后 RSS 不持续单调增长；
+- FD/线程数不随重连次数线性增长；
+- 交易错误只集中在 gateway 重启窗口。
 
-### 已完成的短时验证（Release）
+短时结果只用于回归，不代表 24h/72h 长稳通过。
 
-2026-11-03，`build-release`（无 ASan），30s，16 HTTP 线程，1s 报单/撤单，
-8s 重启 gw：
+## 2. CTP 交易时段 soak
 
-```json
-{
-  "duration_s": 30.0,
-  "http_ok": 153198,
-  "http_err": 0,
-  "order_ok": 23,
-  "order_err": 4,
-  "ws_messages": 12780,
-  "ws_err": 0,
-  "reconnects": 3,
-  "node_max_rss_kb": 10520,
-  "node_max_fds": 27,
-  "node_max_threads": 4,
-  "gw_max_rss_kb": 8624,
-  "gw_max_fds": 10,
-  "gw_max_threads": 4,
-  "fatal": ""
-}
-```
-
-`order_err=4` 对应 gw 重启窗口内的命令失败，属于预期故障窗口。
-
-### 2026-11-03 最终回归（shared core + CTP 持久化/readyz）
-
-`build-package` Release，30s，8 HTTP 线程，1s 报单/撤单，10s 重启 gw：
-
-```json
-{
-  "duration_s": 30.0,
-  "http_ok": 227167,
-  "http_err": 0,
-  "order_ok": 27,
-  "order_err": 1,
-  "ws_messages": 29612,
-  "ws_err": 0,
-  "reconnects": 2,
-  "node_max_rss_kb": 26864,
-  "node_max_fds": 19,
-  "node_max_threads": 4,
-  "gw_max_rss_kb": 26092,
-  "gw_max_fds": 10,
-  "gw_max_threads": 4,
-  "fatal": ""
-}
-```
-
-同版本 perf（8s，16 HTTP，4 WS）：
-
-```text
-| workload | qps | p50 ms | p90 ms | p99 ms | max ms | errors |
-|---|---:|---:|---:|---:|---:|---:|
-| HTTP x16 | 7515.4 | 1.355 | 4.769 | 10.596 | 39.378 | 0 |
-| WS ping x4 | 14517.4 | 0.227 | 0.503 | 0.880 | 2.882 | 0 |
-```
-
-24h 运行由同一脚本直接执行：
+CTP 账户在每日结算期间会预期断线，不能用连续 24h 在线判断可靠性：
 
 ```bash
-python3 scripts/soak_two_process.py --out artifacts/soak_24h.csv
+./scripts/ctp_week_preflight.sh
+python3 scripts/ctp_week_soak.py --days 5 --execute
+python3 scripts/ctp_daily_reconcile.py --out-dir artifacts/ctp_reconcile
 ```
 
-建议作为夜间/发布前任务运行，并把 JSON summary 与 CSV 归档。
+`ctp_session_soak.py` 按交易时段采样 `/readyz`、account、positions、orders，
+把结算/闭市断线标记为 `expected_disconnect`，只把交易时段内断线计为 unexpected。
 
-## 2. 性能基线
+## 3. GitHub Actions
 
-`scripts/perf_baseline.py` 对运行中的 node 做客户端视角基线：
+`.github/workflows/soak.yml` 使用 self-hosted runner（标签
+`self-hosted, linux, tqsdk-soak`），因为托管 runner 单 job 最长 6 小时，且长稳需要
+固定机器、配置和网络。支持 `workflow_dispatch` 和每周五 18:00 Asia/Shanghai 的
+72h campaign；产物写入 `artifacts/`。
+
+## 4. 性能基线
 
 ```bash
-python3 scripts/perf_baseline.py --port 8080 \
-  --clients 16 --duration 10 --ws-clients 4
+python3 scripts/bench_http_ws.py \
+  --base http://127.0.0.1:18081 --requests 200 --ws-seconds 5
+
+node scripts/bench_wasm_plugins.mjs
 ```
 
-- HTTP：16 条 keep-alive 连接顺序 GET `/healthz`；
-- WebSocket：4 条连接测 `{"op":"ping"}` -> `{"type":"pong"}` RTT；
-- 输出 QPS、p50/p90/p99/max（毫秒）与错误数，并写 JSON/Markdown。
-
-### Release 基线（本机回环，2026-11-03）
-
-```text
-# tqsdk-node perf baseline
-- target: 127.0.0.1:18080/healthz / /stream
-- duration: 10.0s
-
-| workload | qps | p50 ms | p90 ms | p99 ms | max ms | errors |
-|---|---:|---:|---:|---:|---:|---:|
-| HTTP x16 | 5875.9 | 1.740 | 6.095 | 13.870 | 86.149 | 0 |
-| WS ping x4 | 11062.2 | 0.288 | 0.689 | 1.286 | 3.975 | 0 |
-```
-
-说明：
-
-- 这是 Python 客户端 + 本机回环的**相对基线**，不是网络容量上限；
-- 用于提交前后对比，建议固定机器、客户端线程数、duration 与目标 endpoint；
-- 延迟包含 Python 客户端调度开销，绝对值仅作趋势参考；
-- 不应在 ASan/TSan 构建上比较性能数字。
-
-## 3. 推荐回归流程
-
-```bash
-# 1) 功能/单测
-ctest --test-dir build --output-on-failure
-ctest --test-dir build-ctp --output-on-failure   # CTP 可选
-
-# 2) TSan 并发子集
-TSAN_OPTIONS=halt_on_error=1 ./build-tsan/tqsdk_tests \
-  --gtest_filter='Threading.*:WsStream.*:GatewayIpcServerTest.*:IpcClientTest.*:ChannelBasic.*'
-
-# 3) Release 短 soak + perf
-python3 scripts/soak_two_process.py --duration 30 \
-  --gw-bin ./build-release/tqsdk-gw --node-bin ./build-release/tqsdk-node
-# 4) 发布前 24h soak
-python3 scripts/soak_two_process.py --duration 86400 \
-  --gw-bin ./build-release/tqsdk-gw --node-bin ./build-release/tqsdk-node
-```
-
-
-### 2026-11-04 P1/P2 回归（debug build）
-
-15s，8 HTTP 线程，1s 报单/撤单，5s 重启 gw，使用 `build-ui`：
-
-```json
-{
-  "duration_s": 15.0,
-  "http_ok": 124500,
-  "http_err": 0,
-  "order_ok": 12,
-  "order_err": 2,
-  "ws_messages": 17938,
-  "ws_err": 0,
-  "reconnects": 2,
-  "node_max_rss_kb": 26896,
-  "node_max_fds": 19,
-  "node_max_threads": 4,
-  "gw_max_rss_kb": 26048,
-  "gw_max_fds": 10,
-  "gw_max_threads": 4,
-  "fatal": ""
-}
-```
-
-`order_err=2` 集中在 gw 重启窗口，进程、HTTP、WS 均无 fatal，FD/线程数稳定。
-该次为 P1/P2 功能回归短时验证；24h soak 仍按本文件上面的命令作为发布前任务。
-
-### 2026-11-04 P4 短时验证与 24h 长稳启动
-
-P4 通信/quote 元数据改动后的 20s Release 验证：
-
-```json
-{
-  "duration_s": 20.0,
-  "http_ok": 274530,
-  "http_err": 0,
-  "order_ok": 15,
-  "order_err": 4,
-  "ws_messages": 52097,
-  "ws_err": 0,
-  "reconnects": 3,
-  "node_max_rss_kb": 27612,
-  "node_max_fds": 15,
-  "node_max_threads": 4,
-  "gw_max_rss_kb": 26704,
-  "gw_max_fds": 10,
-  "gw_max_threads": 4,
-  "fatal": ""
-}
-```
-
-24h soak 已由 `scripts/soak_two_process.py --duration 86400` 启动，产物位于
-`artifacts/soak_24h_*.csv/json`；完成后按本节验收标准归档。Windows CTP 验证
-按计划推迟到后续阶段。
-
-### 2026-11-04 最终 24h soak（进行中）
-
-在 P4 通信/quote/WS 改动完成并 275/275 测试通过后，启动最终长稳：
-
-```text
-started_at: 2026-11-04 23:49:28
-csv:        artifacts/soak_24h_20261104_234928.csv
-log:        artifacts/soak_24h_20261104_234928.log
-pid:        881836
-```
-
-配置：8 HTTP load 线程、每 1s 报单/撤单、每 10min 重启 gw。24h 结束后
-按上面的验收标准检查 fatal、RSS/FD/线程趋势和重连计数。
-
-### 2026-11-05 10:26 观察
-
-当前 24h soak 已运行约 38,220s（10.6h），未发现异常：
-
-```text
-node_rss_kb: 28080–28336
-node_fds:    19
-http_ok:     541,576,101
-http_err:    0
-ws_messages: 58,161,900
-ws_err:      0
-reconnects:  63（测试脚本主动重启 gw）
-order_ok:    7,537
-order_err:   14（重启窗口内的预期错误）
-```
-
-进程仍在运行，计划运行到约 24h 后生成 CSV/JSON 总结。CTP 账户的每日结算
-断线不会用这个 SimTd soak 掩盖；CTP 恢复/结算测试见
-`docs/SIMNOW_ACCEPTANCE.md` §8。
-
-### 2026-11-05 CTP 交易时段监控
-
-已增加 `scripts/ctp_session_soak.py`，它按交易阶段采样 `/readyz`、账户、持仓和
-委托，不把每日结算断线算作系统故障。当前 CTP 还预留着一个跨结算的
-`SHFE.rb2701 long=1` 平昨测试仓，相关状态记录在
-`artifacts/ctp_close_yesterday_pending.json`。
-
-### CTP 交易时段 monitor
-
-除了 SimTd 24h soak，当前还启动了 CTP 交易时段 monitor：
-
-```text
-out:  artifacts/ctp_session_20261105_live.jsonl
-log:  artifacts/ctp_session_20261105_live.log
-```
-
-它每 30s 采样 `/readyz`、account、positions、orders，按 `phase` 区分
-`open/break/pre_open` 与 `settlement/closed`。结算断线会记录为 expected，
-不会伪装成 CTP 连续 24h 在线。
-
-### 2026-11-05 后续自动任务
-
-已通过 `at` 安排：
-
-```text
-09:30 2026-11-06  平昨自动 runner（隔离端口 24332/28083）
-10:30 2026-11-06  平昨重试
-10:35 2026-11-06  下一交易时段 CTP session monitor（14400s）
-13:35 2026-11-05  小额期权部分成交 probe
-```
-
-所有任务均使用隔离端口，避免与正在运行的 session monitor 冲突。跨结算的
-CTP 任务只对 `readyz.phase`/expected disconnect 做记录，不把预期断线当成故障。
-
-### CTP monitor 重启（WS 修复后）
-
-为验证 WebSocket 修复，CTP 交易时段 monitor 已重启到最新 node/gw：
-
-```text
-out: artifacts/ctp_session_20261105_final.jsonl
-log: artifacts/ctp_session_20261105_final.log
-```
-
-现场验证结果：
-
-```text
-quote-only subscribe -> topics=[]，snapshot 只有 quotes
-orders 显式订阅     -> 首帧 snapshot 带 orders，后续不再重复相同订单
-```
-
-CTP 仍按交易时段/结算阶段采样。
-
-### 2026-11-05 19:48 SimTd 24h 重启
-
-上一轮 SimTd soak 在约 16.4h 被外部终止，日志停在 59040s，未生成最终 CSV；
-遗留的 node/gw 子进程已清理。已在最新代码上重新启动完整 24h：
-
-```text
-pid:  3502948
-start: 2026-11-05 19:48:46
-log:  artifacts/soak_24h_20261105_194846.log
-csv:  artifacts/soak_24h_20261105_194846.csv
-```
-
-该轮将在 2026-11-06 19:48 左右结束。CTP monitor 同时观察到 19:47 已进入
-`settlement` 阶段，`expected_disconnect=true`，说明结算阶段被正确分类。
-
-### TD-only soak 配置修正
-
-原 SimTd soak 的 gateway 使用 `[md] kind="none"`，但 node 仍生成
-`[md] kind="remote"`，造成：
-
-```text
-td.ready=true
-md.connected=false
-ready=false
-```
-
-这不是交易故障，而是测试配置创建了一个没有上游的 RemoteMdGateway。已将
-soak node 改为 `[md] kind="none"`，启动等待也从 `/healthz` 改为 `/readyz`；
-新的 TD-only soak 现在返回：
-
-```json
-{"ready":true,"md":{"connected":false,"present":false,"ready":true},
- "td":{"connected":true,"ready":true}}
-```
-
-catalog 未加载是 TD-only soak 未配置 `[instruments]` 的预期行为；需要
-catalog 时使用 live node。
-
-### 2026-11-06 最终结果
-
-SimTd 24h soak 已完成：
-
-```text
-duration:       86400s
-http_ok:        732,370,495
-http_err:       0
-ws_messages:    98,846,797
-ws_err:         0
-order_ok:       17,019
-order_err:      29
-reconnects:     143
-node_max_rss:   34,452KB
-node_max_fds:   20
-gw_max_rss:     27,332KB
-fatal:          ""
-csv:            artifacts/soak_20261106_232425.csv
-```
-
-CTP session monitor：
-
-```text
-2026-11-05 14:07–20:07:
-  samples=720
-  expected_gaps=1（settlement）
-  unexpected_gaps=0
-  fatal=""
-
-2026-11-06 10:35–14:35:
-  samples=480
-  expected_gaps=0
-  unexpected_gaps=0
-  fatal=""
-```
-
-
-## 2026-11-10 P7.5 基线
-
-- WASM 指标：`node scripts/bench_wasm_plugins.mjs`，5000 根 × 100 次；7 插件
-  合计约 0.48ms/次，详见 [PERFORMANCE_BASELINE.md](PERFORMANCE_BASELINE.md)。
-- HTTP/WS：`python3 scripts/bench_http_ws.py --base ... --requests 30 --ws-seconds 2`；
-  本机 quote p50 0.073ms、kline p50 2.56ms、WS 首帧 snapshot 15.09ms。
-- 新增 5s 两进程回归：HTTP 34,739 / WS 5,406 / order 1 / 0 fatal；
-  24h/72h 通过 `scripts/soak_long_job.sh` 启动，不能把 5s 结果当作长稳结论。
-- 前端优化：全隐藏指标跳过计算；按 chart+bars+参数缓存 WASM 输出，颜色/线型/
-  显隐变化不再重跑数值计算。
-
-
-## 2026-11-10 重构后 60s 回归
-
-使用 `./scripts/soak_long_job.sh --duration 60 --reconnect-interval 10`：
-
-```text
-http_ok:        411,323
-http_err:       0
-ws_messages:    57,249
-ws_err:         0
-order_ok:       10
-order_err:      1（网关重启窗口内预期失败）
-reconnects:     5
-node_max_rss:   34,444KB
-gw_max_rss:     26,424KB
-fatal:          ""
-```
-
-本次同时验证了 `MultiAccountManager` 在关闭/移除账户后不会提前析构仍有排队回调的
-`TqApi`；双 Sim gw 进程级验收和 ASan 版本验收均通过。60s 仍不是 24h/72h 长稳结论。
-
-## 2026-11-12 机器重启后的 CTP soak 恢复
-
-首次 CTP 周 soak 在宿主机意外重启前运行到 15:32，未形成完整报告；旧采样保留在
-`artifacts/ctp_week/ctp_week_20261112_133918.jsonl`，不能作为完整五日结论。
-
-重启后修复了 soak 启动器的一个边界：收盘/结算阶段 `/readyz` 返回 503 且
-`td.expected_disconnect=true` 属于预期状态，不应被当成启动超时。现在
-`ctp_session_soak.py` 接受该状态作为初始采样点，夜间/次日开盘后继续记录 ready
-区间。
-
-重启后的 soak：
-
-```text
-start: 2026-11-12 16:53:23
-duration: 7 个自然日（覆盖 5 个交易日）
-interval: 15s
-out: artifacts/ctp_week/ctp_week_20261112_165323.jsonl
-```
-
-启动时 `phase=settlement`、`expected_disconnect=true`、MD/TD connected，采样正常；
-真实 5 个交易日结论仍需等待完整周期。
-
-### 2026-11-12 结算后重启的第二次恢复
-
-16:53 启动的 soak 在 19:53 遇到 CTP 前置 `reason=4097` 断线，随后网关停在
-`authenticate failed: CTP:前置不活跃`，TD 回调未再恢复；该段没有 ready 采样，
-不能作为交易时段结论，已在 21:34 停止并重新启动。
-
-21:34 重启结果：
-
-```text
-start: 2026-11-12 21:34:40
-initial_ready: true
-initial_phase: open
-md_connected: true
-td_connected: true
-out: artifacts/ctp_week/ctp_week_20261112_213440.jsonl
-```
-
-账户/持仓快照正常（DCE.i2701 -30、DCE.jm2701 -15、DCE.v2701 -40），soak 按 15s
-继续采样；这是当前有效的周 soak，完整结论仍需等待 7 个自然日。
-
-### 2026-11-12 watchdog 加固
-
-CTP 前置断线后认证回调丢失会让 gw 永久停在 reconnecting。已为
-`CtpTdGateway` / `CtpMdGateway` 增加 `front_timeout_ms` watchdog：超时后在进程
-内重建 CTP API，不依赖 gw/node 进程重启。
-
-本地假前置验证：TCP 连接建立但不返回认证/登录回调，2s 后连续触发
-`front/auth/login watchdog fired` 和 `CTP API rebuilt`，gw 进程保持存活。
-当前有效 soak 已切换到包含该 watchdog 的 0.2.2 构建。
+HTTP/WebSocket/WASM 的可重复数据和环境说明见
+[PERFORMANCE_BASELINE.md](PERFORMANCE_BASELINE.md)。不要把本机短测数字当成跨机器
+SLA。
+
+## 5. 当前状态
+
+- SimTd 两进程短测/24h 历史回归已完成，产品代码和测试仍在持续更新；
+- CTP session monitor 支持结算预期断线；
+- 当前 7 天 CTP soak 仍在运行，输出在 `artifacts/ctp_week_040/`；
+- 真实 5 个交易日完成前，不宣称 CTP 连续周验证通过；
+- 长稳失败时必须保留 CSV/JSON、gw/node 日志和配置快照，先定位再重启。

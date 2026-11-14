@@ -127,7 +127,7 @@ node WS /stream snapshot/diff
 - 指标设置弹层支持 MA 周期/颜色、BOLL 周期/倍数/颜色、
   MACD 快慢信号/颜色、RSI 周期/颜色；
 - 配置写入 `localStorage`，并保留旧 v1 配置迁移；
-- WASM 自定义指标路线见 [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md)；旧参数化配置兼容说明见 [WEB_INDICATORS.md](WEB_INDICATORS.md)。
+- WASM 自定义指标路线和兼容边界见 [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md)。
 
 ### 本地持久化
 

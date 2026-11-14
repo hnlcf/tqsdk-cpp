@@ -1,94 +1,82 @@
 # 文档索引
 
-本目录按“总体 → 模块 → 交互 → 状态 → 协议 → 运维 → 专题”分层。根目录
-[README.md](../README.md) 是入口，canonical docs 如下。
+本目录只保留**当前实现和维护入口**。历史设计、一次性 campaign 记录不再维护；
+需要追溯时使用 Git 历史，不再堆叠 `archive/` 副本。
 
-## 1. 总体设计
+根目录 [README.md](../README.md) 是项目入口。
 
-| 文档 | 内容 |
-|---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 进程拓扑、分层、数据所有权、线程模型、性能边界 |
-| [MODULES.md](MODULES.md) | 每个模块的职责、关键文件、公开接口和依赖方向 |
-| [FLOWS.md](FLOWS.md) | 行情/交易/订阅/重连/结算/UI 信息流 |
-| [STATE_MACHINES.md](STATE_MACHINES.md) | 进程、连接、CTP、订单、WS 客户端、交易日状态机 |
-| [PROTOCOLS.md](PROTOCOLS.md) | IPC 帧、REST、WebSocket、序列化和错误语义 |
-| [ERROR_HANDLING.md](ERROR_HANDLING.md) | std::expected、模块错误、异常隔离、日志和迁移状态 |
-| [TQ_PROTOCOL.md](TQ_PROTOCOL.md) | TQ OTG 全部 aid、消息结构、交易数据流与 TqTdGateway |
-
-## 2. 运行与运维
+## 1. 架构与协议
 
 | 文档 | 内容 |
 |---|---|
-| [OPERATIONS.md](OPERATIONS.md) | 依赖、构建、配置、启动、测试、长稳、诊断 |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | TLS、token 认证、systemd、日志脱敏与审计 |
-| [PACKAGING.md](PACKAGING.md) | C++/Web 一键 DEB/RPM/TGZ 打包与发布 |
-| [CONTAINERS.md](CONTAINERS.md) | Docker/Podman 部署镜像、Sim/实时行情示例 |
-| [CONTINUOUS_CONTRACTS.md](CONTINUOUS_CONTRACTS.md) | KQ 主连/指数、continuous_table 与 1d 前后复权 |
-| [STRATEGY_EMA60_DONCHIAN.md](STRATEGY_EMA60_DONCHIAN.md) | EMA60 + Donchian22 + ATR 策略扫描 |
-| [STRATEGY_SCAN_20261111.md](STRATEGY_SCAN_20261111.md) | 2026-11-11 54 品种扫描记录 |
-| [DAILY_STRATEGY_BACKTEST.md](DAILY_STRATEGY_BACKTEST.md) | 2016-2026 十年日线策略正式回测报告 |
-| [DAILY_BACKTEST_DATA.md](DAILY_BACKTEST_DATA.md) | 十年指数日线数据源、过滤、方法 |
-| [PYTHON_BACKTEST.md](PYTHON_BACKTEST.md) | C++ BacktestEngine 的 Python ctypes 绑定 |
-| [PYTHON_LIVE_TRADING.md](PYTHON_LIVE_TRADING.md) | Python 实时策略 -> node REST -> CTP |
-| [PYTHON_LIBRARY.md](PYTHON_LIBRARY.md) | tqsdk_py 抽象层：数据/策略/consumer/backtest/live |
-| [PYTHON_PACKAGING.md](PYTHON_PACKAGING.md) | numpy/pandas 取舍、uv 环境、wheel/native 打包 |
-| [RELEASE_0.1.0.md](RELEASE_0.1.0.md) | 0.1.0 release artifact 清单与安装 |
-| [RELEASE_0.4.0.md](RELEASE_0.4.0.md) | 0.4.0 错误处理重构与 C++23 构建说明 |
-| [CTP_SINGLE_ACCOUNT_STRATEGY.md](CTP_SINGLE_ACCOUNT_STRATEGY.md) | 单 SimNow 账户 CTP 量化测试步骤 |
-| [CI.md](CI.md) | 本地 CI、ASan/TSan、短 soak 和回归门禁 |
-| [SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md) | SimNow 真实 CTP 验收流程和报告 |
-| [SIMNOW_DUAL_ACCOUNT.md](SIMNOW_DUAL_ACCOUNT.md) | 双 SimNow/CTP 账户进程级只读验收 |
-| [P0_SIMNOW_TEST_PLAN.md](P0_SIMNOW_TEST_PLAN.md) | P0 高级报单/执行任务/风控 SimNow 验收清单 |
-| [SOAK_AUTOMATION.md](SOAK_AUTOMATION.md) | 24h/72h self-hosted soak 自动化 |
-| [SOAK_PERF.md](SOAK_PERF.md) | 24h SimTd soak、CTP session monitor、性能结果 |
-| [PERFORMANCE_BASELINE.md](PERFORMANCE_BASELINE.md) | WASM/HTTP/WS 可重复性能基线 |
-| [REFACTOR_ASSESSMENT.md](REFACTOR_ASSESSMENT.md) | 前后端重构评估与建议顺序 |
-| [CTP_TRADE_MATRIX.md](CTP_TRADE_MATRIX.md) | CTP 交易矩阵与 5 交易日执行清单 |
-| [CTP_WEEKLY_TEST_PLAN.md](CTP_WEEKLY_TEST_PLAN.md) | 连续交易日 CTP soak、每日对账、执行清单 |
-| [P6_AUTOMATION.md](P6_AUTOMATION.md) | 2026-11-09 09:00 P6.1/P6.2/P6.3 自动排期与产物 |
-| [CTP.md](CTP.md) | CTP 接入、SHFE 价格转换、平今平昨、节假日 |
-| [HA（归档）](archive/HA_LEGACY.md) | 旧版高可用草案，待重写 |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 进程拓扑、分层、数据所有权、线程模型 |
+| [MODULES.md](MODULES.md) | 模块职责、关键文件和依赖方向 |
+| [FLOWS.md](FLOWS.md) | 行情/交易/订阅/重连信息流 |
+| [STATE_MACHINES.md](STATE_MACHINES.md) | 进程、连接、订单、交易日状态机 |
+| [PROTOCOLS.md](PROTOCOLS.md) | IPC 帧、REST、WebSocket 协议 |
+| [ERROR_HANDLING.md](ERROR_HANDLING.md) | `std::expected`、错误边界、异常隔离和日志 |
+| [TQ_PROTOCOL.md](TQ_PROTOCOL.md) | TQ OTG 全部 aid、消息结构、TqTdGateway |
+| [TQ_AUTH.md](TQ_AUTH.md) | 快期账户认证、token 和动态 URL |
 
-## 3. UI 与扩展
+## 2. 构建、部署与运维
 
 | 文档 | 内容 |
 |---|---|
-| [WEB_FRONTEND.md](WEB_FRONTEND.md) | TQSDK Board（SolidJS/pnpm/Lightweight Charts）架构与功能 |
-| [WEB_INDICATORS.md](WEB_INDICATORS.md) | 指标参数/颜色/自定义指标演进方案 |
-| [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md) | WASM 指标插件、ABI/Manifest/SDK、安全与扩展边界 |
-| [TQ_AUTH.md](TQ_AUTH.md) | 快期账户 TqAuth、token 刷新和目录下载 Bearer header |
-| [INSTRUMENTS.md](INSTRUMENTS.md) | 合约目录格式、加载与刷新 |
-| [KLINE_CACHE.md](KLINE_CACHE.md) | SQLite K 线缓存、恢复与容量 |
-| [CONSTANTS.md](CONSTANTS.md) | 跨模块默认值/容量/协议上限 |
-| [TICK_DATA.md](TICK_DATA.md) | Tick/DataSeries/DataDownloader |
-| [OPTION_ANALYTICS.md](OPTION_ANALYTICS.md) | 期权 ATM、Black-Scholes、Greeks |
-| [TRADING_STATUS.md](TRADING_STATUS.md) | TradingStatus 与动态 MD/TD URL |
-| [MULTI_ACCOUNT_ACCEPTANCE.md](MULTI_ACCOUNT_ACCEPTANCE.md) | 双 Sim gw 进程级多账户验收 |
+| [OPERATIONS.md](OPERATIONS.md) | 依赖、构建、配置、启动、健康检查、诊断 |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | TLS、token 认证、systemd、日志脱敏和审计 |
+| [PACKAGING.md](PACKAGING.md) | DEB/RPM/TGZ 打包和发布 |
+| [CONTAINERS.md](CONTAINERS.md) | Docker/Podman 镜像 |
+| [CI.md](CI.md) | CI、sanitizer、短 soak 和回归门禁 |
+| [SOAK_PERF.md](SOAK_PERF.md) | 长稳工具、通过标准、CTP session soak |
+| [PERFORMANCE_BASELINE.md](PERFORMANCE_BASELINE.md) | HTTP/WS/WASM 可重复性能基线 |
+| [RELEASE_0.4.0.md](RELEASE_0.4.0.md) | 当前 0.4.0 release 说明 |
+
+## 3. 交易、CTP 与验收
+
+| 文档 | 内容 |
+|---|---|
+| [CTP.md](CTP.md) | CTP 接入、报单映射、SHFE 规则、查询和节假日 |
+| [SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md) | 单账户 SimNow/CTP 验收 |
+| [SIMNOW_DUAL_ACCOUNT.md](SIMNOW_DUAL_ACCOUNT.md) | 双 SimNow 账户进程级验收 |
+| [MULTI_ACCOUNT_ACCEPTANCE.md](MULTI_ACCOUNT_ACCEPTANCE.md) | 双 Sim 网关多账户验收 |
 | [MULTI_ACCOUNT_BACKTEST.md](MULTI_ACCOUNT_BACKTEST.md) | 多账户门面与 bar 回测 |
-| [ORDER_TASKS.md](ORDER_TASKS.md) | TargetPosTask / InsertOrderTask 设计与用法 |
-| [RISK_CONTROL.md](RISK_CONTROL.md) | RiskManager、规则接口、REST 验收 |
+| [ORDER_TASKS.md](ORDER_TASKS.md) | `TargetPosTask` / `InsertOrderTask` |
+| [RISK_CONTROL.md](RISK_CONTROL.md) | `RiskManager` 和风控规则 |
+| [TRADING_STATUS.md](TRADING_STATUS.md) | 交易状态与动态 MD/TD URL |
 
-Web 是当前主前端；旧 Web 方案归档在
-[archive/WEB_FRONTEND_DEFERRED.md](archive/WEB_FRONTEND_DEFERRED.md)。
+## 4. 数据、合约与期权
 
-## 4. 未来计划
+| 文档 | 内容 |
+|---|---|
+| [CONSTANTS.md](CONSTANTS.md) | 跨模块默认值、容量和协议上限 |
+| [INSTRUMENTS.md](INSTRUMENTS.md) | 标准合约目录 |
+| [KLINE_CACHE.md](KLINE_CACHE.md) | SQLite K 线缓存 |
+| [CONTINUOUS_CONTRACTS.md](CONTINUOUS_CONTRACTS.md) | KQ 主连/指数与 1d 复权 |
+| [TICK_DATA.md](TICK_DATA.md) | Tick / DataSeries / DataDownloader |
+| [OPTION_ANALYTICS.md](OPTION_ANALYTICS.md) | 期权 ATM、Black-Scholes、Greeks |
+
+## 5. Web 前端
+
+| 文档 | 内容 |
+|---|---|
+| [WEB_FRONTEND.md](WEB_FRONTEND.md) | TQSDK Board 架构、功能、构建 |
+| [WEB_CUSTOM_INDICATORS.md](WEB_CUSTOM_INDICATORS.md) | WASM 指标 ABI、Manifest、SDK 和 Worker |
+
+## 6. 策略、回测与 Python
+
+| 文档 | 内容 |
+|---|---|
+| [STRATEGY_EMA60_DONCHIAN.md](STRATEGY_EMA60_DONCHIAN.md) | EMA60 + Donchian22 + ATR 策略 |
+| [DAILY_STRATEGY_BACKTEST.md](DAILY_STRATEGY_BACKTEST.md) | 2016-2026 日线正式回测报告 |
+| [DAILY_BACKTEST_DATA.md](DAILY_BACKTEST_DATA.md) | 回测数据源、过滤和方法 |
+| [PYTHON_BACKTEST.md](PYTHON_BACKTEST.md) | Python 调用 C++ BacktestEngine |
+| [PYTHON_LIVE_TRADING.md](PYTHON_LIVE_TRADING.md) | Python 实时策略 -> node REST |
+| [PYTHON_LIBRARY.md](PYTHON_LIBRARY.md) | `tqsdk_py` 策略库 |
+| [PYTHON_PACKAGING.md](PYTHON_PACKAGING.md) | uv、wheel 和 native 打包 |
+
+## 7. 未来计划
 
 - [ROADMAP.md](ROADMAP.md)
 
-## 5. 历史归档
-
-[archive/](archive/) 中的文档只用于追溯旧设计，不代表当前实现：
-
-- `README_LEGACY.md`
-- `ARCHITECTURE_REVIEW_2026_11.md`
-- `THREADING_LEGACY.md`
-- `IPC_RECOVERY_LEGACY.md`
-- `HA_LEGACY.md`
-- `UI_QT_LEGACY.md`
-- `INDICATOR_PLUGINS_QT_LEGACY.md`
-- `UI_ARCHITECTURE_LEGACY.md`
-- `WEB_FRONTEND_DEFERRED.md`
-- `MODULES_LEGACY.md`
-- `ROADMAP_LEGACY.md`
-
-新代码/协议变更应先更新 canonical docs，再更新专题文档；归档文档不再维护。
+文档更新原则：协议或行为变更先改 canonical doc，再改专题文档；不再新增按日期堆积的
+一次性验收记录，结果写入 `artifacts/` 或对应维护页的“当前状态”小节。

@@ -52,7 +52,7 @@ node "$ROOT/scripts/check_wasm_plugins.mjs"
 
 if (( RUN_ASAN )); then
     echo "== ASan =="
-    "$ROOT/scripts/p6_asan_job.sh"
+    "$ROOT/scripts/asan_job.sh"
 fi
 if (( RUN_TSAN )); then
     echo "== TSan =="

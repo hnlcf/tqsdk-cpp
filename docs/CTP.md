@@ -482,5 +482,5 @@ ctest --test-dir build-ui -R CtpQueryPipeline --output-on-failure
 ```
 
 真实交易周的只读持续验证、每日对账和报单边界见
-[CTP_WEEKLY_TEST_PLAN.md](CTP_WEEKLY_TEST_PLAN.md)。该验证必须跨真实结算日
+[SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md)。该验证必须跨真实结算日
 执行，不能用 SimTd 24h soak 替代。

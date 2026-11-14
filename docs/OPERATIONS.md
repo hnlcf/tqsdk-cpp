@@ -316,18 +316,10 @@ python3 scripts/ctp_session_soak.py \
 
 ```bash
 ./scripts/ctp_recovery_test.sh
-./scripts/ctp_order_fault_test.sh
 ```
 
-平昨：
-
-```bash
-./scripts/ctp_open_overnight_position.sh
-./scripts/ctp_close_yesterday_test.sh
-./scripts/ctp_overnight_close_runner.sh
-```
-
-这些脚本使用隔离端口/flow path；先阅读脚本顶部注释。
+脚本使用隔离端口/flow path；先阅读脚本顶部注释。平今/平昨与结算边界以
+[SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md) 为准。
 
 ### 连续交易周（只读）
 
@@ -338,7 +330,7 @@ python3 scripts/ctp_week_soak.py --days 5 --execute
 python3 scripts/ctp_daily_reconcile.py --out-dir artifacts/ctp_reconcile
 ```
 
-完整验收矩阵见 [CTP_WEEKLY_TEST_PLAN.md](CTP_WEEKLY_TEST_PLAN.md)。
+完整验收流程见 [SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md)。
 
 ## 7. 产物与诊断
 
