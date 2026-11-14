@@ -1,6 +1,7 @@
 #include "tqsdk/gateway/tq/tq_md_gateway.h"
 
 #include "tqsdk/gateway/tq/tq_md_protocol.h"
+#include "tqsdk/gateway/tq/tq_protocol.h"
 #include "tqsdk/util/spawn_logged.h"
 
 #include <cstdio>
@@ -104,7 +105,7 @@ asio::awaitable<void> TqMdGateway::send_subscribe_quote() {
         }
         ins_list += s;
     }
-    co_await send_cmd(nlohmann::json{{"aid", "subscribe_quote"}, {"ins_list", ins_list}});
+    co_await send_cmd(tq::serialize(tq::Message{tq::SubscribeQuote{ins_list}}));
 }
 
 asio::awaitable<void>
@@ -164,11 +165,12 @@ asio::awaitable<void> TqMdGateway::send_cmd(nlohmann::json cmd) {
 }
 
 asio::awaitable<void> TqMdGateway::do_set_chart(const KlineSub& sub) {
-    co_await send_cmd(nlohmann::json{{"aid", "set_chart"},
-                                     {"chart_id", sub.chart_id},
-                                     {"ins_list", sub.symbol},
-                                     {"duration", sub.duration_ns},
-                                     {"view_width", sub.view_width}});
+    tq::SetChart chart;
+    chart.chart_id   = sub.chart_id;
+    chart.ins_list   = sub.symbol;
+    chart.duration   = sub.duration_ns;
+    chart.view_width = sub.view_width;
+    co_await send_cmd(tq::serialize(tq::Message{std::move(chart)}));
     co_return;
 }
 
@@ -282,7 +284,7 @@ asio::awaitable<void> TqMdGateway::do_connect_and_run() {
                 }
                 ins_list += s;
             }
-            co_await send_cmd(nlohmann::json{{"aid", "subscribe_quote"}, {"ins_list", ins_list}});
+            co_await send_cmd(tq::serialize(tq::Message{tq::SubscribeQuote{ins_list}}));
         }
         // 补发已有 K 线订阅。
         for (const auto& [cid, sub] : pending_klines_) {
@@ -332,7 +334,7 @@ asio::awaitable<void> TqMdGateway::read_loop() {
         }
 
         // 请求一帧：先 peek，再读。
-        co_await send_cmd(nlohmann::json{{"aid", "peek_message"}});
+        co_await send_cmd(tq::serialize(tq::Message{tq::PeekMessage{}}));
 
         read_buf_.consume(read_buf_.size());
         co_await ws_->async_read(read_buf_, use_awaitable);
@@ -348,8 +350,13 @@ asio::awaitable<void> TqMdGateway::read_loop() {
 
         const std::string aid = frame.value("aid", "");
         if (aid == "rtn_data") {
-            if (frame.contains("data") && frame["data"].is_array()) {
-                co_await deliver_rtn_data(frame["data"]);
+            auto parsed_frame = tq::parse(frame);
+            if (!parsed_frame) {
+                SPDLOG_WARN("[TqMd] unsupported/invalid TQ frame: {}", parsed_frame.error().detail);
+                continue;
+            }
+            if (auto* rtn = std::get_if<tq::RtnData>(&*parsed_frame); rtn != nullptr) {
+                co_await deliver_rtn_data(rtn->data);
             }
         } else if (aid == "rsp_login") {
             SPDLOG_DEBUG("[TqMd] login session: {}", frame.value("session_id", ""));
