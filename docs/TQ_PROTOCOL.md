@@ -161,7 +161,10 @@ account_key = ""           # 默认等于 account_id
 - 尚未接入 `pre_insert_order` 的保证金预计算 API；消息结构已就绪。
 - `set_risk_management_rule` 仅 SSE/SZSE 股票风控场景；当前期货 gateway 不发送。
 - 真实 TQ 柜台仍需 SimNow/TQ 账户验收；消息层已有确定性单测。
-- `TqTdGateway` 当前由 gw 进程构造；node 仍通过 remote IPC 访问。
+- `TqTdGateway` 当前由 gw 进程构造；node 仍通过 remote IPC 访问；
+- 2026-11-14 对 `wss://otg-simnow.shinnytech.com/trade` 做过只读握手冒烟：
+  握手返回 101，收到 `rtn_brokers`；当时 SimNow 交易时段已关闭，未继续完成
+  真实账户登录/报单验收。
 
 ## 7. 测试
 
@@ -175,4 +178,10 @@ ctest --test-dir build-ui -R TqApiConfigTest --output-on-failure
 - 全部 aid 名称与解析；
 - 登录、查询、图表、订单、撤单、预插入、风控、控制消息；
 - `rtn_data` / `rtn_brokers` / `rsp_login` / `rsp_quotes`；
-- 未知 aid 返回 `ParseError`。
+- 未知 aid 返回 `ParseError`；
+- `TqTdNormalization` 覆盖 OTG trade 节点到 `trade[account_key].user` 的转换；
+- `MachineId` 覆盖本机 MAC 格式。
+
+```text
+本地最终结果：CTest 379/379（2 项网络测试按环境跳过），Python 21/21。
+```
