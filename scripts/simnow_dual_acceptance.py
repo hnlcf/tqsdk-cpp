@@ -87,6 +87,8 @@ def http_json(port: int, method: str, path: str, body: dict[str, Any] | None = N
         except json.JSONDecodeError:
             parsed = {"raw": raw.decode("utf-8", "replace")}
         return response.status, parsed
+    except (OSError, ValueError) as exc:
+        return 0, {"error": str(exc)}
     finally:
         conn.close()
 
