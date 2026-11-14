@@ -36,6 +36,7 @@
 | [CTP_SINGLE_ACCOUNT_STRATEGY.md](CTP_SINGLE_ACCOUNT_STRATEGY.md) | 单 SimNow 账户 CTP 量化测试步骤 |
 | [CI.md](CI.md) | 本地 CI、ASan/TSan、短 soak 和回归门禁 |
 | [SIMNOW_ACCEPTANCE.md](SIMNOW_ACCEPTANCE.md) | SimNow 真实 CTP 验收流程和报告 |
+| [SIMNOW_DUAL_ACCOUNT.md](SIMNOW_DUAL_ACCOUNT.md) | 双 SimNow/CTP 账户进程级只读验收 |
 | [P0_SIMNOW_TEST_PLAN.md](P0_SIMNOW_TEST_PLAN.md) | P0 高级报单/执行任务/风控 SimNow 验收清单 |
 | [SOAK_AUTOMATION.md](SOAK_AUTOMATION.md) | 24h/72h self-hosted soak 自动化 |
 | [SOAK_PERF.md](SOAK_PERF.md) | 24h SimTd soak、CTP session monitor、性能结果 |

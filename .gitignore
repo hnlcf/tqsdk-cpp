@@ -70,3 +70,6 @@ dist/
 
 # node continuous-contract runtime snapshot
 continuous_table.json
+
+# local credential files (never commit)
+config/*.env
