@@ -343,6 +343,7 @@ if(TQSDK_BUILD_TESTS)
         tests/e2e/sim_td_e2e_test.cpp
         tests/gateway/tq_md_protocol_test.cpp
         tests/gateway/tq_protocol_test.cpp
+        tests/gateway/tq_td_gateway_test.cpp
         tests/instrument/instrument_catalog_test.cpp
         tests/serve/ws_protocol_test.cpp
         tests/serve/account_router_test.cpp

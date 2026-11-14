@@ -13,6 +13,13 @@
 
 namespace tqsdk {
 
+/// 把 OTG `rtn_data` 中 trade 外层柜台 user_id 映射成本地 account_key，
+/// 并补齐 DiffMergeEngine 要求的 `trade[account_key].user` 层。
+nlohmann::json normalize_td_trade_slice(const nlohmann::json& slice, std::string_view account_key);
+
+/// 判断一个 TD slice 是否已收到完整交易截面（trade_more_data == false）。
+bool td_trade_complete(const nlohmann::json& slice) noexcept;
+
 /// 天勤 OTG 交易网关（WebSocket JSON 协议）。
 ///
 /// 协议参考官方 tqsdk-python：

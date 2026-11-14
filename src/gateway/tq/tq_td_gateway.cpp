@@ -241,7 +241,7 @@ asio::awaitable<void> TqTdGateway::send_peek() {
     (void)co_await send_json(tq::serialize(tq::Message{tq::PeekMessage{}}));
 }
 
-nlohmann::json TqTdGateway::normalize_trade_keys(const nlohmann::json& slice) {
+nlohmann::json normalize_td_trade_slice(const nlohmann::json& slice, std::string_view account_key) {
     auto out   = slice;
     auto trade = out.find("trade");
     if (trade == out.end() || !trade->is_object()) {
@@ -249,15 +249,18 @@ nlohmann::json TqTdGateway::normalize_trade_keys(const nlohmann::json& slice) {
     }
     nlohmann::json normalized = nlohmann::json::object();
     for (auto it = trade->begin(); it != trade->end(); ++it) {
-        // OTG 返回的 trade 外层 key 是柜台 user_id；本进程只承载一个账户，
-        // 统一改名成 gateway 的 account_key，避免上层看到柜台账号。
-        normalized[opts_.account_key] = it.value();
+        const auto& value = it.value();
+        if (value.is_object() && !value.contains("user")) {
+            normalized[std::string(account_key)] = nlohmann::json{{"user", value}};
+        } else {
+            normalized[std::string(account_key)] = value;
+        }
     }
     *trade = std::move(normalized);
     return out;
 }
 
-bool TqTdGateway::trade_complete(const nlohmann::json& slice) const {
+bool td_trade_complete(const nlohmann::json& slice) noexcept {
     auto trade = slice.find("trade");
     if (trade == slice.end() || !trade->is_object()) {
         return false;
@@ -266,12 +269,27 @@ bool TqTdGateway::trade_complete(const nlohmann::json& slice) const {
         if (!it.value().is_object()) {
             continue;
         }
-        if (auto complete = it.value().find("trade_more_data");
-            complete != it.value().end() && complete->is_boolean() && !complete->get<bool>()) {
+        const auto& node = it.value();
+        if (auto complete = node.find("trade_more_data");
+            complete != node.end() && complete->is_boolean() && !complete->get<bool>()) {
             return true;
+        }
+        if (auto user = node.find("user"); user != node.end() && user->is_object()) {
+            if (auto complete = user->find("trade_more_data");
+                complete != user->end() && complete->is_boolean() && !complete->get<bool>()) {
+                return true;
+            }
         }
     }
     return false;
+}
+
+nlohmann::json TqTdGateway::normalize_trade_keys(const nlohmann::json& slice) {
+    return normalize_td_trade_slice(slice, opts_.account_key);
+}
+
+bool TqTdGateway::trade_complete(const nlohmann::json& slice) const {
+    return td_trade_complete(slice);
 }
 
 void TqTdGateway::merge_json(nlohmann::json& dst, const nlohmann::json& src) {
@@ -395,7 +413,11 @@ asio::awaitable<CommandAck> TqTdGateway::insert_order(const InsertOrderReq& req,
         order.limit_price = req.limit_price;
     }
     order.offset_leg2 = req.offset_leg2;
-    if (!co_await send_json(tq::serialize(tq::Message{std::move(order)}))) {
+    auto payload      = tq::serialize(tq::Message{std::move(order)});
+    // BaseOtg 在把交易包发往 OTG 前会移除 account_key；account_key 只用于
+    // 本地多账户路由，不是 TD 服务端字段。
+    payload.erase("account_key");
+    if (!co_await send_json(payload)) {
         co_return CommandAck{false, rid, "failed to send insert_order"};
     }
     co_return CommandAck{true, rid, {}};
@@ -409,7 +431,9 @@ asio::awaitable<CommandAck> TqTdGateway::cancel_order(const CancelOrderReq& req)
     cancel.account_key = opts_.account_key;
     cancel.user_id     = opts_.account_id;
     cancel.order_id    = req.order_id;
-    if (!co_await send_json(tq::serialize(tq::Message{std::move(cancel)}))) {
+    auto payload       = tq::serialize(tq::Message{std::move(cancel)});
+    payload.erase("account_key");
+    if (!co_await send_json(payload)) {
         co_return CommandAck{false, req.order_id, "failed to send cancel_order"};
     }
     co_return CommandAck{true, req.order_id, {}};

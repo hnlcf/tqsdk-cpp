@@ -348,21 +348,17 @@ asio::awaitable<void> TqMdGateway::read_loop() {
             continue;
         }
 
-        const std::string aid = frame.value("aid", "");
-        if (aid == "rtn_data") {
-            auto parsed_frame = tq::parse(frame);
-            if (!parsed_frame) {
-                SPDLOG_WARN("[TqMd] unsupported/invalid TQ frame: {}", parsed_frame.error().detail);
-                continue;
-            }
-            if (auto* rtn = std::get_if<tq::RtnData>(&*parsed_frame); rtn != nullptr) {
-                co_await deliver_rtn_data(rtn->data);
-            }
-        } else if (aid == "rsp_login") {
-            SPDLOG_DEBUG("[TqMd] login session: {}", frame.value("session_id", ""));
-        } else {
-            // 其他 rtn_* / 通知帧：阶段4 忽略。
+        auto parsed_frame = tq::parse(frame);
+        if (!parsed_frame) {
+            SPDLOG_WARN("[TqMd] unsupported/invalid TQ frame: {}", parsed_frame.error().detail);
+            continue;
         }
+        if (auto* rtn = std::get_if<tq::RtnData>(&*parsed_frame); rtn != nullptr) {
+            co_await deliver_rtn_data(rtn->data);
+        } else if (auto* login = std::get_if<tq::RspLogin>(&*parsed_frame); login != nullptr) {
+            SPDLOG_DEBUG("[TqMd] login response: {}", login->raw.dump());
+        }
+        // 其它 rtn_brokers / rsp_quotes / notify 在 MD 层忽略。
     }
     co_return;
 }
