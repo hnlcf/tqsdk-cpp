@@ -21,6 +21,7 @@ import asyncio
 import http.client
 import json
 import os
+import math
 import shutil
 import signal
 import socket
@@ -131,6 +132,113 @@ def wait_accounts(port: int, timeout: float = 90.0) -> dict[str, Any]:
     raise RuntimeError(f"accounts A/B not available on {port}: {last}")
 
 
+def wait_order(port: int, account: str, order_id: str, timeout: float = 10.0) -> dict[str, Any] | None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        status, body = http_json(port, "GET", f"/orders?account={account}")
+        if status == 200:
+            order = (body.get("orders") or {}).get(order_id)
+            if isinstance(order, dict):
+                return order
+        time.sleep(0.2)
+    return None
+
+
+def wait_order_dead(port: int, account: str, order_id: str, timeout: float = 15.0) -> dict[str, Any] | None:
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        last = wait_order(port, account, order_id, timeout=1.0)
+        if last is not None and last.get("is_dead"):
+            return last
+        time.sleep(0.2)
+    return last
+
+
+def order_probe(port: int, account: str, symbol: str) -> dict[str, Any]:
+    """Place one far-from-market GFD limit order, verify isolation, then cancel.
+
+    This is intentionally a tiny, reversible write probe. It never uses market
+    or IOC order types and never targets the best bid/ask.
+    """
+    result: dict[str, Any] = {"account": account, "symbol": symbol}
+    status, quote = http_json(port, "GET", f"/quote/{symbol}")
+    if status != 200 or not isinstance(quote, dict):
+        result["error"] = f"quote status {status}"
+        return result
+
+    last = quote.get("last_price")
+    tick = quote.get("price_tick")
+    lower = quote.get("lower_limit")
+    if not isinstance(last, (int, float)) or not math.isfinite(float(last)) or float(last) <= 0:
+        result["error"] = f"invalid last_price: {last}"
+        return result
+    tick = float(tick) if isinstance(tick, (int, float)) and float(tick) > 0 else 1.0
+    last = float(last)
+    floor_price = float(lower) if isinstance(lower, (int, float)) and math.isfinite(float(lower)) else last * 0.5
+    limit_price = max(floor_price + 5.0 * tick, last - 50.0 * tick)
+    limit_price = math.floor(limit_price / tick) * tick
+    if limit_price >= last:
+        limit_price = last - tick
+    if limit_price <= 0:
+        result["error"] = "cannot derive a safe limit price"
+        return result
+    result.update({"last_price": last, "price_tick": tick, "limit_price": limit_price})
+
+    request = {
+        "instrument_id": symbol,
+        "direction": "BUY",
+        "offset": "OPEN",
+        "price_type": "LIMIT",
+        "limit_price": limit_price,
+        "time_cond": "GFD",
+        "volume_cond": "ANY",
+        "volume": 1,
+    }
+    status, placed = http_json(port, "POST", f"/order?account={account}", request)
+    result["place_status"] = status
+    result["place_response"] = placed
+    order_id = str(placed.get("order_id", "")) if isinstance(placed, dict) else ""
+    if status != 200 or not isinstance(placed, dict) or not placed.get("success") or not order_id:
+        result["ok"] = False
+        return result
+
+    result["order_id"] = order_id
+    seen = wait_order(port, account, order_id, timeout=10.0)
+    result["order_seen"] = seen
+    other = "B" if account == "A" else "A"
+    other_status, other_orders = http_json(port, "GET", f"/orders?account={other}")
+    leaked = isinstance(other_orders, dict) and order_id in (other_orders.get("orders") or {})
+    result["visible_in_other_account"] = leaked
+    if leaked:
+        result["ok"] = False
+    else:
+        result["ok"] = seen is not None
+
+    cancelled = False
+    cancel_response: Any = None
+    for _ in range(3):
+        status, cancel_response = http_json(
+            port, "DELETE", f"/order/{order_id}?account={account}"
+        )
+        result["cancel_status"] = status
+        result["cancel_response"] = cancel_response
+        if status == 200 and isinstance(cancel_response, dict) and cancel_response.get("success"):
+            cancelled = True
+            break
+        time.sleep(0.5)
+    result["cancel_accepted"] = cancelled
+    final = wait_order_dead(port, account, order_id, timeout=20.0)
+    result["final_order"] = final
+    if final is not None and not final.get("is_dead"):
+        result["ok"] = False
+        result["error"] = "order still live after cancel attempts"
+    if final is not None and final.get("is_error"):
+        result["ok"] = False
+        result["error"] = final.get("last_msg") or "order rejected"
+    return result
+
+
 async def ws_snapshot(port: int, account: str) -> dict[str, Any]:
     import websockets
 
@@ -196,7 +304,7 @@ threads = 2
 """.strip()
 
 
-def node_config(port: int, gw_a: int, gw_b: int, name: str) -> str:
+def node_config(port: int, gw_a: int, gw_b: int, name: str, symbol: str) -> str:
     def q(value: str) -> str:
         return json.dumps(value)
 
@@ -225,7 +333,7 @@ ack_timeout_ms = 10000
 [serve]
 bind = "127.0.0.1"
 port = {port}
-symbols = []
+symbols = [{q(symbol)}]
 
 [serve.ws]
 path = "/stream"
@@ -234,7 +342,10 @@ max_clients = 32
 max_queue = 256
 
 [instruments]
-enabled = false
+enabled = true
+file = {q(str(ROOT / "symbol.json"))}
+refresh_interval_sec = 21600
+initial_delay_sec = 3600
 
 [kline_cache]
 enabled = false
@@ -294,9 +405,14 @@ def main() -> int:
     parser.add_argument("--gw-a-port", type=int, default=14331)
     parser.add_argument("--gw-b-port", type=int, default=14332)
     parser.add_argument("--timeout", type=float, default=120.0)
+    parser.add_argument("--symbol", default="DCE.v2701")
+    parser.add_argument("--orders", action="store_true", help="run reversible 1-lot write probes")
+    parser.add_argument("--yes", action="store_true", help="explicitly confirm SimNow write probes")
     parser.add_argument("--keep", action="store_true")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "artifacts/simnow_dual")
     args = parser.parse_args()
+    if args.orders and not args.yes:
+        raise SystemExit("refusing write probes without --yes")
 
     gw_bin = args.bin_dir / "tqsdk-gw"
     node_bin = args.bin_dir / "tqsdk-node"
@@ -313,11 +429,11 @@ def main() -> int:
     work.chmod(0o700)
     logs_by_name: dict[str, Path] = {}
     procs: list[subprocess.Popen] = []
-    report: dict[str, Any] = {"ok": False, "node_port": args.node_port}
+    report: dict[str, Any] = {"ok": False, "node_port": args.node_port, "profile": "read-only"}
     try:
         write_private(work / "gw-a.toml", gw_config(env_a, args.gw_a_port, "simnow-a", work / "ctp-a"))
         write_private(work / "gw-b.toml", gw_config(env_b, args.gw_b_port, "simnow-b", work / "ctp-b"))
-        write_private(work / "node.toml", node_config(args.node_port, args.gw_a_port, args.gw_b_port, "simnow-dual-node"))
+        write_private(work / "node.toml", node_config(args.node_port, args.gw_a_port, args.gw_b_port, "simnow-dual-node", args.symbol))
 
         for name, binary, cfg in (
             ("gw-a", gw_bin, work / "gw-a.toml"),
@@ -340,6 +456,15 @@ def main() -> int:
                     raise RuntimeError(f"{endpoint}?account={account} -> {status}: {body}")
             report[f"ws_{account}"] = asyncio.run(ws_snapshot(args.node_port, account))
 
+        if args.orders:
+            report["orders"] = [
+                order_probe(args.node_port, account, args.symbol) for account in ("A", "B")
+            ]
+            report["profile"] = "read-only+reversible-1-lot-write-probe"
+            if not all(item.get("ok") for item in report["orders"]):
+                report["ok"] = False
+                raise RuntimeError("one or more reversible order probes failed")
+
         args.out_dir.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d_%H%M%S")
         out = args.out_dir / f"simnow_dual_{stamp}.json"
@@ -352,7 +477,6 @@ def main() -> int:
             shutil.copy2(source, target)
             copied_logs[name] = str(target)
         report["ok"] = True
-        report["profile"] = "read-only"
         report["artifacts"] = {"report": str(out), "logs": copied_logs}
         out.write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
         print(json.dumps({
