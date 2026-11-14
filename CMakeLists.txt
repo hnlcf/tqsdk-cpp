@@ -82,6 +82,7 @@ add_library(tqsdk_core SHARED
     src/gateway/sim/sim_td_gateway.cpp
     src/gateway/tq/tq_md_protocol.cpp
     src/gateway/tq/tq_md_gateway.cpp
+    src/gateway/tq/tq_td_gateway.cpp
     src/util/log.cpp
     src/util/audit.cpp
     src/util/http_download.cpp

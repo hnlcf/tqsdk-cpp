@@ -32,6 +32,7 @@ enum class TdKind {
     None,   ///< 不接交易
     Sim,    ///< 本地撮合模拟器
     Ctp,    ///< CTP 交易前置
+    Tq,     ///< 天勤 OTG 交易网关
     Remote, ///< 通过 IPC 代理到 gw 进程
     Mock,   ///< 脚本化 mock（测试用）
 };
@@ -107,7 +108,20 @@ struct TqApiConfig {
         /// 远程网关（通常为 CTP）是否启用 SHFE 市价/对价限价转换。
         bool shfe_market_as_limit = true;
 
-        /// 预留：通过 TqAuth 解析 Tq 交易网关 URL；当前 CTP 网关不消费该字段。
+        /// Tq OTG 交易账户；td.kind == tq 时使用。
+        struct TqOptions {
+            std::string broker_id;
+            std::string account_id;
+            std::string password;
+            std::string front_broker;
+            std::string front_url;
+            std::string td_url; ///< 显式覆盖动态 URL
+            std::string account_key;
+            std::string client_app_id = "SHINNY_TQ_1.0";
+            std::string client_mac_address;
+        } tq;
+
+        /// 通过 TqAuth 解析 Tq 交易网关 URL。
         bool auto_url = false;
     } td;
 

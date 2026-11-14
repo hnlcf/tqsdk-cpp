@@ -24,6 +24,7 @@ C++23 期货数据与交易基础设施，目标是把 TqSdk 的“异步数据�
 - Tick/DataSeries/DataDownloader、期权 ATM+Greeks、TradingStatus/动态 URL、多账户与回测；
 - 合约目录、节假日日历、统一市场 SQLite 缓存（K 线 + tick）；
 - CTP SimNow 验收、交易时段 soak、故障注入；
+- TQ OTG 消息结构、TqTdGateway 登录/peek/重连/报单协议；
 - 公共边界错误处理已迁移到 `std::expected`，项目自建异常类已删除；
 
 ## 快速开始

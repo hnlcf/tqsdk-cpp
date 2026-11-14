@@ -74,6 +74,9 @@ TdKind parse_td_kind(std::string_view s) {
     if (s == "remote") {
         return TdKind::Remote;
     }
+    if (s == "tq") {
+        return TdKind::Tq;
+    }
     if (s == "mock") {
         return TdKind::Mock;
     }
@@ -193,6 +196,18 @@ CtpConfig parse_ctp_config(const toml::table& root) {
     return ctp;
 }
 
+void parse_tq_td(const toml::table& t, TqApiConfig::Td::TqOptions& out) {
+    out.broker_id          = get_str(t, "broker_id", out.broker_id);
+    out.account_id         = get_str(t, "account_id", out.account_id);
+    out.password           = get_str(t, "password", out.password);
+    out.front_broker       = get_str(t, "front_broker", out.front_broker);
+    out.front_url          = get_str(t, "front_url", out.front_url);
+    out.td_url             = get_str(t, "td_url", out.td_url);
+    out.account_key        = get_str(t, "account_key", out.account_key);
+    out.client_app_id      = get_str(t, "client_app_id", out.client_app_id);
+    out.client_mac_address = get_str(t, "client_mac_address", out.client_mac_address);
+}
+
 // 解析一份已加载的 TOML DOM 到 TqApiConfig。
 TqApiConfig build_from_toml(const toml::table& root) {
     TqApiConfig cfg;
@@ -234,6 +249,9 @@ TqApiConfig build_from_toml(const toml::table& root) {
         cfg.td.shfe_market_as_limit =
             get_bool(td_t, "shfe_market_as_limit", cfg.td.shfe_market_as_limit);
         cfg.td.auto_url = get_bool(td_t, "auto_url", cfg.td.auto_url);
+        if (const auto* tq_tv = td_t.get("tq"); tq_tv != nullptr && tq_tv->is_table()) {
+            parse_tq_td(*tq_tv->as_table(), cfg.td.tq);
+        }
         if (auto* specs_tv = td_t.get("specs"); specs_tv && specs_tv->is_table()) {
             const auto& specs_t = *specs_tv->as_table();
             for (auto&& [k, v] : specs_t) {
@@ -470,7 +488,8 @@ make_tqapi(asio::io_context&           ctx,
         break;
     }
     case TdKind::Ctp:
-        // CTP 只在 gw 进程中构造。
+    case TdKind::Tq:
+        // CTP/TQ 交易网关只在 gw 进程中构造。
         td = nullptr;
         break;
     case TdKind::Remote:
@@ -528,6 +547,9 @@ TqApiConfig::Td parse_gw_td(const toml::table& root) {
         td.kind            = parse_td_kind(get_str(t, "kind", "none"));
         td.initial_balance = get_double(t, "initial_balance", td.initial_balance);
         td.auto_url        = get_bool(t, "auto_url", td.auto_url);
+        if (const auto* tq_tv = t.get("tq"); tq_tv != nullptr && tq_tv->is_table()) {
+            parse_tq_td(*tq_tv->as_table(), td.tq);
+        }
     }
     return td;
 }

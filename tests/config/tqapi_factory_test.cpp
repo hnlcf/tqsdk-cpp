@@ -213,7 +213,7 @@ TEST(TqApiFactoryTest, RemoteMdAndTdEndToEnd) {
         o.heartbeat_interval = std::chrono::seconds(60);
         o.heartbeat_timeout  = std::chrono::seconds(120);
         node.sess = std::make_unique<ipc::IpcSession>(std::move(ch), ctx.get_executor(), o);
-        co_await node.sess->start();
+        (void)co_await node.sess->start();
 
         // 应答循环：处理 Subscribe / Command 若干次后退出
         for (int i = 0; i < 8; ++i) {
@@ -224,12 +224,12 @@ TEST(TqApiFactoryTest, RemoteMdAndTdEndToEnd) {
             if (opt->type == ipc::FrameType::Subscribe) {
                 node.got_sub = ipc::decode_as<ipc::FrameType::Subscribe>(*opt);
                 SPDLOG_TRACE("[FakeNode] got Subscribe");
-                co_await node.sess->send_body<ipc::FrameType::SubscribeAck>(
+                (void)co_await node.sess->send_body<ipc::FrameType::SubscribeAck>(
                     ipc::SubscribeAckBody{true, ""});
             } else if (opt->type == ipc::FrameType::Command) {
                 node.got_cmd = ipc::decode_as<ipc::FrameType::Command>(*opt);
                 SPDLOG_TRACE("[FakeNode] got Command rid={}", node.got_cmd->rid);
-                co_await node.sess->send_body<ipc::FrameType::CommandAck>(
+                (void)co_await node.sess->send_body<ipc::FrameType::CommandAck>(
                     ipc::CommandAckBody{CommandAck{true, node.got_cmd->rid, ""}});
             }
         }
@@ -524,4 +524,43 @@ TEST(ConfigErrors, LoadMissingFileReturnsError) {
     ASSERT_FALSE(result);
     EXPECT_EQ(result.error().code, config::ConfigErrorCode::file_io);
     EXPECT_FALSE(result.error().detail.empty());
+}
+
+TEST(TqApiConfigTest, ParseTqTdOptions) {
+    const auto cfg = parse_tqapi_config(R"(
+        [td]
+        kind = "tq"
+        auto_url = true
+        [td.tq]
+        broker_id = "simnow"
+        account_id = "user_a"
+        password = "secret"
+        front_broker = "9999"
+        front_url = "tcp://127.0.0.1:1"
+        account_key = "A"
+    )");
+    ASSERT_TRUE(cfg);
+    EXPECT_EQ(cfg->td.kind, TdKind::Tq);
+    EXPECT_TRUE(cfg->td.auto_url);
+    EXPECT_EQ(cfg->td.tq.broker_id, "simnow");
+    EXPECT_EQ(cfg->td.tq.account_id, "user_a");
+    EXPECT_EQ(cfg->td.tq.account_key, "A");
+    EXPECT_EQ(cfg->td.tq.front_broker, "9999");
+}
+
+TEST(TqApiConfigTest, ParseGatewayTqTdOptions) {
+    const auto cfg = parse_gw_config(R"(
+        [td]
+        kind = "tq"
+        auto_url = true
+        [td.tq]
+        broker_id = "simnow"
+        account_id = "user_b"
+        password = "secret"
+    )");
+    ASSERT_TRUE(cfg);
+    EXPECT_EQ(cfg->td.kind, TdKind::Tq);
+    EXPECT_TRUE(cfg->td.auto_url);
+    EXPECT_EQ(cfg->td.tq.broker_id, "simnow");
+    EXPECT_EQ(cfg->td.tq.account_id, "user_b");
 }

@@ -5,6 +5,7 @@
 #include "tqsdk/config/tqapi_factory.h"
 #include "tqsdk/gateway/sim/sim_td_gateway.h"
 #include "tqsdk/gateway/tq/tq_md_gateway.h"
+#include "tqsdk/gateway/tq/tq_td_gateway.h"
 
 #ifdef TQSDK_ENABLE_CTP
     #include "tqsdk/gateway/ctp/ctp_md_gateway.h"
@@ -63,8 +64,10 @@ make_real_md(const TqApiConfig::Md& md, const CtpConfig& ctp, asio::any_io_execu
     return nullptr;
 }
 
-std::unique_ptr<TradingGateway>
-make_real_td(const TqApiConfig::Td& td, const CtpConfig& ctp, asio::any_io_executor ex) {
+std::unique_ptr<TradingGateway> make_real_td(const TqApiConfig::Td& td,
+                                             const CtpConfig&       ctp,
+                                             const TqAuth::Config&  tq_auth,
+                                             asio::any_io_executor  ex) {
     switch (td.kind) {
     case TdKind::Sim:
         return std::make_unique<SimTdGateway>(ex, td.initial_balance);
@@ -75,6 +78,43 @@ make_real_td(const TqApiConfig::Td& td, const CtpConfig& ctp, asio::any_io_execu
         SPDLOG_ERROR("[gw] td.kind=ctp but binary built without TQSDK_ENABLE_CTP");
         return nullptr;
 #endif
+    case TdKind::Tq: {
+        std::string url = td.tq.td_url;
+        std::string authorization;
+        if (url.empty()) {
+            if (!tq_auth.enabled) {
+                SPDLOG_ERROR("[gw] td.kind=tq needs [td.tq].td_url or [tq_auth].enabled");
+                return nullptr;
+            }
+            TqAuth     auth(tq_auth);
+            const auto login = auth.login_result();
+            if (!login) {
+                SPDLOG_ERROR("[gw] tq td auth failed: {} ({})",
+                             login.error().detail,
+                             auth::auth_error_name(login.error().code));
+                return nullptr;
+            }
+            const auto endpoint = auth.get_td_url(td.tq.broker_id, td.tq.account_id);
+            if (!endpoint) {
+                SPDLOG_ERROR("[gw] tq td url unavailable: {}", auth.last_error());
+                return nullptr;
+            }
+            url           = endpoint->url;
+            authorization = auth.authorization_header();
+        }
+        TqTdGateway::Options options;
+        options.url                = std::move(url);
+        options.authorization      = std::move(authorization);
+        options.broker_id          = td.tq.broker_id;
+        options.account_id         = td.tq.account_id;
+        options.password           = td.tq.password;
+        options.front_broker       = td.tq.front_broker;
+        options.front_url          = td.tq.front_url;
+        options.account_key        = td.tq.account_key;
+        options.client_app_id      = td.tq.client_app_id;
+        options.client_mac_address = td.tq.client_mac_address;
+        return std::make_unique<TqTdGateway>(ex, std::move(options));
+    }
     case TdKind::None:
     case TdKind::Mock:
     case TdKind::Remote:
@@ -141,10 +181,10 @@ int main(int argc, char** argv) {
 
     // 真实网关（进程生命周期内常驻，被所有连接共享）。
     auto md = make_real_md(md_cfg, cfg.ctp, ex);
-    auto td = make_real_td(cfg.td, cfg.ctp, ex);
+    auto td = make_real_td(cfg.td, cfg.ctp, cfg.tq_auth, ex);
 
     // Tq 交易网关 URL 目前只做解析/诊断，CTP TD 仍使用 ctp.td_front。
-    if (cfg.td.auto_url && cfg.tq_auth.enabled) {
+    if (cfg.td.kind != TdKind::Tq && cfg.td.auto_url && cfg.tq_auth.enabled) {
         TqAuth     auth(cfg.tq_auth);
         const auto auth_result = auth.login_result();
         if (auth_result) {
