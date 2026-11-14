@@ -26,7 +26,7 @@
 
 ## 1.1 当前剩余优先级
 
-1. **TqTdGateway**：消费动态 TD URL，实现 TQ 交易网关登录、下单/撤单、成交/持仓 diff、重连对账；需要官方协议/可用测试端点。
+1. ✅ **TQ 协议层**：全部客户端/服务端 aid 的结构化消息、序列化/解析和 TQ MD 迁移已完成；**TqTdGateway** 已接入动态 TD URL、`req_login`/`confirm_settlement`、`peek_message`、下单/撤单、trade diff/snapshot、断线重连；真实 TQ 账户登录后的续约/报单验收仍待交易时段执行。详见 [TQ_PROTOCOL.md](TQ_PROTOCOL.md)。
 2. ✅ **WebSocket 多账户过滤**：`/stream?account=` 选择每账户独立 hub；Web 账户切换会重连并带账户订阅。
 3. ✅ **账户级 task/risk**：`/task/*`、`/risk/*` 支持 `?account=`，任务按账户过滤，风控使用对应 TqApi。
 4. ✅ **进程级双账户验收**：两个独立 Sim gw + node 的 `/accounts`、下单、持仓、task/risk、`/stream?account=` 已通过；真实 CTP/SimNow 双账户仍待执行，见 [MULTI_ACCOUNT_ACCEPTANCE.md](MULTI_ACCOUNT_ACCEPTANCE.md)。
