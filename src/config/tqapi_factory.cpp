@@ -12,6 +12,8 @@
 
 #include <toml++/toml.hpp>
 
+#include <set>
+
 namespace tqsdk {
 
 namespace {
@@ -769,6 +771,143 @@ NodeConfig build_node_from_toml(const toml::table& root) {
     return cfg;
 }
 
+// 配置文件支持 [include].files = ["shared/ipc.toml", ...]：
+// - 路径相对于当前文件；
+// - 后 include 覆盖先 include，入口文件最后覆盖所有 fragment；
+// - TOML table 递归合并，标量/数组替换；
+// - 禁止循环 include。
+void merge_toml_table(toml::table& dst, const toml::table& src) {
+    for (auto&& [k, v] : src) {
+        const auto key      = std::string(k.str());
+        auto*      existing = dst.get(key);
+        if (existing != nullptr && existing->is_table() && v.is_table()) {
+            merge_toml_table(*existing->as_table(), *v.as_table());
+        } else {
+            dst.insert_or_assign(key, v);
+        }
+    }
+}
+
+std::filesystem::path normalized_config_path(const std::filesystem::path& path) {
+    std::error_code ec;
+    auto            result = std::filesystem::weakly_canonical(path, ec);
+    if (!ec) {
+        return result;
+    }
+    result = std::filesystem::absolute(path, ec);
+    return ec ? path.lexically_normal() : result.lexically_normal();
+}
+
+config::ConfigResult<toml::table> load_toml_with_includes(const std::filesystem::path& entry,
+                                                          std::set<std::string>&       stack,
+                                                          int depth) noexcept {
+    if (depth > 32) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::invalid_value,
+            fmt::format("config include depth exceeds 32: {}", entry.string()),
+        });
+    }
+
+    const auto normalized = normalized_config_path(entry);
+    const auto key        = normalized.string();
+    if (!stack.insert(key).second) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::invalid_value,
+            fmt::format("config include cycle at '{}'", entry.string()),
+        });
+    }
+
+    std::error_code fs_ec;
+    if (!std::filesystem::is_regular_file(normalized, fs_ec)) {
+        stack.erase(key);
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::file_io,
+            fmt::format("config file not found: {}", entry.string()),
+        });
+    }
+
+    toml::table root;
+    try {
+        root = toml::parse_file(normalized.string());
+    } catch (const toml::parse_error& e) {
+        stack.erase(key);
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::parse,
+            fmt::format("parse '{}': {}", entry.string(), e.description().data()),
+        });
+    } catch (const std::exception& e) {
+        stack.erase(key);
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            fmt::format("load '{}': {}", entry.string(), e.what()),
+        });
+    } catch (...) {
+        stack.erase(key);
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::unknown,
+            fmt::format("load '{}': unknown error", entry.string()),
+        });
+    }
+
+    std::vector<std::filesystem::path> includes;
+    if (auto* include_node = root.get("include"); include_node != nullptr) {
+        const auto* include_table = include_node->as_table();
+        if (include_table == nullptr) {
+            stack.erase(key);
+            return std::unexpected(config::ConfigError{
+                config::ConfigErrorCode::invalid_value,
+                fmt::format("[include] must be a table in '{}'", entry.string()),
+            });
+        }
+        const auto* files = include_table->get("files");
+        if (files == nullptr || !files->is_array()) {
+            stack.erase(key);
+            return std::unexpected(config::ConfigError{
+                config::ConfigErrorCode::invalid_value,
+                fmt::format("[include].files must be an array in '{}'", entry.string()),
+            });
+        }
+        for (auto&& item : *files->as_array()) {
+            const auto* value = item.as_string();
+            if (value == nullptr || value->get().empty()) {
+                stack.erase(key);
+                return std::unexpected(config::ConfigError{
+                    config::ConfigErrorCode::invalid_value,
+                    fmt::format("[include].files entries must be non-empty strings in '{}'",
+                                entry.string()),
+                });
+            }
+            auto path = std::filesystem::path(value->get());
+            if (path.is_relative()) {
+                path = entry.parent_path() / path;
+            }
+            includes.push_back(std::move(path));
+        }
+        root.erase("include");
+    }
+
+    toml::table merged;
+    for (const auto& include : includes) {
+        auto included = load_toml_with_includes(include, stack, depth + 1);
+        if (!included) {
+            stack.erase(key);
+            return std::unexpected(std::move(included.error()));
+        }
+        merge_toml_table(merged, *included);
+    }
+    merge_toml_table(merged, root);
+    stack.erase(key);
+    return merged;
+}
+
+std::filesystem::path config_entry_path(const std::string& path, std::string_view entry_name) {
+    std::error_code ec;
+    if (std::filesystem::is_directory(path, ec)) {
+        return std::filesystem::path(path) / std::string(entry_name);
+    }
+    return std::filesystem::path(path);
+}
+
 } // namespace
 
 config::ConfigResult<GwConfig> parse_gw_config(std::string_view toml_text) noexcept {
@@ -820,38 +959,20 @@ config::ConfigResult<NodeConfig> parse_node_config(std::string_view toml_text) n
 }
 
 config::ConfigResult<GwConfig> load_gw_config(const std::string& path) noexcept {
-    std::error_code fs_ec;
-    if (!std::filesystem::exists(path, fs_ec)) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::file_io,
-            fmt::format("config file not found: {}", path),
-        });
+    const auto            entry = config_entry_path(path, "gw.toml");
+    std::set<std::string> stack;
+    auto                  root = load_toml_with_includes(entry, stack, 0);
+    if (!root) {
+        return std::unexpected(std::move(root.error()));
     }
-    try {
-        auto             root = toml::parse_file(path);
-        ConfigParseState state;
-        ParseGuard       guard(state);
-        auto             cfg = build_gw_from_toml(root);
-        if (state.failed) {
-            return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
-        }
-        return cfg;
-    } catch (const toml::parse_error& e) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::parse,
-            fmt::format("gw config parse '{}': {}", path, e.description().data()),
-        });
-    } catch (const std::exception& e) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::unknown,
-            fmt::format("gw config load '{}': {}", path, e.what()),
-        });
-    } catch (...) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::unknown,
-            fmt::format("gw config load '{}': unknown error", path),
-        });
+
+    ConfigParseState state;
+    ParseGuard       guard(state);
+    auto             cfg = build_gw_from_toml(*root);
+    if (state.failed) {
+        return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
     }
+    return cfg;
 }
 
 config::ConfigResult<GwConfig> try_parse_gw_config(std::string_view toml_text) noexcept {
@@ -871,38 +992,20 @@ config::ConfigResult<GwConfig> try_parse_gw_config(std::string_view toml_text) n
 }
 
 config::ConfigResult<NodeConfig> load_node_config(const std::string& path) noexcept {
-    std::error_code fs_ec;
-    if (!std::filesystem::exists(path, fs_ec)) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::file_io,
-            fmt::format("config file not found: {}", path),
-        });
+    const auto            entry = config_entry_path(path, "node.toml");
+    std::set<std::string> stack;
+    auto                  root = load_toml_with_includes(entry, stack, 0);
+    if (!root) {
+        return std::unexpected(std::move(root.error()));
     }
-    try {
-        auto             root = toml::parse_file(path);
-        ConfigParseState state;
-        ParseGuard       guard(state);
-        auto             cfg = build_node_from_toml(root);
-        if (state.failed) {
-            return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
-        }
-        return cfg;
-    } catch (const toml::parse_error& e) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::parse,
-            fmt::format("node config parse '{}': {}", path, e.description().data()),
-        });
-    } catch (const std::exception& e) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::unknown,
-            fmt::format("node config load '{}': {}", path, e.what()),
-        });
-    } catch (...) {
-        return std::unexpected(config::ConfigError{
-            config::ConfigErrorCode::unknown,
-            fmt::format("node config load '{}': unknown error", path),
-        });
+
+    ConfigParseState state;
+    ParseGuard       guard(state);
+    auto             cfg = build_node_from_toml(*root);
+    if (state.failed) {
+        return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
     }
+    return cfg;
 }
 
 config::ConfigResult<NodeConfig> try_parse_node_config(std::string_view toml_text) noexcept {

@@ -22,7 +22,8 @@
 //   2. 通过 serve 层（HttpServer）对外暴露 REST：行情/账户/订单/持仓 + 下单/撤单。
 //
 // 用法：
-//   tqsdk-node -c config/node.toml
+//   tqsdk-node -c config          # config 目录，自动读取 node.toml + [include]
+//   tqsdk-node -c config/node.toml # 也兼容单文件入口
 //
 // 数据流：
 //   gw --IPC(MarketDataPush/TradePush)--> RemoteMd/TdGateway::output()
@@ -56,7 +57,8 @@ int main(int argc, char** argv) {
     std::string config_path;
     std::string log_level;
     int         threads = 0;
-    app.add_option("-c,--config", config_path, "Path to node config TOML")->required();
+    app.add_option("-c,--config", config_path, "Path to node config TOML or config directory")
+        ->required();
     app.add_option("-l,--log-level", log_level, "Log level (overrides TQSDK_LOG_LEVEL)");
     app.add_option("-t,--threads", threads, "IO worker threads (overrides [runtime].threads)");
     app.set_version_flag("-v,--version",

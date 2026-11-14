@@ -1,0 +1,30 @@
+# Shared data/cache settings (node).
+[instruments]
+enabled = true
+file = "symbol.json"
+url = "https://openmd.shinnytech.com/t/md/symbols/symbol.json"
+refresh_interval_sec = 21600
+initial_delay_sec = 60
+
+[continuous]
+enabled = true
+url = "https://files.shinnytech.com/continuous_table.json"
+file = "continuous_table.json"
+refresh_interval_sec = 86400
+initial_delay_sec = 1
+
+[market_cache]
+file = "market_cache.sqlite3"
+
+[kline_cache]
+enabled = true
+max_bars_per_series = 2000
+flush_interval_ms = 250
+max_pending_bars = 50000
+fresh_after_sec = 900
+
+[tick_cache]
+enabled = false
+max_ticks_per_series = 200000
+flush_interval_ms = 250
+max_pending_ticks = 50000

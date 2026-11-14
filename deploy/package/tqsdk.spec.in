@@ -60,3 +60,4 @@ echo "tqsdk: edit /etc/tqsdk/gw.toml and node.toml, set TQSDK_SERVE_TOKEN in tqs
 /usr/share/tqsdk
 /usr/share/doc/tqsdk
 %attr(0640,root,tqsdk) /etc/tqsdk/*.example
+%attr(0640,root,tqsdk) /etc/tqsdk/shared/*.toml

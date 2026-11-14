@@ -122,13 +122,16 @@ diff 的 `is_error` / `status` 为准。
 
 ## 5. 配置
 
-TQ TD 只在 `tqsdk-gw` 进程中使用：
+TQ TD 只在 `tqsdk-gw` 进程中使用。目录式配置把这些项放在
+`config/shared/tq.toml`，由 `config/gw.toml` 的 `[include]` 引入；
+目录/include 规则见 [CONFIG.md](CONFIG.md)。
 
 ```toml
 [td]
 kind = "tq"
 auto_url = true
 
+# 这些 TQ 参数实际放在 config/shared/tq.toml，由入口 include。
 [td.tq]
 broker_name = "simnow"    # 天勤 broker 元数据键，也是 req_login.bid
 account_id = "..."         # 期货资金账号
@@ -185,5 +188,5 @@ ctest --test-dir build-ui -R TqApiConfigTest --output-on-failure
 - `MachineId` 覆盖本机 MAC 格式。
 
 ```text
-本地最终结果：CTest 380/380（2 项网络测试按环境跳过），Python 21/21。
+本地最终结果：CTest 384/384（2 项网络测试按环境跳过），Python 21/21。
 ```

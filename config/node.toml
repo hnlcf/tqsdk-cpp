@@ -1,119 +1,64 @@
-# tqsdk-node 数据服务进程示例配置
+# tqsdk-node 数据服务进程入口配置
 #
-# node 以 Node 角色连接 gw 端点，把行情/交易合并为权威截面，再通过 HTTP serve
-# 对外暴露。上游连接段沿用客户端配置语义（[ipc]/[md]/[td]），md/td 均设为 remote
-# 并指向 gw 的监听端点。
+# 启动目录模式：
+#   ./build-ui/tqsdk-node -c config
+# load_node_config("config") 会读取本文件，并解析 [include].files。
 #
-# 多账户（可选）：
-# 每个额外账户连接一个独立 gw 端点，拥有独立 TqApi/DataManager。
-# 账户 REST：GET /accounts、GET /positions?account=<id>、
-# POST /order?account=<id>。
-# account_id = "default"
-# [[accounts]]
-# id = "account-b"
-# gw_host = "127.0.0.1"
-# gw_port = 14331
+# 共享配置：
+#   shared/ipc.toml     IPC 编码/超时
+#   shared/tq.toml      TqAuth 和 TQ 默认设置
+#   shared/cache.toml   合约目录、SQLite 缓存、主连表
+#
+# node 只负责连接 gw 和对外服务；真实行情/交易网关由 gw 进程选择。
+[include]
+files = [
+    "shared/ipc.toml",
+    "shared/tq.toml",
+    "shared/cache.toml",
+]
 
 [ipc]
-# transport = "uds"
 transport = "tcp"
-encoding = "json"
-handshake_timeout_ms = 5000
-heartbeat_interval_ms = 5000
-heartbeat_timeout_ms = 15000
+role = "node"
 local_name = "tqsdk-node"
-# 注意：node 会强制以 node 角色握手（覆盖此处 role）。
 
 # 上游行情（来自 gw）
 [md]
 kind = "remote"
-# socket = "/tmp/tqsdk-gw.sock"
 tcp_host = "127.0.0.1"
 tcp_port = 4321
 
 # 上游交易（来自 gw）
 [td]
 kind = "remote"
-# socket = "/tmp/tqsdk-gw.sock"
 tcp_host = "127.0.0.1"
 tcp_port = 4321
-
 ack_timeout_ms = 10000
 
-# ---- 对外 serve 层 ----
 [serve]
 bind = "127.0.0.1"
 port = 8080
-# 启动即预订阅的合约（便于直接 curl 到数据）
 symbols = []
 
-# 同一端口上的 WebSocket 实时推送（ws://host:port/stream）
-# 认证：token 建议只从环境变量/EnvironmentFile 注入，不要写进仓库。
-# [serve.auth]
-# enabled = false
-# token_env = "TQSDK_SERVE_TOKEN"
-# allow_query_token = true
-# exempt_healthz = true
-
+# 同一端口上的 WebSocket 实时推送。
 [serve.ws]
 path = "/stream"
 heartbeat_interval_ms = 30000
 max_clients = 256
-# 单连接待发送队列上限；慢消费者丢最旧行情
 max_queue = 1024
 
-# ---- 快期账户认证 ----
-# 可选：官方 TqSdk 使用快期账号换 access_token，并在下载
-# openmd symbol.json / latest.json 时携带 Authorization: Bearer。
-# 账号密码只放在本机配置或环境变量，不要提交。
-[tq_auth]
-enabled = true
-user_name = "your_tq_user"
-password = "your_tq_password"
-auth_url = "https://auth.shinnytech.com"
-request_timeout_sec = 30
-
-# ---- 标准合约目录 ----
-# 优先加载本地 symbol.json（active 合约，35MB）；不存在时回退 latest.json。
-# 后台线程按 refresh_interval_sec 空闲下载并原子替换；首次缺失时立即尝试下载。
-[instruments]
-enabled = true
-file = "symbol.json"
-url = "https://openmd.shinnytech.com/t/md/symbols/symbol.json"
-refresh_interval_sec = 21600
-initial_delay_sec = 60
-
-# ---- 行情缓存（K 线和 tick 共用同一个 SQLite 文件）----
-# 多张表：kline_bars / kline_series / ticks / tick_series。
-[market_cache]
-file = "market_cache.sqlite3"
-
-# ---- K 线历史缓存 ----
-[kline_cache]
-enabled = true
-max_bars_per_series = 2000
-flush_interval_ms = 250
-max_pending_bars = 50000
-fresh_after_sec = 900
-
-# ---- Tick 快照缓存 ----
-# 保存 quote 快照（不是逐笔成交 tape）；异步写 SQLite，按合约保留最近 N 条。
-# REST: GET /tick-cache/status、GET /ticks/SHFE.rb2701?source=cache&limit=200
-[tick_cache]
-enabled = false
-max_ticks_per_series = 200000
-flush_interval_ms = 250
-max_pending_ticks = 50000
-
-# ---- 运行时线程 ----
-# io_context worker 数。数据面（TqApi/DataManager/网关）绑定 core strand 串行；
-# HTTP 每连接独立 strand，可在多个 worker 上并行处理 socket 读写。
-# 变更请求审计：只记录 method/target/status/remote，不记录请求 body 或 token。
+# 变更请求审计（可选，默认关闭）。
 [audit]
 enabled = false
 file = "logs/audit.log"
 max_bytes = 10485760
 max_files = 5
+
+# 多账户（可选；每个额外账户连接独立 gw）。
+# [[accounts]]
+# id = "account-b"
+# gw_host = "127.0.0.1"
+# gw_port = 14331
 
 [runtime]
 threads = 4

@@ -1,5 +1,7 @@
 #include "tqsdk/pch.h"
 
+#include <fstream>
+
 #include "tqsdk/config/tqapi_factory.h"
 #include "tqsdk/ipc/ipc_session.h"
 #include "tqsdk/ipc/protocol.h"
@@ -575,4 +577,151 @@ TEST(TqApiConfigTest, TqTdRequiresBrokerName) {
     ASSERT_FALSE(cfg);
     EXPECT_EQ(cfg.error().code, config::ConfigErrorCode::invalid_value);
     EXPECT_NE(cfg.error().detail.find("broker_name"), std::string::npos);
+}
+
+namespace {
+
+struct TempConfigBundle {
+    std::filesystem::path root;
+
+    TempConfigBundle() {
+        root = std::filesystem::temp_directory_path() /
+               fmt::format("tqsdk-config-bundle-{}",
+                           std::chrono::steady_clock::now().time_since_epoch().count());
+        std::filesystem::create_directories(root / "shared");
+    }
+
+    ~TempConfigBundle() { std::filesystem::remove_all(root); }
+
+    void write(std::string_view name, std::string_view body) const {
+        const auto path = root / std::string(name);
+        std::filesystem::create_directories(path.parent_path());
+        std::ofstream out(path);
+        out << body;
+    }
+};
+
+} // namespace
+
+TEST(TqApiConfigTest, LoadsGatewayConfigDirectoryWithIncludes) {
+    TempConfigBundle bundle;
+    bundle.write("shared/ipc.toml", R"(
+        [ipc]
+        encoding = "json"
+        heartbeat_interval_ms = 6000
+        heartbeat_timeout_ms = 18000
+    )");
+    bundle.write("shared/tq.toml", R"(
+        [tq_auth]
+        enabled = true
+        user_name = "bundle-user"
+        password = "bundle-password"
+        [td.tq]
+        broker_name = "from-fragment"
+        account_id = "bundle-account"
+        password = "account-password"
+    )");
+    bundle.write("gw.toml", R"(
+        [include]
+        files = ["shared/ipc.toml", "shared/tq.toml"]
+        [listen]
+        transport = "tcp"
+        tcp_host = "127.0.0.1"
+        tcp_port = 19001
+        [ipc]
+        local_name = "bundle-gw"
+        [md]
+        kind = "none"
+        [td]
+        kind = "tq"
+        auto_url = true
+        [td.tq]
+        broker_name = "from-entry"
+    )");
+
+    const auto cfg = load_gw_config(bundle.root.string());
+    ASSERT_TRUE(cfg);
+    EXPECT_EQ(cfg->listen.tcp_port, 19001);
+    EXPECT_EQ(cfg->local_name, "bundle-gw");
+    EXPECT_EQ(cfg->heartbeat_interval, std::chrono::milliseconds(6000));
+    EXPECT_EQ(cfg->td.tq.broker_name, "from-entry");
+    EXPECT_EQ(cfg->td.tq.account_id, "bundle-account");
+    EXPECT_TRUE(cfg->tq_auth.enabled);
+    EXPECT_EQ(cfg->tq_auth.user_name, "bundle-user");
+}
+
+TEST(TqApiConfigTest, LoadsNodeConfigDirectoryWithIncludes) {
+    TempConfigBundle bundle;
+    bundle.write("shared/ipc.toml", R"(
+        [ipc]
+        encoding = "json"
+        handshake_timeout_ms = 6000
+        heartbeat_interval_ms = 7000
+        heartbeat_timeout_ms = 21000
+    )");
+    bundle.write("node.toml", R"(
+        [include]
+        files = ["shared/ipc.toml"]
+        [ipc]
+        transport = "tcp"
+        role = "node"
+        local_name = "bundle-node"
+        [md]
+        kind = "remote"
+        tcp_host = "127.0.0.1"
+        tcp_port = 19001
+        [td]
+        kind = "remote"
+        tcp_host = "127.0.0.1"
+        tcp_port = 19001
+        [serve]
+        bind = "127.0.0.1"
+        port = 19002
+    )");
+
+    const auto cfg = load_node_config(bundle.root.string());
+    ASSERT_TRUE(cfg);
+    EXPECT_EQ(cfg->upstream.ipc.transport, IpcTransport::Tcp);
+    EXPECT_EQ(cfg->upstream.ipc.role, ipc::IpcRole::Node);
+    EXPECT_EQ(cfg->upstream.ipc.local_name, "bundle-node");
+    EXPECT_EQ(cfg->upstream.ipc.handshake_timeout, std::chrono::milliseconds(6000));
+    EXPECT_EQ(cfg->serve_port, 19002);
+}
+
+TEST(TqApiConfigTest, MissingIncludeReturnsFileIoError) {
+    TempConfigBundle bundle;
+    bundle.write("gw.toml", R"(
+        [include]
+        files = ["shared/missing.toml"]
+        [td]
+        kind = "none"
+    )");
+
+    const auto cfg = load_gw_config(bundle.root.string());
+    ASSERT_FALSE(cfg);
+    EXPECT_EQ(cfg.error().code, config::ConfigErrorCode::file_io);
+    EXPECT_NE(cfg.error().detail.find("missing.toml"), std::string::npos);
+}
+
+TEST(TqApiConfigTest, RejectsIncludeCycle) {
+    TempConfigBundle bundle;
+    bundle.write("a.toml", R"(
+        [include]
+        files = ["b.toml"]
+        [td]
+        kind = "none"
+    )");
+    bundle.write("b.toml", R"(
+        [include]
+        files = ["a.toml"]
+    )");
+    bundle.write("gw.toml", R"(
+        [include]
+        files = ["a.toml"]
+    )");
+
+    const auto cfg = load_gw_config(bundle.root.string());
+    ASSERT_FALSE(cfg);
+    EXPECT_EQ(cfg.error().code, config::ConfigErrorCode::invalid_value);
+    EXPECT_NE(cfg.error().detail.find("cycle"), std::string::npos);
 }

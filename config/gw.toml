@@ -1,95 +1,42 @@
-# tqsdk-gw 接入进程示例配置
+# tqsdk-gw 接入进程入口配置
 #
-# gw 监听一个 IPC 端点等待 node 连接；连上后以真实网关为其提供行情/交易。
-# 本示例使用 sim 交易网关（无需外部网络/账号），并灌入 SHFE.rb2610 的规格与
-# 初始撮合价，便于 node 侧直接下单并成交（curl 演示）。
+# 启动目录模式：
+#   ./build-ui/tqsdk-gw -c config
+# load_gw_config("config") 会读取本文件，并解析 [include].files。
+#
+# 共享配置：
+#   shared/ipc.toml   IPC 编码/超时
+#   shared/tq.toml    TQ MD 默认地址、TqAuth、TQ TD 账户
+#   shared/ctp.toml   CTP 前置和账户
+#   shared/sim.toml   SimTd 规格/初始价格
+#
+# 切换网关只改本文件的 [md].kind / [td].kind：
+#   sim:  td.kind = "sim"（默认）
+#   ctp:  td.kind = "ctp"，构建需开启 -DTQSDK_ENABLE_CTP=ON
+#   tq:   td.kind = "tq"，并把 auto_url 设为 true
+[include]
+files = [
+    "shared/ipc.toml",
+    "shared/tq.toml",
+    "shared/ctp.toml",
+    "shared/sim.toml",
+]
 
 [listen]
-# transport = "uds"
-# socket = "/tmp/tqsdk-gw.sock"
-
 transport = "tcp"
 tcp_host = "127.0.0.1"
 tcp_port = 4321
 
 [ipc]
-encoding = "json"
-handshake_timeout_ms = 5000
-heartbeat_interval_ms = 5000
-heartbeat_timeout_ms = 15000
+# 覆盖 shared/ipc.toml 中的通用值
 local_name = "tqsdk-gw"
 
-# ---- 行情网关 ----
-# kind = "tq"   -> 天勤免费行情 WebSocket（需要外网）
-# kind = "none" -> 不接行情
+# TQ MD 默认地址来自 shared/tq.toml；这里只选择 kind。
 [md]
-# kind = "none"
-# 如需真实行情，取消下面注释：
 kind = "tq"
-host = "free-openmd.shinnytech.com"
-port = "443"
-path = "/t/md/front/mobile"
 
-# ---- 交易网关 ----
 [td]
 kind = "sim"
-initial_balance = 1000000.0
 
-# SimTdGateway 合约规格种子
-[td.specs."SHFE.rb2610"]
-volume_multiple = 10.0   # 每点 10 元
-price_tick = 1.0
-margin_rate = 0.1        # 10% 保证金
-commission_rate = 0.0
-commission_per_lot = 2.0 # 每手 2 元
-
-# SimTdGateway 初始撮合价（市价单/限价单据此撮合）
-[td.last_prices]
-"SHFE.rb2610" = 3800.0
-
-# ---- 运行时线程 ----
-# 网关/会话状态共享 core strand；worker > 1 时 I/O 可多线程，
-# 但业务状态更新仍严格串行。
 [runtime]
 threads = 2
-
-# ---- CTP 柜台（可选）----
-# 使用 CTP 时把 [md]/[td] 的 kind 改为 "ctp"，并构建时加 -DTQSDK_ENABLE_CTP=ON。
-# [ctp]
-# broker_id = "9999"
-# user_id = "your_user"
-# password = "your_password"
-# auth_code = "0000000000000000"
-# app_id = "your_app_id"
-# td_front = "tcp://180.168.146.187:10130"
-# md_front = "tcp://180.168.146.187:10131"
-# flow_path = "/tmp/tqsdk_ctp"
-# order_interval_ms = 100
-
-# ---- TQ OTG 交易网关（可选）----
-# 使用 TQ 交易时，把 [td].kind 改为 "tq"；Sim/CTP 配置不要同时启用。
-# [td]
-# kind = "tq"
-# auto_url = true
-#
-# [td.tq]
-# # broker_name 是天勤元数据键，也是 req_login.bid，例如 simnow / H海通期货。
-# broker_name = "simnow"
-# account_id = "your_account"
-# password = "your_password"
-# # 可选：前置/柜台 broker id，写入 req_login.broker_id；与 broker_name 不同。
-# broker_id = ""
-# # 可选：req_login.front，通常不填。
-# front_url = ""
-# # 可选：显式覆盖动态 TD URL；填写后不请求 broker_name 元数据。
-# td_url = ""
-# # 可选：本地 TQ 账户 key；默认等于 account_id。
-# account_key = ""
-#
-# [tq_auth]
-# enabled = true
-# user_name = "your_tq_user"
-# password = "your_tq_password"
-# auth_url = "https://auth.shinnytech.com"
-# # 默认 https://files.shinnytech.com
-# broker_url_prefix = "https://files.shinnytech.com"

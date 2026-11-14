@@ -37,7 +37,8 @@ token 的 `exp` 从 JWT payload 读取，不校验签名；读取失败时使用
 
 ## 3. 配置
 
-`config/node.toml`：
+目录式配置中放在 `config/shared/tq.toml`（由 `config/node.toml` /
+`config/gw.toml` 的 `[include]` 引入）：
 
 ```toml
 [tq_auth]

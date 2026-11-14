@@ -112,9 +112,12 @@ for unit in tqsdk-gw.service tqsdk-node.service tqsdk.target; do
         "$ROOT/deploy/systemd/$unit" >"$STAGE/usr/lib/systemd/system/$unit"
 done
 
-mkdir -p "$STAGE/etc/tqsdk"
+mkdir -p "$STAGE/etc/tqsdk/shared"
 install -m 0644 "$ROOT/config/gw.toml" "$STAGE/etc/tqsdk/gw.toml.example"
 install -m 0644 "$ROOT/config/node.toml" "$STAGE/etc/tqsdk/node.toml.example"
+for shared in "$ROOT"/config/shared/*.toml; do
+    install -m 0644 "$shared" "$STAGE/etc/tqsdk/shared/"
+done
 install -m 0640 "$ROOT/deploy/systemd/tqsdk.env.example" "$STAGE/etc/tqsdk/tqsdk.env.example"
 
 mkdir -p "$STAGE/usr/share/tqsdk/examples/caddy"

@@ -22,7 +22,8 @@
 
 | 文档 | 内容 |
 |---|---|
-| [OPERATIONS.md](OPERATIONS.md) | 依赖、构建、配置、启动、健康检查、诊断 |
+| [OPERATIONS.md](OPERATIONS.md) | 依赖、构建、启动、健康检查、诊断 |
+| [CONFIG.md](CONFIG.md) | 配置目录、include、合并优先级和本地凭据 |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | TLS、token 认证、systemd、日志脱敏和审计 |
 | [PACKAGING.md](PACKAGING.md) | DEB/RPM/TGZ 打包和发布 |
 | [CONTAINERS.md](CONTAINERS.md) | Docker/Podman 镜像 |

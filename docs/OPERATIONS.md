@@ -46,6 +46,15 @@ cmake --build build
 
 ## 3. 配置
 
+推荐使用目录式配置，完整规则见 [CONFIG.md](CONFIG.md)：
+
+```bash
+./build-ui/tqsdk-gw   -c config
+./build-ui/tqsdk-node -c config
+```
+
+`-c` 也可指向单个 TOML 文件，继续兼容旧入口。
+
 ### live 账号
 
 ```bash
@@ -73,77 +82,44 @@ HTTP_PORT
 SYMBOLS
 ```
 
-### gw.toml 结构
+### 配置目录
 
-```toml
-[listen]
-transport = "tcp"
-tcp_host = "127.0.0.1"
-tcp_port = 14330
-
-[ipc]
-encoding = "json"
-local_name = "gw-live-tq-ctp"
-
-[md]
-kind = "tq"
-
-[td]
-kind = "ctp"
-
-[ctp]
-...
-[runtime]
-threads = 2
+```text
+config/
+├── gw.toml
+├── node.toml
+└── shared/
+    ├── ipc.toml
+    ├── tq.toml
+    ├── ctp.toml
+    ├── sim.toml
+    └── cache.toml
 ```
 
-`md.kind`/`td.kind` 可选 `none/sim/tq/ctp/remote/mock`（按具体段约束）。
-
-### node.toml 结构
+入口文件通过：
 
 ```toml
-[ipc]
-transport = "tcp"
-encoding = "json"
+[include]
+files = ["shared/ipc.toml", "shared/tq.toml"]
+```
 
+合并共享配置；`gw.toml` 只保留 `listen`、`md.kind`、`td.kind`、`runtime`，
+`node.toml` 只保留上游连接、`serve`、`audit`、`runtime`。
+
+网关选择：
+
+```toml
+# gw.toml
 [md]
-kind = "remote"
-tcp_host = "127.0.0.1"
-tcp_port = 14330
+kind = "tq"   # tq / ctp / none
 
 [td]
-kind = "remote"
-tcp_host = "127.0.0.1"
-tcp_port = 14330
-
-[serve]
-bind = "127.0.0.1"
-port = 18081
-symbols = ["SHFE.rb2701"]
-
-[serve.ws]
-path = "/stream"
-heartbeat_interval_ms = 30000
-max_clients = 256
-max_queue = 1024
-coalesce_ms = 10
-
-[instruments]
-enabled = true
-file = "symbol.json"
-
-[market_cache]
-file = "run/live/market_cache.sqlite3"
-
-[kline_cache]
-enabled = true
-
-[tick_cache]
-enabled = false
-
-[runtime]
-threads = 4
+kind = "sim"  # sim / ctp / tq
 ```
+
+切换 TQ TD 时只改 `[td].kind = "tq"`、`auto_url = true`，账户参数在
+`shared/tq.toml`；切换 CTP/Sim 同理。`[include]` 的路径相对入口文件，
+入口覆盖 shared；详细优先级和本地凭据见 [CONFIG.md](CONFIG.md)。
 
 ### TD-only soak
 

@@ -76,6 +76,15 @@ $EDITOR config/live.local.env
 只启动后端使用 `./scripts/run_live.sh`；需要自动重启用 `./scripts/run_live_supervisor.sh`。
 交易前健康检查：`./scripts/live_healthcheck.sh --wait-ready 120`。
 
+手工启动也可以使用目录式配置（共享 IPC/TQ/CTP/缓存配置）：
+
+```bash
+./build-ui/tqsdk-gw -c config
+./build-ui/tqsdk-node -c config
+```
+
+配置布局和 include 规则见 [docs/CONFIG.md](docs/CONFIG.md)。
+
 只启动 gw/node：
 
 ```bash
@@ -159,7 +168,8 @@ docs/             架构、模块、信息流、状态机、运维、专题
 - [docs/FLOWS.md](docs/FLOWS.md) — 行情/交易/订阅/重连信息流
 - [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) — 进程、订单、连接状态机
 - [docs/PROTOCOLS.md](docs/PROTOCOLS.md) — IPC/REST/WS 协议
-- [docs/OPERATIONS.md](docs/OPERATIONS.md) — 构建、配置、运行、验收、诊断
+- [docs/CONFIG.md](docs/CONFIG.md) — 配置目录、include 和共享配置
+- [docs/OPERATIONS.md](docs/OPERATIONS.md) — 构建、运行、验收、诊断
 
 常用专题：
 
@@ -178,7 +188,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 ## 当前状态
 
 - 最新 Release：`v0.4.0`（错误处理重构、C++23 GCC 14 构建、12 个 assets）；
-- `ctest`：380/380（2 项 TqMdNetwork 网络测试按环境跳过）；
+- `ctest`：384/384（2 项 TqMdNetwork 网络测试按环境跳过）；
 - Python：21/21；Web typecheck/test/build 和 Playwright E2E 通过；
 - 本地 Clang 23 与 GCC 16.2.1 构建通过；
 - 错误处理：公共 API 使用 expected/noexcept，详见 [docs/ERROR_HANDLING.md](docs/ERROR_HANDLING.md)；

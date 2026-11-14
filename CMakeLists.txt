@@ -483,8 +483,9 @@ if(TQSDK_ENABLE_CTP)
 endif()
 
 # 示例配置与文档；brokers.json 可能含柜台信息，不随包强制分发。
-install(FILES config/gw.toml config/node.toml
-        DESTINATION share/tqsdk/config)
+install(DIRECTORY config/
+        DESTINATION share/tqsdk/config
+        FILES_MATCHING PATTERN "*.toml")
 install(DIRECTORY docs/
         DESTINATION share/doc/tqsdk
         FILES_MATCHING PATTERN "*.md")

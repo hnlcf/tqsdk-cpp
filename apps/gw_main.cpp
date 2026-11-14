@@ -30,7 +30,8 @@
 // 详见 include/tqsdk/ipc/gateway_server.h 的契约。
 //
 // 用法：
-//   tqsdk-gw -c config/gw.toml
+//   tqsdk-gw -c config          # config 目录，自动读取 gw.toml + [include]
+//   tqsdk-gw -c config/gw.toml # 也兼容单文件入口
 //
 // 支持的网关（由配置 [md].kind / [td].kind 选择）：
 //   md: tq（天勤 WebSocket 实盘行情） | none
@@ -132,7 +133,8 @@ int main(int argc, char** argv) {
     std::string config_path;
     std::string log_level;
     int         threads = 0;
-    app.add_option("-c,--config", config_path, "Path to gw config TOML")->required();
+    app.add_option("-c,--config", config_path, "Path to gw config TOML or config directory")
+        ->required();
     app.add_option("-l,--log-level", log_level, "Log level (overrides TQSDK_LOG_LEVEL)");
     app.add_option("-t,--threads", threads, "IO worker threads (overrides [runtime].threads)");
     app.set_version_flag("-v,--version",

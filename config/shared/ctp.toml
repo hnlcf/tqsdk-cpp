@@ -1,0 +1,12 @@
+# Shared CTP counter settings (gw only).
+# Replace placeholders locally; never commit real credentials.
+[ctp]
+broker_id = "9999"
+user_id = "your_user"
+password = "your_password"
+auth_code = "0000000000000000"
+app_id = "simnow_client_test"
+td_front = "tcp://182.254.243.31:30001"
+md_front = "tcp://182.254.243.31:30012"
+flow_path = "/tmp/tqsdk_ctp"
+order_interval_ms = 100

@@ -1,0 +1,25 @@
+# TQ market data and OTG trading account.
+# `[md]` here contains the free TQ market endpoint defaults; an entry file can
+# override them. `broker_name` is the TQ metadata key / req_login.bid; the
+# optional `broker_id` is the front broker id in req_login.broker_id.
+[md]
+host = "free-openmd.shinnytech.com"
+port = "443"
+path = "/t/md/front/mobile"
+
+[tq_auth]
+enabled = false
+user_name = "your_tq_user"
+password = "your_tq_password"
+auth_url = "https://auth.shinnytech.com"
+request_timeout_sec = 30
+broker_url_prefix = "https://files.shinnytech.com"
+
+[td.tq]
+broker_name = "simnow"
+account_id = "your_account"
+password = "your_password"
+broker_id = ""
+front_url = ""
+td_url = ""
+account_key = ""

@@ -1,0 +1,7 @@
+# Shared IPC settings for gw/node.
+# Entry files override local_name/role/transport as needed.
+[ipc]
+encoding = "json"
+handshake_timeout_ms = 5000
+heartbeat_interval_ms = 5000
+heartbeat_timeout_ms = 15000

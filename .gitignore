@@ -73,3 +73,6 @@ continuous_table.json
 
 # local credential files (never commit)
 config/*.env
+
+# local config directory (copy of config/ with real credentials)
+config.local/
