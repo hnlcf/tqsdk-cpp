@@ -11,7 +11,7 @@
 | 模块 | 错误类型 | 适用范围 |
 |---|---|---|
 | `util/http_*` | `util::HttpError` / `HttpErrorCode` | URL、DNS、连接、TLS、HTTP 状态、读写 |
-| `config` | `config::ConfigError` / `ConfigErrorCode` | TOML 文件、语法、字段校验、枚举/类型错误 |
+| `config` | `config::ConfigError` / `ConfigErrorCode` | TOML 文件/目录、include、语法、字段校验、枚举/类型错误 |
 | `ipc` | `ipc::IpcFailure` / `IpcErrorCode` | 建连、握手、通道、会话、命令 ack |
 | `gateway` | `gateway::GatewayError` / `GatewayErrorCode` | TqApi 建连/握手、网关构造边界 |
 | `auth` | `auth::AuthError` / `AuthErrorCode` | 快期账户登录边界 |
