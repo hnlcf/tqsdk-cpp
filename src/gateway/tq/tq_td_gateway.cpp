@@ -261,6 +261,10 @@ nlohmann::json normalize_td_trade_slice(const nlohmann::json& slice, std::string
 }
 
 bool td_trade_complete(const nlohmann::json& slice) noexcept {
+    if (auto complete = slice.find("trade_more_data");
+        complete != slice.end() && complete->is_boolean() && !complete->get<bool>()) {
+        return true;
+    }
     auto trade = slice.find("trade");
     if (trade == slice.end() || !trade->is_object()) {
         return false;
