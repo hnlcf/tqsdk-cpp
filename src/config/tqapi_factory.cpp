@@ -208,6 +208,32 @@ void parse_tq_td(const toml::table& t, TqApiConfig::Td::TqOptions& out) {
     out.account_key = get_str(t, "account_key", out.account_key);
 }
 
+IpcConfig parse_ipc_config(const toml::table& t, std::string_view fallback_name) {
+    IpcConfig cfg;
+    cfg.name              = get_str(t, "name", std::string(fallback_name));
+    cfg.transport         = parse_transport(get_str(t, "transport", "uds"));
+    cfg.socket            = get_str(t, "socket", cfg.socket);
+    cfg.tcp_host          = get_str(t, "tcp_host", cfg.tcp_host);
+    cfg.tcp_port          = static_cast<uint16_t>(get_int(t, "tcp_port", cfg.tcp_port));
+    cfg.encoding          = parse_encoding(get_str(t, "encoding", "json"));
+    cfg.handshake_timeout = std::chrono::milliseconds(
+        get_int(t, "handshake_timeout_ms", cfg.handshake_timeout.count()));
+    cfg.heartbeat_interval = std::chrono::milliseconds(
+        get_int(t, "heartbeat_interval_ms", cfg.heartbeat_interval.count()));
+    cfg.heartbeat_timeout = std::chrono::milliseconds(
+        get_int(t, "heartbeat_timeout_ms", cfg.heartbeat_timeout.count()));
+
+    if (cfg.transport == IpcTransport::Uds && cfg.socket.empty()) {
+        fail_parse(config::ConfigErrorCode::invalid_value,
+                   fmt::format("[ipc] '{}' requires socket for uds", cfg.name));
+    }
+    if (cfg.transport == IpcTransport::Tcp && (cfg.tcp_host.empty() || cfg.tcp_port == 0)) {
+        fail_parse(config::ConfigErrorCode::invalid_value,
+                   fmt::format("[ipc] '{}' requires tcp_host and tcp_port", cfg.name));
+    }
+    return cfg;
+}
+
 // 解析一份已加载的 TOML DOM 到 TqApiConfig。
 TqApiConfig build_from_toml(const toml::table& root) {
     TqApiConfig cfg;
@@ -373,6 +399,28 @@ config::ConfigResult<TqApiConfig> load_tqapi_config(const std::string& path) noe
 
 config::ConfigResult<TqApiConfig> try_parse_tqapi_config(std::string_view toml_text) noexcept {
     return parse_tqapi_config(toml_text);
+}
+
+TqApiConfig make_remote_tqapi_config(const IpcConfig& ipc, std::string account_id) {
+    TqApiConfig cfg;
+    cfg.ipc.transport          = ipc.transport;
+    cfg.ipc.encoding           = ipc.encoding;
+    cfg.ipc.handshake_timeout  = ipc.handshake_timeout;
+    cfg.ipc.heartbeat_interval = ipc.heartbeat_interval;
+    cfg.ipc.heartbeat_timeout  = ipc.heartbeat_timeout;
+    cfg.ipc.role               = ipc::IpcRole::Node;
+    cfg.ipc.local_name = fmt::format("node-{}", account_id.empty() ? "default" : account_id);
+
+    cfg.md.kind     = MdKind::Remote;
+    cfg.md.socket   = ipc.socket;
+    cfg.md.tcp_host = ipc.tcp_host;
+    cfg.md.tcp_port = ipc.tcp_port;
+
+    cfg.td.kind     = TdKind::Remote;
+    cfg.td.socket   = ipc.socket;
+    cfg.td.tcp_host = ipc.tcp_host;
+    cfg.td.tcp_port = ipc.tcp_port;
+    return cfg;
 }
 
 asio::awaitable<gateway::GatewayResult<std::unique_ptr<TqApi>>>
@@ -583,25 +631,11 @@ RuntimeConfig parse_runtime(const toml::table& root) {
     return rt;
 }
 
-GwConfig build_gw_from_toml(const toml::table& root) {
+GwConfig build_gw_from_toml(toml::table root, IpcConfig ipc) {
     GwConfig cfg;
-    if (const auto& l = require_table(root, "listen"); !l.empty()) {
-        cfg.listen.transport = parse_transport(get_str(l, "transport", "uds"));
-        cfg.listen.socket    = get_str(l, "socket", cfg.listen.socket);
-        cfg.listen.tcp_host  = get_str(l, "tcp_host", cfg.listen.tcp_host);
-        cfg.listen.tcp_port  = static_cast<uint16_t>(get_int(l, "tcp_port", 0));
-    }
-    if (const auto& i = require_table(root, "ipc"); !i.empty()) {
-        cfg.encoding          = parse_encoding(get_str(i, "encoding", "json"));
-        cfg.handshake_timeout = std::chrono::milliseconds(get_int(i, "handshake_timeout_ms", 5000));
-        cfg.heartbeat_interval =
-            std::chrono::milliseconds(get_int(i, "heartbeat_interval_ms", 5000));
-        cfg.heartbeat_timeout =
-            std::chrono::milliseconds(get_int(i, "heartbeat_timeout_ms", 15000));
-        cfg.local_name = get_str(i, "local_name", cfg.local_name);
-    }
-    cfg.md = parse_gw_md(root);
-    cfg.td = parse_gw_td(root);
+    cfg.ipc = std::move(ipc);
+    cfg.md  = parse_gw_md(root);
+    cfg.td  = parse_gw_td(root);
     if (cfg.td.kind == TdKind::Tq && cfg.td.tq.broker_name.empty()) {
         fail_parse(config::ConfigErrorCode::invalid_value,
                    "[td.tq].broker_name is required when [td].kind = tq");
@@ -644,27 +678,14 @@ GwConfig build_gw_from_toml(const toml::table& root) {
     return cfg;
 }
 
-NodeConfig build_node_from_toml(const toml::table& root) {
+NodeConfig build_node_from_toml(const toml::table&                       root,
+                                std::vector<NodeConfig::AccountEndpoint> accounts,
+                                std::string                              primary_account) {
     NodeConfig cfg;
-    cfg.upstream = build_from_toml(root); // 复用客户端解析（[ipc]/[md]/[td]）
-    // node 一律以 Node 角色连接 gw（gw 侧声明 Gateway，两端角色必须不同）。
-    cfg.upstream.ipc.role = ipc::IpcRole::Node;
-    cfg.account_id        = get_str(root, "account_id", cfg.account_id);
-
-    if (auto* arr = root.get("accounts"); arr && arr->is_array()) {
-        for (auto&& item : *arr->as_array()) {
-            const auto* t = item.as_table();
-            if (!t) {
-                continue;
-            }
-            NodeConfig::AccountEndpoint ep;
-            ep.id      = get_str(*t, "id", "");
-            ep.gw_host = get_str(*t, "gw_host", ep.gw_host);
-            ep.gw_port = static_cast<uint16_t>(get_int(*t, "gw_port", 0));
-            if (!ep.id.empty() && ep.gw_port != 0) {
-                cfg.accounts.push_back(std::move(ep));
-            }
-        }
+    cfg.accounts        = std::move(accounts);
+    cfg.primary_account = std::move(primary_account);
+    if (cfg.primary_account.empty() && !cfg.accounts.empty()) {
+        cfg.primary_account = cfg.accounts.front().id;
     }
 
     if (const auto& s = require_table(root, "serve"); !s.empty()) {
@@ -771,7 +792,7 @@ NodeConfig build_node_from_toml(const toml::table& root) {
     return cfg;
 }
 
-// 配置文件支持 [include].files = ["shared/ipc.toml", ...]：
+// 配置文件支持 [include].files = ["shared/tq.toml", ...]：
 // - 路径相对于当前文件；
 // - 后 include 覆盖先 include，入口文件最后覆盖所有 fragment；
 // - TOML table 递归合并，标量/数组替换；
@@ -910,6 +931,172 @@ std::filesystem::path config_entry_path(const std::string& path, std::string_vie
 
 } // namespace
 
+config::ConfigResult<IpcConfig> resolve_ipc_group(const toml::table&           root,
+                                                  const std::filesystem::path& base_dir,
+                                                  std::string_view             key) noexcept {
+    if (key.empty()) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::invalid_value,
+            "ipc group key is empty",
+        });
+    }
+
+    const auto& ipc_table = require_table(root, "ipc");
+    if (const auto* inline_group = ipc_table.get(key);
+        inline_group != nullptr && inline_group->is_table()) {
+        return parse_ipc_config(*inline_group->as_table(), key);
+    }
+
+    if (base_dir.empty()) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::invalid_value,
+            fmt::format("ipc group '{}' is not inline; load from a config directory", key),
+        });
+    }
+
+    auto path = std::filesystem::path(key);
+    if (path.extension() != ".toml") {
+        path += ".toml";
+    }
+    if (path.is_relative()) {
+        path = base_dir / "ipc" / path;
+    }
+
+    std::set<std::string> stack;
+    auto                  group_root = load_toml_with_includes(path, stack, 0);
+    if (!group_root) {
+        return std::unexpected(std::move(group_root.error()));
+    }
+    const auto& group_table = require_table(*group_root, "ipc");
+    if (group_table.empty()) {
+        return std::unexpected(config::ConfigError{
+            config::ConfigErrorCode::invalid_value,
+            fmt::format("ipc group '{}' must contain [ipc]", key),
+        });
+    }
+    return parse_ipc_config(group_table, key);
+}
+
+IpcConfig legacy_gw_ipc(const toml::table& root) {
+    const auto& listen = require_table(root, "listen");
+    const auto& ipc    = require_table(root, "ipc");
+    IpcConfig   cfg;
+    cfg.name              = get_str(ipc, "local_name", "tqsdk-gw");
+    cfg.transport         = parse_transport(get_str(listen, "transport", "uds"));
+    cfg.socket            = get_str(listen, "socket", cfg.socket);
+    cfg.tcp_host          = get_str(listen, "tcp_host", cfg.tcp_host);
+    cfg.tcp_port          = static_cast<uint16_t>(get_int(listen, "tcp_port", cfg.tcp_port));
+    cfg.encoding          = parse_encoding(get_str(ipc, "encoding", "json"));
+    cfg.handshake_timeout = std::chrono::milliseconds(
+        get_int(ipc, "handshake_timeout_ms", cfg.handshake_timeout.count()));
+    cfg.heartbeat_interval = std::chrono::milliseconds(
+        get_int(ipc, "heartbeat_interval_ms", cfg.heartbeat_interval.count()));
+    cfg.heartbeat_timeout = std::chrono::milliseconds(
+        get_int(ipc, "heartbeat_timeout_ms", cfg.heartbeat_timeout.count()));
+    return cfg;
+}
+
+NodeConfig::AccountEndpoint legacy_node_account(const toml::table& root) {
+    const auto& ipc = require_table(root, "ipc");
+    const auto& md  = require_table(root, "md");
+    const auto& td  = require_table(root, "td");
+
+    NodeConfig::AccountEndpoint ep;
+    ep.id            = get_str(root, "account_id", "default");
+    ep.ipc.name      = get_str(ipc, "local_name", ep.id);
+    ep.ipc.transport = parse_transport(get_str(ipc, "transport", "uds"));
+    ep.ipc.encoding  = parse_encoding(get_str(ipc, "encoding", "json"));
+    ep.ipc.socket =
+        !get_str(md, "socket", "").empty() ? get_str(md, "socket", "") : get_str(td, "socket", "");
+    ep.ipc.tcp_host = !get_str(md, "tcp_host", "").empty() ? get_str(md, "tcp_host", "")
+                                                           : get_str(td, "tcp_host", "");
+    ep.ipc.tcp_port = static_cast<uint16_t>(get_int(md, "tcp_port", get_int(td, "tcp_port", 0)));
+    ep.ipc.handshake_timeout = std::chrono::milliseconds(
+        get_int(ipc, "handshake_timeout_ms", ep.ipc.handshake_timeout.count()));
+    ep.ipc.heartbeat_interval = std::chrono::milliseconds(
+        get_int(ipc, "heartbeat_interval_ms", ep.ipc.heartbeat_interval.count()));
+    ep.ipc.heartbeat_timeout = std::chrono::milliseconds(
+        get_int(ipc, "heartbeat_timeout_ms", ep.ipc.heartbeat_timeout.count()));
+    return ep;
+}
+
+config::ConfigResult<IpcConfig>
+gateway_ipc_from_root(const toml::table& root, const std::filesystem::path& base_dir) noexcept {
+    const auto& gateway = require_table(root, "gateway");
+    const auto  key     = get_str(gateway, "ipc", "");
+    if (!key.empty()) {
+        return resolve_ipc_group(root, base_dir, key);
+    }
+    return legacy_gw_ipc(root);
+}
+
+config::ConfigResult<std::vector<NodeConfig::AccountEndpoint>>
+node_accounts_from_root(const toml::table& root, const std::filesystem::path& base_dir) noexcept {
+    std::vector<NodeConfig::AccountEndpoint> accounts;
+    std::set<std::string>                    ids;
+    if (auto* arr = root.get("accounts"); arr != nullptr && arr->is_array()) {
+        for (auto&& item : *arr->as_array()) {
+            const auto* t = item.as_table();
+            if (t == nullptr) {
+                continue;
+            }
+            NodeConfig::AccountEndpoint ep;
+            ep.id = get_str(*t, "id", "");
+            if (ep.id.empty()) {
+                return std::unexpected(config::ConfigError{
+                    config::ConfigErrorCode::invalid_value,
+                    "[[accounts]].id must not be empty",
+                });
+            }
+            if (!ids.insert(ep.id).second) {
+                return std::unexpected(config::ConfigError{
+                    config::ConfigErrorCode::invalid_value,
+                    fmt::format("duplicate account id '{}'", ep.id),
+                });
+            }
+
+            const auto ipc_key = get_str(*t, "ipc", "");
+            if (!ipc_key.empty()) {
+                auto group = resolve_ipc_group(root, base_dir, ipc_key);
+                if (!group) {
+                    return std::unexpected(std::move(group.error()));
+                }
+                ep.ipc = std::move(*group);
+            } else if (const auto old_port = get_int(*t, "gw_port", 0); old_port > 0) {
+                // 兼容旧 [[accounts]] gw_host/gw_port；新配置应使用 ipc key。
+                ep.ipc.name              = ep.id;
+                ep.ipc.transport         = IpcTransport::Tcp;
+                ep.ipc.tcp_host          = get_str(*t, "gw_host", "127.0.0.1");
+                ep.ipc.tcp_port          = static_cast<uint16_t>(old_port);
+                const auto& ipc          = require_table(root, "ipc");
+                ep.ipc.encoding          = parse_encoding(get_str(ipc, "encoding", "json"));
+                ep.ipc.handshake_timeout = std::chrono::milliseconds(
+                    get_int(ipc, "handshake_timeout_ms", ep.ipc.handshake_timeout.count()));
+                ep.ipc.heartbeat_interval = std::chrono::milliseconds(
+                    get_int(ipc, "heartbeat_interval_ms", ep.ipc.heartbeat_interval.count()));
+                ep.ipc.heartbeat_timeout = std::chrono::milliseconds(
+                    get_int(ipc, "heartbeat_timeout_ms", ep.ipc.heartbeat_timeout.count()));
+            } else {
+                return std::unexpected(config::ConfigError{
+                    config::ConfigErrorCode::invalid_value,
+                    fmt::format("[[accounts]] '{}' requires ipc key", ep.id),
+                });
+            }
+            accounts.push_back(std::move(ep));
+        }
+    }
+
+    // 兼容旧单上游配置：没有 accounts 时从 [ipc]/[md]/[td] 构造默认账户。
+    if (accounts.empty()) {
+        const auto& md = require_table(root, "md");
+        const auto& td = require_table(root, "td");
+        if (get_str(md, "kind", "none") == "remote" || get_str(td, "kind", "none") == "remote") {
+            accounts.push_back(legacy_node_account(root));
+        }
+    }
+    return accounts;
+}
+
 config::ConfigResult<GwConfig> parse_gw_config(std::string_view toml_text) noexcept {
     toml::table      root;
     ConfigParseState state;
@@ -927,7 +1114,11 @@ config::ConfigResult<GwConfig> parse_gw_config(std::string_view toml_text) noexc
             fmt::format("gw toml parse error: {}", e.what()),
         });
     }
-    auto cfg = build_gw_from_toml(root);
+    auto ipc = gateway_ipc_from_root(root, {});
+    if (!ipc) {
+        return std::unexpected(std::move(ipc.error()));
+    }
+    auto cfg = build_gw_from_toml(std::move(root), std::move(*ipc));
     if (state.failed) {
         return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
     }
@@ -951,7 +1142,12 @@ config::ConfigResult<NodeConfig> parse_node_config(std::string_view toml_text) n
             fmt::format("node toml parse error: {}", e.what()),
         });
     }
-    auto cfg = build_node_from_toml(root);
+    auto accounts = node_accounts_from_root(root, {});
+    if (!accounts) {
+        return std::unexpected(std::move(accounts.error()));
+    }
+    auto primary = get_str(root, "primary_account", "");
+    auto cfg     = build_node_from_toml(std::move(root), std::move(*accounts), std::move(primary));
     if (state.failed) {
         return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
     }
@@ -968,7 +1164,11 @@ config::ConfigResult<GwConfig> load_gw_config(const std::string& path) noexcept 
 
     ConfigParseState state;
     ParseGuard       guard(state);
-    auto             cfg = build_gw_from_toml(*root);
+    auto             ipc = gateway_ipc_from_root(*root, entry.parent_path());
+    if (!ipc) {
+        return std::unexpected(std::move(ipc.error()));
+    }
+    auto cfg = build_gw_from_toml(std::move(*root), std::move(*ipc));
     if (state.failed) {
         return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
     }
@@ -1001,7 +1201,12 @@ config::ConfigResult<NodeConfig> load_node_config(const std::string& path) noexc
 
     ConfigParseState state;
     ParseGuard       guard(state);
-    auto             cfg = build_node_from_toml(*root);
+    auto             accounts = node_accounts_from_root(*root, entry.parent_path());
+    if (!accounts) {
+        return std::unexpected(std::move(accounts.error()));
+    }
+    auto primary = get_str(*root, "primary_account", "");
+    auto cfg     = build_node_from_toml(std::move(*root), std::move(*accounts), std::move(primary));
     if (state.failed) {
         return std::unexpected(config::ConfigError{state.code, std::move(state.detail)});
     }

@@ -62,3 +62,5 @@ echo "tqsdk: edit /etc/tqsdk/gw.toml and node.toml, set TQSDK_SERVE_TOKEN in tqs
 %attr(0640,root,tqsdk) /etc/tqsdk/*.example
 %dir %attr(0750,root,tqsdk) /etc/tqsdk/shared
 %attr(0640,root,tqsdk) /etc/tqsdk/shared/*.toml
+%dir %attr(0750,root,tqsdk) /etc/tqsdk/ipc
+%attr(0640,root,tqsdk) /etc/tqsdk/ipc/*.toml

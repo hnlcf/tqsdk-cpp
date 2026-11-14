@@ -2,34 +2,25 @@
 #
 # 启动目录模式：
 #   ./build-ui/tqsdk-gw -c config
-# load_gw_config("config") 会读取本文件，并解析 [include].files。
-#
-# 共享配置：
-#   shared/ipc.toml   IPC 编码/超时
+# 入口通过 gateway.ipc 选择一个 IPC 组（config/ipc/<key>.toml）。
+# 共享网关配置：
 #   shared/tq.toml    TQ MD 默认地址、TqAuth、TQ TD 账户
 #   shared/ctp.toml   CTP 前置和账户
 #   shared/sim.toml   SimTd 规格/初始价格
 #
-# 切换网关只改本文件的 [md].kind / [td].kind：
-#   sim:  td.kind = "sim"（默认）
-#   ctp:  td.kind = "ctp"，构建需开启 -DTQSDK_ENABLE_CTP=ON
-#   tq:   td.kind = "tq"，并把 auto_url 设为 true
+# 切换网关只改 [md].kind / [td].kind：
+#   sim -> td.kind="sim"
+#   ctp -> td.kind="ctp"（需 -DTQSDK_ENABLE_CTP=ON）
+#   tq  -> td.kind="tq" 且 auto_url=true
+[gateway]
+ipc = "gw-a"
+
 [include]
 files = [
-    "shared/ipc.toml",
     "shared/tq.toml",
     "shared/ctp.toml",
     "shared/sim.toml",
 ]
-
-[listen]
-transport = "tcp"
-tcp_host = "127.0.0.1"
-tcp_port = 4321
-
-[ipc]
-# 覆盖 shared/ipc.toml 中的通用值
-local_name = "tqsdk-gw"
 
 # TQ MD 默认地址来自 shared/tq.toml；这里只选择 kind。
 [md]

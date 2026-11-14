@@ -43,6 +43,24 @@ enum class IpcTransport {
     Tcp
 };
 
+/// 一组 gw/node IPC 交互的完整配置。
+///
+/// 一个 `config/ipc/<key>.toml` 文件对应一个实例；gw 用它监听，node 用它连接。
+/// 超时、name、编码、UDS/TCP 端点全部收拢在这里，不再拆到 `[listen]` 或
+/// `[md]/[td]` 下。
+struct IpcConfig {
+    std::string        name      = "gw";
+    IpcTransport       transport = IpcTransport::Uds;
+    std::string        socket    = "/tmp/tqsdk-gw.sock";
+    std::string        tcp_host  = "127.0.0.1";
+    uint16_t           tcp_port  = 0;
+    ipc::FrameEncoding encoding  = ipc::FrameEncoding::Json;
+
+    std::chrono::milliseconds handshake_timeout{std::chrono::seconds(5)};
+    std::chrono::milliseconds heartbeat_interval{std::chrono::seconds(5)};
+    std::chrono::milliseconds heartbeat_timeout{std::chrono::seconds(15)};
+};
+
 /// TqApi 配置（对应一份 TOML 文件）。
 ///
 /// 设计：每个网关独立选择"进程内直连"或"远程代理"，由 [md].kind / [td].kind 决定；
@@ -171,18 +189,8 @@ try_make_tqapi(asio::io_context&           ctx,
 /// gw 进程监听一个 UDS/TCP 端点，等待 node 连接；连接上来后，用**真实网关**
 /// （md/td）为其提供数据与交易能力。真正接哪个网关由 [md].kind/[td].kind 决定。
 struct GwConfig {
-    struct Listen {
-        IpcTransport transport = IpcTransport::Uds;
-        std::string  socket    = "/tmp/tqsdk-gw.sock"; // transport==Uds
-        std::string  tcp_host  = "127.0.0.1";
-        uint16_t     tcp_port  = 0;
-    } listen;
-
-    ipc::FrameEncoding        encoding = ipc::FrameEncoding::Json;
-    std::chrono::milliseconds handshake_timeout{std::chrono::seconds(5)};
-    std::chrono::milliseconds heartbeat_interval{std::chrono::seconds(5)};
-    std::chrono::milliseconds heartbeat_timeout{std::chrono::seconds(15)};
-    std::string               local_name = "tqsdk-gw";
+    /// 选中的 IPC 组（来自 gateway.ipc key 或 `<config>/ipc/<key>.toml`）。
+    IpcConfig ipc;
 
     // 真实网关选择（复用 TqApiConfig 的 Md/Td 段语义，但只允许直连种类）。
     TqApiConfig::Md md;
@@ -220,8 +228,14 @@ struct GwConfig {
 /// 再通过 HTTP serve 层对外暴露。gw 连接参数复用 TqApiConfig（md/td kind 应设为
 /// Remote，指向 gw 的监听端点）。
 struct NodeConfig {
-    TqApiConfig upstream;               ///< 默认账户到 gw 的连接（md/td.kind = Remote）
-    std::string account_id = "default"; ///< 默认账户 ID
+    /// 每个账户对应一个 IPC 组；node 不再配置 md/td 种类或端点。
+    struct AccountEndpoint {
+        std::string id;
+        IpcConfig   ipc;
+    };
+    std::vector<AccountEndpoint> accounts;
+    /// 主账户 ID；为空时使用 accounts.front()。
+    std::string primary_account;
 
     /// [serve.auth]：REST/WS token 认证。token 优先取 TOML，通常建议只配
     /// token_env 并从 systemd EnvironmentFile/环境变量注入。
@@ -233,14 +247,6 @@ struct NodeConfig {
         bool        exempt_healthz    = true;
     };
     ServeAuth auth;
-
-    /// 额外账户：每个账户独立连接一个 gw 端点，形成独立 TqApi/DataManager。
-    struct AccountEndpoint {
-        std::string id;
-        std::string gw_host = "127.0.0.1";
-        uint16_t    gw_port = 0;
-    };
-    std::vector<AccountEndpoint> accounts;
 
     /// 统一行情缓存文件；未显式设置 [kline_cache].file/[tick_cache].file 时共用。
     std::string               market_cache_file = std::string(constants::kDefaultMarketCacheFile);
@@ -266,6 +272,10 @@ struct NodeConfig {
     /// [runtime] worker 线程数（io_context 线程；数据面仍由 core strand 串行）。
     RuntimeConfig runtime;
 };
+
+/// 用一组 IPC 端点构造 node 侧 remote TqApi 配置。
+/// md/td 都固定为 Remote，不再由 node 配置文件选择。
+TqApiConfig make_remote_tqapi_config(const IpcConfig& ipc, std::string account_id);
 
 /// 解析 gw 配置（TOML 文本）。
 config::ConfigResult<GwConfig> parse_gw_config(std::string_view toml_text) noexcept;

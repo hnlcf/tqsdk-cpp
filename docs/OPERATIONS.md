@@ -82,34 +82,30 @@ HTTP_PORT
 SYMBOLS
 ```
 
-### 配置目录
+### 配置目录与 IPC 组
 
 ```text
 config/
 ├── gw.toml
 ├── node.toml
+├── ipc/
+│   ├── gw-a.toml
+│   └── gw-b.toml
 └── shared/
-    ├── ipc.toml
     ├── tq.toml
     ├── ctp.toml
     ├── sim.toml
     └── cache.toml
 ```
 
-入口文件通过：
-
-```toml
-[include]
-files = ["shared/ipc.toml", "shared/tq.toml"]
-```
-
-合并共享配置；`gw.toml` 只保留 `listen`、`md.kind`、`td.kind`、`runtime`，
-`node.toml` 只保留上游连接、`serve`、`audit`、`runtime`。
-
-网关选择：
+一组 gw/node 交互对应一个 `ipc/<key>.toml`，包含 name、transport、
+UDS/TCP 端点、编码和超时。gw 选择一组：
 
 ```toml
 # gw.toml
+[gateway]
+ipc = "gw-a"
+
 [md]
 kind = "tq"   # tq / ctp / none
 
@@ -117,21 +113,30 @@ kind = "tq"   # tq / ctp / none
 kind = "sim"  # sim / ctp / tq
 ```
 
-切换 TQ TD 时只改 `[td].kind = "tq"`、`auto_url = true`，账户参数在
-`shared/tq.toml`；切换 CTP/Sim 同理。`[include]` 的路径相对入口文件，
-入口覆盖 shared；详细优先级和本地凭据见 [CONFIG.md](CONFIG.md)。
+node 不配置 md/td，只按账户选择 IPC 组：
+
+```toml
+# node.toml
+primary_account = "default"
+
+[[accounts]]
+id = "default"
+ipc = "gw-a"
+
+[[accounts]]
+id = "account-b"
+ipc = "gw-b"
+```
+
+每个账户固定构造 Remote MD/TD，共用一个 IPC 组。切换 TQ TD 只改 gw 的
+`[td].kind = "tq"`、`auto_url = true`，账户参数在 `shared/tq.toml`。
+详细 include/覆盖规则和本地凭据见 [CONFIG.md](CONFIG.md)。
 
 ### TD-only soak
 
-TD-only node 必须使用：
-
-```toml
-[md]
-kind = "none"
-```
-
-不要写 `md.kind="remote"` 指向一个没有 MD 的 gw，否则 RemoteMdGateway 存在但
-没有上游，`/readyz` 可能一直 false。
+TD-only 时把 **gw** 的 `[md].kind` 设为 `"none"`；node 仍只通过 IPC 连接，
+不需要也不应该写 `md.kind`。如果 gw 没有 MD，node 的 RemoteMd 侧保持空数据，
+`/readyz` 以 TD snapshot 为准。
 
 ## 4. 启动
 

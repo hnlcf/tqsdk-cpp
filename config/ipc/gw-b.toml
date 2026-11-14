@@ -1,0 +1,10 @@
+# Optional second IPC group for a second gw/account.
+[ipc]
+name = "gw-b"
+transport = "tcp"
+tcp_host = "127.0.0.1"
+tcp_port = 4322
+encoding = "json"
+handshake_timeout_ms = 5000
+heartbeat_interval_ms = 5000
+heartbeat_timeout_ms = 15000

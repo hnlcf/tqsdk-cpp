@@ -2,63 +2,41 @@
 #
 # 启动目录模式：
 #   ./build-ui/tqsdk-node -c config
-# load_node_config("config") 会读取本文件，并解析 [include].files。
-#
-# 共享配置：
-#   shared/ipc.toml     IPC 编码/超时
-#   shared/tq.toml      TqAuth 和 TQ 默认设置
-#   shared/cache.toml   合约目录、SQLite 缓存、主连表
-#
-# node 只负责连接 gw 和对外服务；真实行情/交易网关由 gw 进程选择。
+# node 不再配置 md/td；每个账户只选择一个 IPC 组。
+# IPC 组文件在 config/ipc/<key>.toml，包含 transport/endpoint/超时/name。
 [include]
 files = [
-    "shared/ipc.toml",
     "shared/tq.toml",
     "shared/cache.toml",
 ]
 
-[ipc]
-transport = "tcp"
-role = "node"
-local_name = "tqsdk-node"
+primary_account = "default"
 
-# 上游行情（来自 gw）
-[md]
-kind = "remote"
-tcp_host = "127.0.0.1"
-tcp_port = 4321
+[[accounts]]
+id = "default"
+ipc = "gw-a"
 
-# 上游交易（来自 gw）
-[td]
-kind = "remote"
-tcp_host = "127.0.0.1"
-tcp_port = 4321
-ack_timeout_ms = 10000
+# 第二个账户/网关示例：
+# [[accounts]]
+# id = "account-b"
+# ipc = "gw-b"
 
 [serve]
 bind = "127.0.0.1"
 port = 8080
 symbols = []
 
-# 同一端口上的 WebSocket 实时推送。
 [serve.ws]
 path = "/stream"
 heartbeat_interval_ms = 30000
 max_clients = 256
 max_queue = 1024
 
-# 变更请求审计（可选，默认关闭）。
 [audit]
 enabled = false
 file = "logs/audit.log"
 max_bytes = 10485760
 max_files = 5
-
-# 多账户（可选；每个额外账户连接独立 gw）。
-# [[accounts]]
-# id = "account-b"
-# gw_host = "127.0.0.1"
-# gw_port = 14331
 
 [runtime]
 threads = 4

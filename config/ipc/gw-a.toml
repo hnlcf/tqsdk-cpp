@@ -1,0 +1,13 @@
+# One IPC group = one gw/node interaction.
+# gw listens on this endpoint; node accounts reference key "gw-a".
+[ipc]
+name = "gw-a"
+transport = "tcp"
+tcp_host = "127.0.0.1"
+tcp_port = 4321
+# transport = "uds"
+# socket = "/tmp/tqsdk-gw-a.sock"
+encoding = "json"
+handshake_timeout_ms = 5000
+heartbeat_interval_ms = 5000
+heartbeat_timeout_ms = 15000

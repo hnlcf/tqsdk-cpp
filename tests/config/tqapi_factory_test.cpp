@@ -385,23 +385,33 @@ max_pending_ticks = 99
     EXPECT_EQ(cfg.tick_cache.max_pending_ticks, 99u);
 }
 
-TEST(TqApiFactoryConfig, ParsesNodeAccountEndpoints) {
+TEST(TqApiFactoryConfig, ParsesNodeAccountIpcGroups) {
     auto cfg = parse_node_config(R"(
+primary_account = "B"
 [[accounts]]
 id = "B"
-gw_host = "127.0.0.1"
-gw_port = 14331
+ipc = "gw-b"
 [[accounts]]
 id = "C"
-gw_host = "10.0.0.2"
-gw_port = 14332
+ipc = "gw-c"
+
+[ipc.gw-b]
+transport = "tcp"
+tcp_host = "127.0.0.1"
+tcp_port = 14331
+
+[ipc.gw-c]
+transport = "tcp"
+tcp_host = "10.0.0.2"
+tcp_port = 14332
 )")
                    .value();
     ASSERT_EQ(cfg.accounts.size(), 2u);
+    EXPECT_EQ(cfg.primary_account, "B");
     EXPECT_EQ(cfg.accounts[0].id, "B");
-    EXPECT_EQ(cfg.accounts[0].gw_port, 14331);
+    EXPECT_EQ(cfg.accounts[0].ipc.tcp_port, 14331);
     EXPECT_EQ(cfg.accounts[1].id, "C");
-    EXPECT_EQ(cfg.accounts[1].gw_host, "10.0.0.2");
+    EXPECT_EQ(cfg.accounts[1].ipc.tcp_host, "10.0.0.2");
 }
 
 TEST(TqApiFactoryConfig, ParsesAutoUrlFlags) {
@@ -605,8 +615,12 @@ struct TempConfigBundle {
 
 TEST(TqApiConfigTest, LoadsGatewayConfigDirectoryWithIncludes) {
     TempConfigBundle bundle;
-    bundle.write("shared/ipc.toml", R"(
+    bundle.write("ipc/gw-a.toml", R"(
         [ipc]
+        name = "bundle-gw"
+        transport = "tcp"
+        tcp_host = "127.0.0.1"
+        tcp_port = 19001
         encoding = "json"
         heartbeat_interval_ms = 6000
         heartbeat_timeout_ms = 18000
@@ -623,13 +637,9 @@ TEST(TqApiConfigTest, LoadsGatewayConfigDirectoryWithIncludes) {
     )");
     bundle.write("gw.toml", R"(
         [include]
-        files = ["shared/ipc.toml", "shared/tq.toml"]
-        [listen]
-        transport = "tcp"
-        tcp_host = "127.0.0.1"
-        tcp_port = 19001
-        [ipc]
-        local_name = "bundle-gw"
+        files = ["shared/tq.toml"]
+        [gateway]
+        ipc = "gw-a"
         [md]
         kind = "none"
         [td]
@@ -641,9 +651,9 @@ TEST(TqApiConfigTest, LoadsGatewayConfigDirectoryWithIncludes) {
 
     const auto cfg = load_gw_config(bundle.root.string());
     ASSERT_TRUE(cfg);
-    EXPECT_EQ(cfg->listen.tcp_port, 19001);
-    EXPECT_EQ(cfg->local_name, "bundle-gw");
-    EXPECT_EQ(cfg->heartbeat_interval, std::chrono::milliseconds(6000));
+    EXPECT_EQ(cfg->ipc.tcp_port, 19001);
+    EXPECT_EQ(cfg->ipc.name, "bundle-gw");
+    EXPECT_EQ(cfg->ipc.heartbeat_interval, std::chrono::milliseconds(6000));
     EXPECT_EQ(cfg->td.tq.broker_name, "from-entry");
     EXPECT_EQ(cfg->td.tq.account_id, "bundle-account");
     EXPECT_TRUE(cfg->tq_auth.enabled);
@@ -652,8 +662,12 @@ TEST(TqApiConfigTest, LoadsGatewayConfigDirectoryWithIncludes) {
 
 TEST(TqApiConfigTest, LoadsNodeConfigDirectoryWithIncludes) {
     TempConfigBundle bundle;
-    bundle.write("shared/ipc.toml", R"(
+    bundle.write("ipc/gw-a.toml", R"(
         [ipc]
+        name = "gw-a"
+        transport = "tcp"
+        tcp_host = "127.0.0.1"
+        tcp_port = 19001
         encoding = "json"
         handshake_timeout_ms = 6000
         heartbeat_interval_ms = 7000
@@ -661,19 +675,11 @@ TEST(TqApiConfigTest, LoadsNodeConfigDirectoryWithIncludes) {
     )");
     bundle.write("node.toml", R"(
         [include]
-        files = ["shared/ipc.toml"]
-        [ipc]
-        transport = "tcp"
-        role = "node"
-        local_name = "bundle-node"
-        [md]
-        kind = "remote"
-        tcp_host = "127.0.0.1"
-        tcp_port = 19001
-        [td]
-        kind = "remote"
-        tcp_host = "127.0.0.1"
-        tcp_port = 19001
+        files = []
+        primary_account = "default"
+        [[accounts]]
+        id = "default"
+        ipc = "gw-a"
         [serve]
         bind = "127.0.0.1"
         port = 19002
@@ -681,10 +687,11 @@ TEST(TqApiConfigTest, LoadsNodeConfigDirectoryWithIncludes) {
 
     const auto cfg = load_node_config(bundle.root.string());
     ASSERT_TRUE(cfg);
-    EXPECT_EQ(cfg->upstream.ipc.transport, IpcTransport::Tcp);
-    EXPECT_EQ(cfg->upstream.ipc.role, ipc::IpcRole::Node);
-    EXPECT_EQ(cfg->upstream.ipc.local_name, "bundle-node");
-    EXPECT_EQ(cfg->upstream.ipc.handshake_timeout, std::chrono::milliseconds(6000));
+    ASSERT_EQ(cfg->accounts.size(), 1u);
+    EXPECT_EQ(cfg->primary_account, "default");
+    EXPECT_EQ(cfg->accounts[0].ipc.transport, IpcTransport::Tcp);
+    EXPECT_EQ(cfg->accounts[0].ipc.tcp_port, 19001);
+    EXPECT_EQ(cfg->accounts[0].ipc.handshake_timeout, std::chrono::milliseconds(6000));
     EXPECT_EQ(cfg->serve_port, 19002);
 }
 
@@ -724,4 +731,65 @@ TEST(TqApiConfigTest, RejectsIncludeCycle) {
     ASSERT_FALSE(cfg);
     EXPECT_EQ(cfg.error().code, config::ConfigErrorCode::invalid_value);
     EXPECT_NE(cfg.error().detail.find("cycle"), std::string::npos);
+}
+
+TEST(TqApiFactoryConfig, RemoteTqApiConfigUsesIpcGroup) {
+    IpcConfig ipc;
+    ipc.transport = IpcTransport::Tcp;
+    ipc.tcp_host  = "10.0.0.8";
+    ipc.tcp_port  = 14330;
+    ipc.encoding  = ipc::FrameEncoding::Json;
+
+    const auto cfg = make_remote_tqapi_config(ipc, "account-b");
+    EXPECT_EQ(cfg.ipc.transport, IpcTransport::Tcp);
+    EXPECT_EQ(cfg.ipc.role, ipc::IpcRole::Node);
+    EXPECT_EQ(cfg.ipc.local_name, "node-account-b");
+    EXPECT_EQ(cfg.md.kind, MdKind::Remote);
+    EXPECT_EQ(cfg.td.kind, TdKind::Remote);
+    EXPECT_EQ(cfg.md.tcp_host, "10.0.0.8");
+    EXPECT_EQ(cfg.md.tcp_port, 14330);
+    EXPECT_EQ(cfg.td.tcp_host, "10.0.0.8");
+    EXPECT_EQ(cfg.td.tcp_port, 14330);
+}
+
+TEST(TqApiFactoryConfig, LegacyNodeRemoteConfigCreatesAccount) {
+    const auto cfg = parse_node_config(R"(
+[ipc]
+transport = "tcp"
+encoding = "json"
+handshake_timeout_ms = 3000
+[md]
+kind = "remote"
+tcp_host = "127.0.0.1"
+tcp_port = 14330
+[td]
+kind = "remote"
+tcp_host = "127.0.0.1"
+tcp_port = 14330
+)");
+    ASSERT_TRUE(cfg);
+    ASSERT_EQ(cfg->accounts.size(), 1u);
+    EXPECT_EQ(cfg->primary_account, "default");
+    EXPECT_EQ(cfg->accounts[0].ipc.transport, IpcTransport::Tcp);
+    EXPECT_EQ(cfg->accounts[0].ipc.tcp_port, 14330);
+    EXPECT_EQ(cfg->accounts[0].ipc.handshake_timeout, std::chrono::milliseconds(3000));
+}
+
+TEST(TqApiFactoryConfig, LegacyGwConfigUsesListenAsIpcGroup) {
+    const auto cfg = parse_gw_config(R"(
+[listen]
+transport = "tcp"
+tcp_host = "127.0.0.1"
+tcp_port = 14330
+[ipc]
+encoding = "msgpack"
+heartbeat_interval_ms = 7000
+[td]
+kind = "none"
+)");
+    ASSERT_TRUE(cfg);
+    EXPECT_EQ(cfg->ipc.transport, IpcTransport::Tcp);
+    EXPECT_EQ(cfg->ipc.tcp_port, 14330);
+    EXPECT_EQ(cfg->ipc.encoding, ipc::FrameEncoding::MessagePack);
+    EXPECT_EQ(cfg->ipc.heartbeat_interval, std::chrono::milliseconds(7000));
 }

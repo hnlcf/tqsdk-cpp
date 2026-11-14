@@ -158,8 +158,24 @@ int main(int argc, char** argv) {
     // TqApi/网关/DataManager 全部绑定 core_ex；HTTP 连接 I/O 在 io_ex 的
     // 每连接 strand 上并行，进入路由 handler 前切回 core_ex。
     auto bootstrap = [&io, io_ex, core_ex, rt, &cfg]() -> asio::awaitable<void> {
+        if (cfg.accounts.empty()) {
+            SPDLOG_CRITICAL("[node] no IPC gateway accounts configured");
+            io.stop();
+            co_return;
+        }
+        auto primary_it =
+            std::find_if(cfg.accounts.begin(), cfg.accounts.end(), [&](const auto& account) {
+                return cfg.primary_account.empty() || account.id == cfg.primary_account;
+            });
+        if (primary_it == cfg.accounts.end()) {
+            SPDLOG_CRITICAL("[node] primary account '{}' not found", cfg.primary_account);
+            io.stop();
+            co_return;
+        }
+
         std::shared_ptr<TqApi> primary;
-        auto primary_result = co_await try_make_tqapi(io, cfg.upstream, core_ex, rt->kline_store);
+        auto primary_cfg    = make_remote_tqapi_config(primary_it->ipc, primary_it->id);
+        auto primary_result = co_await try_make_tqapi(io, primary_cfg, core_ex, rt->kline_store);
         if (!primary_result) {
             SPDLOG_CRITICAL("[node] failed to connect/init upstream gw: {} ({})",
                             primary_result.error().detail,
@@ -170,7 +186,7 @@ int main(int argc, char** argv) {
         primary                      = std::shared_ptr<TqApi>(std::move(*primary_result));
         rt->api                      = primary;
         rt->accounts                 = std::make_shared<MultiAccountManager>();
-        const std::string primary_id = cfg.account_id.empty() ? "default" : cfg.account_id;
+        const std::string primary_id = primary_it->id;
         if (!rt->accounts->add_account(primary_id, primary)) {
             SPDLOG_CRITICAL("[node] invalid/duplicate primary account id: {}", primary_id);
             io.stop();
@@ -192,21 +208,13 @@ int main(int argc, char** argv) {
             SPDLOG_INFO("[node] pre-subscribed quote {}", sym);
         }
 
-        // 额外账户：每个账户连接自己的 gw 端点，使用独立 TqApi/DataManager。
+        // 额外账户：每个账户通过自己的 IPC 组连接一个 gw，使用独立 TqApi/DataManager。
         for (const auto& account : cfg.accounts) {
-            if (rt->accounts->find_account(account.id)) {
-                SPDLOG_WARN("[node] duplicate account id ignored: {}", account.id);
+            if (account.id == primary_id || rt->accounts->find_account(account.id)) {
                 continue;
             }
-            auto account_cfg           = cfg.upstream;
-            account_cfg.ipc.local_name = fmt::format("node-{}", account.id);
-            account_cfg.md.kind        = MdKind::Remote;
-            account_cfg.td.kind        = TdKind::Remote;
-            account_cfg.md.tcp_host    = account.gw_host;
-            account_cfg.md.tcp_port    = account.gw_port;
-            account_cfg.td.tcp_host    = account.gw_host;
-            account_cfg.td.tcp_port    = account.gw_port;
-            auto extra_result          = co_await try_make_tqapi(io, account_cfg, core_ex, nullptr);
+            auto account_cfg  = make_remote_tqapi_config(account.ipc, account.id);
+            auto extra_result = co_await try_make_tqapi(io, account_cfg, core_ex, nullptr);
             if (!extra_result) {
                 SPDLOG_ERROR("[node] account {} failed to connect: {} ({})",
                              account.id,
@@ -219,10 +227,15 @@ int main(int argc, char** argv) {
             for (const auto& sym : cfg.symbols) {
                 extra->get_quote(sym);
             }
-            SPDLOG_INFO("[node] account {} connected to gw {}:{}",
-                        account.id,
-                        account.gw_host,
-                        account.gw_port);
+            if (account.ipc.transport == IpcTransport::Tcp) {
+                SPDLOG_INFO("[node] account {} connected to gw {}:{}",
+                            account.id,
+                            account.ipc.tcp_host,
+                            account.ipc.tcp_port);
+            } else {
+                SPDLOG_INFO(
+                    "[node] account {} connected to gw UDS {}", account.id, account.ipc.socket);
+            }
         }
 
         serve::WsOptions ws_opts;

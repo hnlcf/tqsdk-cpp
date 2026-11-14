@@ -251,11 +251,11 @@ int main(int argc, char** argv) {
                          TradingGateway*             td_p) {
         ipc::IpcSession::Options opts;
         opts.local_role         = ipc::IpcRole::Gateway; // gw 侧声明 Gateway
-        opts.local_name         = cfg.local_name;
-        opts.handshake_timeout  = cfg.handshake_timeout;
-        opts.heartbeat_interval = cfg.heartbeat_interval;
-        opts.heartbeat_timeout  = cfg.heartbeat_timeout;
-        opts.encoding           = cfg.encoding;
+        opts.local_name         = cfg.ipc.name;
+        opts.handshake_timeout  = cfg.ipc.handshake_timeout;
+        opts.heartbeat_interval = cfg.ipc.heartbeat_interval;
+        opts.heartbeat_timeout  = cfg.ipc.heartbeat_timeout;
+        opts.encoding           = cfg.ipc.encoding;
 
         // 每条连接独立 strand；共享网关状态通过 gateway_ex=ex 串行化。
         auto srv_ex  = asio::make_strand(io_ex);
@@ -317,8 +317,8 @@ int main(int argc, char** argv) {
     std::shared_ptr<asio::local::stream_protocol::acceptor> uds_acc;
     std::shared_ptr<tcp::acceptor>                          tcp_acc;
 
-    if (cfg.listen.transport == IpcTransport::Uds) {
-        const std::string path = cfg.listen.socket;
+    if (cfg.ipc.transport == IpcTransport::Uds) {
+        const std::string path = cfg.ipc.socket;
         ::unlink(path.c_str());
         uds_acc = std::make_shared<asio::local::stream_protocol::acceptor>(
             io, asio::local::stream_protocol::endpoint(path));
@@ -346,10 +346,10 @@ int main(int argc, char** argv) {
             },
             "gw.accept.uds");
     } else {
-        tcp::endpoint ep{asio::ip::make_address(cfg.listen.tcp_host), cfg.listen.tcp_port};
+        tcp::endpoint ep{asio::ip::make_address(cfg.ipc.tcp_host), cfg.ipc.tcp_port};
         tcp_acc = std::make_shared<tcp::acceptor>(io, ep);
         SPDLOG_INFO(
-            "[gw] listening on TCP {}:{}", cfg.listen.tcp_host, tcp_acc->local_endpoint().port());
+            "[gw] listening on TCP {}:{}", cfg.ipc.tcp_host, tcp_acc->local_endpoint().port());
 
         co_spawn_logged(
             ex,

@@ -45,7 +45,7 @@ artifacts/ubsan/ubsan.log
 
 ## 3. 当前本地结果
 
-- CTest：384/384（2 项 TqMdNetwork 网络测试按环境跳过）；
+- CTest：387/387（2 项 TqMdNetwork 网络测试按环境跳过）；
 - Python：21/21；
 - Web：typecheck/test/build 通过；Playwright E2E 1 项；
 - 本地 Clang 与 GCC 构建均通过；
