@@ -145,7 +145,14 @@ client_mac_address = ""
 `auto_url=true` 时通过 `[tq_auth]` 登录快期账号并请求动态 TQ TD URL。
 `[tq_auth]` 的快期账号和 `[td.tq]` 的期货账户是两套凭据，不能混用。
 
-## 6. 当前限制
+## 6. 当前实现状态
+
+- `TqTdGateway` 已实现 wss 连接、`req_login`、`confirm_settlement`、`peek_message`、
+  `rtn_data`/`rtn_brokers` 处理、断线重连、Snapshot 恢复、1 手报单/撤单报文；
+- `TqMdGateway` 已改用 `tq::Message` 生成发送报文并用 `tq::parse` 解析服务端帧；
+- `TqProtocol` 单测覆盖全部 aid 和 `TqTdNormalization` 数据映射。
+
+## 6.1 当前限制
 
 - 只实现 `wss://`；`sm://` 国密和 `zqotg://` 本地适配器暂不支持。
 - 尚未接入 `pre_insert_order` 的保证金预计算 API；消息结构已就绪。
