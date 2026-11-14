@@ -197,13 +197,13 @@ CtpConfig parse_ctp_config(const toml::table& root) {
 }
 
 void parse_tq_td(const toml::table& t, TqApiConfig::Td::TqOptions& out) {
-    out.broker_id    = get_str(t, "broker_id", out.broker_id);
-    out.account_id   = get_str(t, "account_id", out.account_id);
-    out.password     = get_str(t, "password", out.password);
-    out.front_broker = get_str(t, "front_broker", out.front_broker);
-    out.front_url    = get_str(t, "front_url", out.front_url);
-    out.td_url       = get_str(t, "td_url", out.td_url);
-    out.account_key  = get_str(t, "account_key", out.account_key);
+    out.broker_name = get_str(t, "broker_name", out.broker_name);
+    out.account_id  = get_str(t, "account_id", out.account_id);
+    out.password    = get_str(t, "password", out.password);
+    out.broker_id   = get_str(t, "broker_id", out.broker_id);
+    out.front_url   = get_str(t, "front_url", out.front_url);
+    out.td_url      = get_str(t, "td_url", out.td_url);
+    out.account_key = get_str(t, "account_key", out.account_key);
 }
 
 // 解析一份已加载的 TOML DOM 到 TqApiConfig。
@@ -598,8 +598,12 @@ GwConfig build_gw_from_toml(const toml::table& root) {
             std::chrono::milliseconds(get_int(i, "heartbeat_timeout_ms", 15000));
         cfg.local_name = get_str(i, "local_name", cfg.local_name);
     }
-    cfg.md      = parse_gw_md(root);
-    cfg.td      = parse_gw_td(root);
+    cfg.md = parse_gw_md(root);
+    cfg.td = parse_gw_td(root);
+    if (cfg.td.kind == TdKind::Tq && cfg.td.tq.broker_name.empty()) {
+        fail_parse(config::ConfigErrorCode::invalid_value,
+                   "[td.tq].broker_name is required when [td].kind = tq");
+    }
     cfg.ctp     = parse_ctp_config(root);
     cfg.tq_auth = parse_tq_auth(root);
     cfg.runtime = parse_runtime(root);

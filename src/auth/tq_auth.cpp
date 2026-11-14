@@ -449,8 +449,10 @@ bool TqAuth::add_account(std::string_view account_id) {
     return post_token(body);
 }
 
-std::optional<TqAuth::TdUrl> TqAuth::get_td_url(std::string_view broker_id,
+std::optional<TqAuth::TdUrl> TqAuth::get_td_url(std::string_view broker_name,
                                                 std::string_view account_id) {
+    // broker_name 是 files.shinnytech.com/<broker_name>.json 的元数据键，
+    // 不是 req_login 里可选的 front broker_id。
     const auto authorization = authorization_header();
     if (authorization.empty()) {
         return std::nullopt;
@@ -458,7 +460,7 @@ std::optional<TqAuth::TdUrl> TqAuth::get_td_url(std::string_view broker_id,
     try {
         const std::string url         = fmt::format("{}/{}.json?account_id={}&auth={}",
                                                     cfg_.broker_url_prefix,
-                                                    url_encode(broker_id),
+                                                    url_encode(broker_name),
                                                     url_encode(account_id),
                                                     url_encode(cfg_.user_name));
         const auto        body_result = util::http_get(
@@ -474,10 +476,10 @@ std::optional<TqAuth::TdUrl> TqAuth::get_td_url(std::string_view broker_id,
             return std::nullopt;
         }
         const auto doc        = json::parse(*body_result);
-        const auto broker_key = std::string{broker_id};
+        const auto broker_key = std::string{broker_name};
         if (!doc.contains(broker_key) || !doc[broker_key].is_object()) {
             std::lock_guard lock(mutex_);
-            set_error(fmt::format("TqAuth unsupported broker: {}", broker_key));
+            set_error(fmt::format("TqAuth unsupported broker_name: {}", broker_key));
             return std::nullopt;
         }
         const auto& broker = doc[broker_key];

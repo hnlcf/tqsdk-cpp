@@ -75,7 +75,8 @@ public:
     bool add_account(std::string_view account_id);
 
     /// 获取期货公司交易网关地址；对应官方 _get_td_url。
-    std::optional<TdUrl> get_td_url(std::string_view broker_id, std::string_view account_id);
+    /// broker_name 是天勤元数据键，不是可选的 req_login.broker_id。
+    std::optional<TdUrl> get_td_url(std::string_view broker_name, std::string_view account_id);
 
     /// 获取行情网关地址；对应官方 _get_md_url。
     std::optional<std::string> get_md_url(bool stock = false, bool backtest = false);

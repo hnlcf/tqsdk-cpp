@@ -39,11 +39,13 @@ public:
         /// wss://host[:port]/path；TQ OTG 当前使用 wss。
         std::string url;
         /// "Bearer <access_token>"；由 TqAuth::authorization_header() 提供。
-        std::string               authorization;
+        std::string authorization;
+        /// 天勤元数据键和 req_login.bid。
+        std::string broker_name;
+        std::string account_id;
+        std::string password;
+        /// 可选的前置/柜台 broker id，对应 req_login.broker_id。
         std::string               broker_id;
-        std::string               account_id;
-        std::string               password;
-        std::string               front_broker;
         std::string               front_url;
         std::string               account_key;
         std::chrono::milliseconds reconnect_delay{500};

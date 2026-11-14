@@ -483,13 +483,11 @@ if(TQSDK_ENABLE_CTP)
 endif()
 
 # 示例配置与文档；brokers.json 可能含柜台信息，不随包强制分发。
-install(FILES config/gw.toml config/node.toml config/p0_simnode.toml
+install(FILES config/gw.toml config/node.toml
         DESTINATION share/tqsdk/config)
-install(FILES README.md docs/README.md docs/ARCHITECTURE.md docs/MODULES.md
-              docs/FLOWS.md docs/STATE_MACHINES.md docs/PROTOCOLS.md docs/OPERATIONS.md
-              docs/CTP.md docs/SOAK_PERF.md docs/WEB_FRONTEND.md docs/WEB_INDICATORS.md docs/TQ_AUTH.md docs/INSTRUMENTS.md
-              docs/KLINE_CACHE.md docs/SIMNOW_ACCEPTANCE.md docs/P0_SIMNOW_TEST_PLAN.md docs/ORDER_TASKS.md docs/RISK_CONTROL.md docs/TICK_DATA.md docs/OPTION_ANALYTICS.md docs/TRADING_STATUS.md docs/MULTI_ACCOUNT_BACKTEST.md docs/PYTHON_BACKTEST.md docs/PYTHON_LIVE_TRADING.md docs/PYTHON_LIBRARY.md docs/PYTHON_PACKAGING.md docs/ERROR_HANDLING.md docs/RELEASE_0.1.0.md docs/ROADMAP.md
-        DESTINATION share/doc/tqsdk)
+install(DIRECTORY docs/
+        DESTINATION share/doc/tqsdk
+        FILES_MATCHING PATTERN "*.md")
 
 # ==========================================================
 # CPack：生成 .tar.gz

@@ -65,3 +65,31 @@ threads = 2
 # md_front = "tcp://180.168.146.187:10131"
 # flow_path = "/tmp/tqsdk_ctp"
 # order_interval_ms = 100
+
+# ---- TQ OTG 交易网关（可选）----
+# 使用 TQ 交易时，把 [td].kind 改为 "tq"；Sim/CTP 配置不要同时启用。
+# [td]
+# kind = "tq"
+# auto_url = true
+#
+# [td.tq]
+# # broker_name 是天勤元数据键，也是 req_login.bid，例如 simnow / H海通期货。
+# broker_name = "simnow"
+# account_id = "your_account"
+# password = "your_password"
+# # 可选：前置/柜台 broker id，写入 req_login.broker_id；与 broker_name 不同。
+# broker_id = ""
+# # 可选：req_login.front，通常不填。
+# front_url = ""
+# # 可选：显式覆盖动态 TD URL；填写后不请求 broker_name 元数据。
+# td_url = ""
+# # 可选：本地 TQ 账户 key；默认等于 account_id。
+# account_key = ""
+#
+# [tq_auth]
+# enabled = true
+# user_name = "your_tq_user"
+# password = "your_tq_password"
+# auth_url = "https://auth.shinnytech.com"
+# # 默认 https://files.shinnytech.com
+# broker_url_prefix = "https://files.shinnytech.com"

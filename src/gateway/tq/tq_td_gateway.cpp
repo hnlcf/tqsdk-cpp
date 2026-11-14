@@ -208,7 +208,7 @@ asio::awaitable<void> TqTdGateway::connect_once() {
     connected_.store(true, std::memory_order_release);
 
     tq::LoginRequest login;
-    login.bid           = opts_.broker_id;
+    login.bid           = opts_.broker_name;
     login.user_name     = opts_.account_id;
     login.password      = opts_.password;
     login.client_app_id = std::string(kClientAppId);
@@ -216,7 +216,7 @@ asio::awaitable<void> TqTdGateway::connect_once() {
         login.client_mac_address = std::move(mac);
     }
     login.broker_id =
-        opts_.front_broker.empty() ? std::nullopt : std::optional<std::string>{opts_.front_broker};
+        opts_.broker_id.empty() ? std::nullopt : std::optional<std::string>{opts_.broker_id};
     login.front =
         opts_.front_url.empty() ? std::nullopt : std::optional<std::string>{opts_.front_url};
     if (!co_await send_json(tq::serialize(tq::Message{std::move(login)}))) {

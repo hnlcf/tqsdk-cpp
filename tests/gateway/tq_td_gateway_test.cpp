@@ -46,9 +46,9 @@ TEST(TqTdNormalization, IgnoresNonTradeSlices) {
 TEST(TqTdNormalization, GatewayStartsDisconnected) {
     asio::io_context     io;
     TqTdGateway::Options options;
-    options.url        = "wss://127.0.0.1:1/trade";
-    options.broker_id  = "simnow";
-    options.account_id = "user";
+    options.url         = "wss://127.0.0.1:1/trade";
+    options.broker_name = "simnow";
+    options.account_id  = "user";
     TqTdGateway gateway(io.get_executor(), std::move(options));
     EXPECT_FALSE(gateway.is_open());
     EXPECT_FALSE(gateway.snapshot_ready());

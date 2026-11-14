@@ -71,9 +71,9 @@ std::optional<Endpoint> DynamicEndpointResolver::md(bool stock, bool backtest) {
     return Endpoint::parse(*url);
 }
 
-std::optional<std::string> DynamicEndpointResolver::td(std::string_view broker_id,
+std::optional<std::string> DynamicEndpointResolver::td(std::string_view broker_name,
                                                        std::string_view account_id) {
-    auto url = auth_.get_td_url(broker_id, account_id);
+    auto url = auth_.get_td_url(broker_name, account_id);
     if (!url.has_value() || url->url.empty()) {
         return std::nullopt;
     }

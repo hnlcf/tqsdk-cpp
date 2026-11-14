@@ -532,20 +532,20 @@ TEST(TqApiConfigTest, ParseTqTdOptions) {
         kind = "tq"
         auto_url = true
         [td.tq]
-        broker_id = "simnow"
+        broker_name = "simnow"
         account_id = "user_a"
         password = "secret"
-        front_broker = "9999"
+        broker_id = "9999"
         front_url = "tcp://127.0.0.1:1"
         account_key = "A"
     )");
     ASSERT_TRUE(cfg);
     EXPECT_EQ(cfg->td.kind, TdKind::Tq);
     EXPECT_TRUE(cfg->td.auto_url);
-    EXPECT_EQ(cfg->td.tq.broker_id, "simnow");
+    EXPECT_EQ(cfg->td.tq.broker_name, "simnow");
     EXPECT_EQ(cfg->td.tq.account_id, "user_a");
     EXPECT_EQ(cfg->td.tq.account_key, "A");
-    EXPECT_EQ(cfg->td.tq.front_broker, "9999");
+    EXPECT_EQ(cfg->td.tq.broker_id, "9999");
 }
 
 TEST(TqApiConfigTest, ParseGatewayTqTdOptions) {
@@ -554,13 +554,25 @@ TEST(TqApiConfigTest, ParseGatewayTqTdOptions) {
         kind = "tq"
         auto_url = true
         [td.tq]
-        broker_id = "simnow"
+        broker_name = "simnow"
         account_id = "user_b"
         password = "secret"
     )");
     ASSERT_TRUE(cfg);
     EXPECT_EQ(cfg->td.kind, TdKind::Tq);
     EXPECT_TRUE(cfg->td.auto_url);
-    EXPECT_EQ(cfg->td.tq.broker_id, "simnow");
+    EXPECT_EQ(cfg->td.tq.broker_name, "simnow");
     EXPECT_EQ(cfg->td.tq.account_id, "user_b");
+}
+
+TEST(TqApiConfigTest, TqTdRequiresBrokerName) {
+    const auto cfg = parse_gw_config(R"(
+        [td]
+        kind = "tq"
+        [td.tq]
+        bank_account_id = "typo"
+    )");
+    ASSERT_FALSE(cfg);
+    EXPECT_EQ(cfg.error().code, config::ConfigErrorCode::invalid_value);
+    EXPECT_NE(cfg.error().detail.find("broker_name"), std::string::npos);
 }

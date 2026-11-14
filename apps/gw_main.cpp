@@ -79,6 +79,10 @@ std::unique_ptr<TradingGateway> make_real_td(const TqApiConfig::Td& td,
         return nullptr;
 #endif
     case TdKind::Tq: {
+        if (td.tq.broker_name.empty()) {
+            SPDLOG_ERROR("[gw] td.kind=tq requires [td.tq].broker_name");
+            return nullptr;
+        }
         std::string url = td.tq.td_url;
         std::string authorization;
         if (url.empty()) {
@@ -94,7 +98,7 @@ std::unique_ptr<TradingGateway> make_real_td(const TqApiConfig::Td& td,
                              auth::auth_error_name(login.error().code));
                 return nullptr;
             }
-            const auto endpoint = auth.get_td_url(td.tq.broker_id, td.tq.account_id);
+            const auto endpoint = auth.get_td_url(td.tq.broker_name, td.tq.account_id);
             if (!endpoint) {
                 SPDLOG_ERROR("[gw] tq td url unavailable: {}", auth.last_error());
                 return nullptr;
@@ -105,10 +109,10 @@ std::unique_ptr<TradingGateway> make_real_td(const TqApiConfig::Td& td,
         TqTdGateway::Options options;
         options.url           = std::move(url);
         options.authorization = std::move(authorization);
-        options.broker_id     = td.tq.broker_id;
+        options.broker_name   = td.tq.broker_name;
         options.account_id    = td.tq.account_id;
         options.password      = td.tq.password;
-        options.front_broker  = td.tq.front_broker;
+        options.broker_id     = td.tq.broker_id;
         options.front_url     = td.tq.front_url;
         options.account_key   = td.tq.account_key;
         return std::make_unique<TqTdGateway>(ex, std::move(options));
@@ -180,24 +184,6 @@ int main(int argc, char** argv) {
     // 真实网关（进程生命周期内常驻，被所有连接共享）。
     auto md = make_real_md(md_cfg, cfg.ctp, ex);
     auto td = make_real_td(cfg.td, cfg.ctp, cfg.tq_auth, ex);
-
-    // Tq 交易网关 URL 目前只做解析/诊断，CTP TD 仍使用 ctp.td_front。
-    if (cfg.td.kind != TdKind::Tq && cfg.td.auto_url && cfg.tq_auth.enabled) {
-        TqAuth     auth(cfg.tq_auth);
-        const auto auth_result = auth.login_result();
-        if (auth_result) {
-            DynamicEndpointResolver resolver(auth);
-            if (auto url = resolver.td(cfg.ctp.broker_id, cfg.ctp.user_id)) {
-                SPDLOG_INFO("[gw] dynamic td url resolved (ctp front unchanged): {}", *url);
-            } else {
-                SPDLOG_WARN("[gw] dynamic td url unavailable: {}", auth.last_error());
-            }
-        } else {
-            SPDLOG_WARN("[gw] dynamic td url: TqAuth login failed: {} ({})",
-                        auth_result.error().detail,
-                        auth::auth_error_name(auth_result.error().code));
-        }
-    }
 
     // 若交易网关是 Sim：按配置灌入合约规格与初始撮合价，使其可直接撮合。
     if (auto* sim = dynamic_cast<SimTdGateway*>(td.get()); sim != nullptr) {

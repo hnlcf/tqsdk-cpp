@@ -130,11 +130,11 @@ kind = "tq"
 auto_url = true
 
 [td.tq]
-broker_id = "simnow"      # TqAccount 的 broker_id
+broker_name = "simnow"    # 天勤 broker 元数据键，也是 req_login.bid
 account_id = "..."         # 期货资金账号
 password = "..."
 # 可选
-front_broker = ""
+broker_id = ""            # 前置/柜台 broker id，写入 req_login.broker_id
 front_url = ""
 td_url = ""                # 显式覆盖动态解析结果
 account_key = ""           # 默认等于 account_id
@@ -145,6 +145,8 @@ account_key = ""           # 默认等于 account_id
 
 `auto_url=true` 时通过 `[tq_auth]` 登录快期账号并请求动态 TQ TD URL。
 `[tq_auth]` 的快期账号和 `[td.tq]` 的期货账户是两套凭据，不能混用。
+`broker_name` 用于 `https://files.shinnytech.com/{broker_name}.json` 和
+`req_login.bid`；`broker_id` 是可选的柜台前置 id，两者不是同一个概念。
 
 ## 6. 当前实现状态
 
@@ -183,5 +185,5 @@ ctest --test-dir build-ui -R TqApiConfigTest --output-on-failure
 - `MachineId` 覆盖本机 MAC 格式。
 
 ```text
-本地最终结果：CTest 379/379（2 项网络测试按环境跳过），Python 21/21。
+本地最终结果：CTest 380/380（2 项网络测试按环境跳过），Python 21/21。
 ```

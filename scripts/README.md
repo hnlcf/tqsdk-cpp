@@ -25,6 +25,10 @@
 | `live_healthcheck.sh` | `/healthz`、`/readyz`、交易阶段检查 |
 | `ctp_week_preflight.sh` | 连续交易周前的只读检查 |
 
+TQ OTG 交易网关的配置示例见 `config/gw.toml` 的 `[td.tq]`；其中
+`broker_name`（天勤元数据键 / `req_login.bid`）与可选的 `broker_id`
+（前置柜台 id）不是同一个字段。
+
 ## Soak 与性能
 
 | 脚本 | 用途 |

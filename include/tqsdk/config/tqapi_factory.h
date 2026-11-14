@@ -110,10 +110,12 @@ struct TqApiConfig {
 
         /// Tq OTG 交易账户；td.kind == tq 时使用。
         struct TqOptions {
-            std::string broker_id;
+            /// 天勤 broker 元数据键和 req_login.bid，例如 "simnow" / "H海通期货"。
+            std::string broker_name;
             std::string account_id;
             std::string password;
-            std::string front_broker;
+            /// 可选的前置/柜台 broker id，对应 req_login.broker_id；与 broker_name 不同。
+            std::string broker_id;
             std::string front_url;
             std::string td_url; ///< 显式覆盖动态 URL
             std::string account_key;

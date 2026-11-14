@@ -26,7 +26,7 @@ public:
         : auth_(auth) {}
 
     std::optional<Endpoint>    md(bool stock = false, bool backtest = false);
-    std::optional<std::string> td(std::string_view broker_id, std::string_view account_id);
+    std::optional<std::string> td(std::string_view broker_name, std::string_view account_id);
 
 private:
     TqAuth& auth_;

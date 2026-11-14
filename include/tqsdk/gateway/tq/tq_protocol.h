@@ -155,6 +155,7 @@ inline void from_json(const nlohmann::json&, Terminate&) {}
 struct LoginRequest {
     static constexpr Aid kAid = Aid::ReqLogin;
 
+    /// broker_name（天勤元数据键）放在 bid；broker_id 是可选的前置/柜台 id。
     std::string                   bid;
     std::string                   user_name;
     std::string                   password;

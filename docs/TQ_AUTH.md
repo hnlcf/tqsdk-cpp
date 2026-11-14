@@ -88,7 +88,7 @@ TQ_AUTH_URL=https://auth.shinnytech.com
 | `expire_datetime` | `expire_datetime()` |
 | `expire_days_left` / `account_type` | `expire_days_left()` / `product_type()` |
 | `_add_account` | `add_account(account_id)` |
-| `_get_td_url` | `get_td_url(broker_id, account_id)` |
+| `_get_td_url` | `get_td_url(broker_name, account_id)` |
 | `_get_md_url` | `get_md_url(stock, backtest)` |
 | `init(mode)` | `init("real"|"bt")` |
 | `_base_headers` | `Authorization`、`User-Agent`、`Accept` |
@@ -106,10 +106,14 @@ mode = "real"
 
 ## 6. 期货公司 TD URL 元数据
 
+官方源码里的参数变量名可能仍写作 `broker_id`，但它在这里的语义是期货公司
+名称；本项目配置和代码统一称为 `broker_name`，以避免与 `req_login.broker_id`
+（前置柜台 id）混淆。
+
 官方 `tqsdk/auth.py::_get_td_url()` 的规则不是“每个期货公司一个固定域名”，而是：
 
 ```text
-GET https://files.shinnytech.com/{broker_id}.json
+GET https://files.shinnytech.com/{broker_name}.json
     ?account_id={account_id}
     &auth={tq_auth_user_name}
 Authorization: Bearer <access_token>
@@ -134,14 +138,14 @@ src/auth/tq_auth.cpp  TqAuth::get_td_url()
 include/tqsdk/constants.h  kTqBrokerUrlPrefix
 ```
 
-### 6.1 broker_id
+### 6.1 broker_name
 
-`broker_id` 是期货公司在天勤侧的名称，不是随便拼的域名。官方支持列表：
+`broker_name` 是期货公司在天勤侧的名称，不是随便拼的域名。官方支持列表：
 <https://www.shinnytech.com/blog/tq-support-broker/>。
 
 公开元数据示例（2026-11 实测）：
 
-| broker_id | TD URL |
+| broker_name | TD URL |
 |---|---|
 | `simnow` | `wss://otg-simnow.shinnytech.com/trade` |
 | `H海通期货` | `wss://q7.htfutures.com:30131/trade` |
@@ -164,7 +168,19 @@ include/tqsdk/constants.h  kTqBrokerUrlPrefix
 注意：公开元数据有时即使不带 Bearer 也能读到，但官方实现始终携带快期认证；
 本项目也应保持同样行为，不要依赖未认证访问。
 
-## 7. 安全
+## 7. broker_name 与 broker_id
+
+这两个字段不能混用：
+
+| 字段 | 用途 |
+|---|---|
+| `broker_name` | 天勤元数据键、`req_login.bid`，例如 `simnow` / `H海通期货` |
+| `broker_id` | 可选的前置/柜台 broker id，写入 `req_login.broker_id` |
+
+`TqTdGateway` 的 `[td.tq].broker_name` 必填；`[td.tq].broker_id` 可留空。
+`front_url` 对应 `req_login.front`，也不是 TD URL。
+
+## 8. 安全
 
 - 账号密码不得提交到仓库；
 - `run/live/node.toml`、`config/live.local.env` 不进入版本控制；
@@ -172,7 +188,7 @@ include/tqsdk/constants.h  kTqBrokerUrlPrefix
 - 当前 access token 只保存在 node 进程内存；
 - 建议下一步将 token 缓存加密到本机，并支持只读 token 文件。
 
-## 8. 验证
+## 9. 验证
 
 ```bash
 ctest --test-dir build-ui -R TqAuth --output-on-failure
