@@ -1,11 +1,10 @@
 #include "tqsdk/gateway/tq/tq_td_gateway.h"
 
 #include "tqsdk/util/log.h"
+#include "tqsdk/util/machine_id.h"
 #include "tqsdk/util/spawn_logged.h"
 
 #include <openssl/ssl.h>
-
-#include <random>
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -37,18 +36,6 @@ TqTdGateway::TqTdGateway(asio::any_io_executor ex, Options options)
     ssl_ctx_.set_verify_mode(ssl::verify_peer);
     if (opts_.account_key.empty()) {
         opts_.account_key = opts_.account_id;
-    }
-    if (opts_.client_mac_address.empty()) {
-        std::random_device rd;
-        std::mt19937_64    rng(rd());
-        const auto         value = rng();
-        opts_.client_mac_address = fmt::format("{:02X}-{:02X}-{:02X}-{:02X}-{:02X}-{:02X}",
-                                               static_cast<unsigned>(value & 0xFF),
-                                               static_cast<unsigned>((value >> 8) & 0xFF),
-                                               static_cast<unsigned>((value >> 16) & 0xFF),
-                                               static_cast<unsigned>((value >> 24) & 0xFF),
-                                               static_cast<unsigned>((value >> 32) & 0xFF),
-                                               static_cast<unsigned>((value >> 40) & 0xFF));
     }
 }
 
@@ -167,6 +154,11 @@ asio::awaitable<void> TqTdGateway::connect_once() {
     if (parsed.host.empty() || parsed.port.empty()) {
         throw std::runtime_error("invalid TqTd url: " + opts_.url);
     }
+    SPDLOG_INFO("[TqTd] connecting {}:{}{} (authorization={})",
+                parsed.host,
+                parsed.port,
+                parsed.target,
+                !opts_.authorization.empty());
 
     resolver_.emplace(ex_);
     auto endpoints = co_await resolver_->async_resolve(parsed.host, parsed.port, use_awaitable);
@@ -182,10 +174,10 @@ asio::awaitable<void> TqTdGateway::connect_once() {
     ws_->read_message_max(8u << 20);
     if (!opts_.authorization.empty()) {
         const auto authorization = opts_.authorization;
-        const auto app_id        = opts_.client_app_id;
         ws_->set_option(beast::websocket::stream_base::decorator(
-            [authorization, app_id](beast::websocket::request_type& req) {
-                req.set(http::field::user_agent, fmt::format("tqsdk-cpp {}", app_id));
+            [authorization](beast::websocket::request_type& req) {
+                req.set(http::field::user_agent,
+                        fmt::format("tqsdk-cpp {}", std::string(kClientAppId)));
                 req.set(http::field::authorization, authorization);
                 req.set(http::field::accept, "application/json");
             }));
@@ -194,17 +186,25 @@ asio::awaitable<void> TqTdGateway::connect_once() {
     co_await ws_->next_layer().async_handshake(ssl::stream_base::client, use_awaitable);
     const auto host_header =
         parsed.port == "443" ? parsed.host : fmt::format("{}:{}", parsed.host, parsed.port);
-    co_await ws_->async_handshake(host_header, parsed.target, use_awaitable);
+    http::response<http::string_body> response;
+    boost::system::error_code         handshake_ec;
+    co_await ws_->async_handshake(
+        response, host_header, parsed.target, asio::redirect_error(use_awaitable, handshake_ec));
+    if (handshake_ec) {
+        SPDLOG_WARN(
+            "[TqTd] handshake rejected: status={} body={}", response.result_int(), response.body());
+        throw boost::system::system_error(handshake_ec);
+    }
     connected_.store(true, std::memory_order_release);
 
     tq::LoginRequest login;
-    login.bid                = opts_.broker_id;
-    login.user_name          = opts_.account_id;
-    login.password           = opts_.password;
-    login.client_app_id      = opts_.client_app_id;
-    login.client_mac_address = opts_.client_mac_address.empty()
-                                   ? std::nullopt
-                                   : std::optional<std::string>{opts_.client_mac_address};
+    login.bid           = opts_.broker_id;
+    login.user_name     = opts_.account_id;
+    login.password      = opts_.password;
+    login.client_app_id = std::string(kClientAppId);
+    if (auto mac = util::machine_mac_address(); !mac.empty()) {
+        login.client_mac_address = std::move(mac);
+    }
     login.broker_id =
         opts_.front_broker.empty() ? std::nullopt : std::optional<std::string>{opts_.front_broker};
     login.front =

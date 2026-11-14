@@ -103,16 +103,14 @@ std::unique_ptr<TradingGateway> make_real_td(const TqApiConfig::Td& td,
             authorization = auth.authorization_header();
         }
         TqTdGateway::Options options;
-        options.url                = std::move(url);
-        options.authorization      = std::move(authorization);
-        options.broker_id          = td.tq.broker_id;
-        options.account_id         = td.tq.account_id;
-        options.password           = td.tq.password;
-        options.front_broker       = td.tq.front_broker;
-        options.front_url          = td.tq.front_url;
-        options.account_key        = td.tq.account_key;
-        options.client_app_id      = td.tq.client_app_id;
-        options.client_mac_address = td.tq.client_mac_address;
+        options.url           = std::move(url);
+        options.authorization = std::move(authorization);
+        options.broker_id     = td.tq.broker_id;
+        options.account_id    = td.tq.account_id;
+        options.password      = td.tq.password;
+        options.front_broker  = td.tq.front_broker;
+        options.front_url     = td.tq.front_url;
+        options.account_key   = td.tq.account_key;
         return std::make_unique<TqTdGateway>(ex, std::move(options));
     }
     case TdKind::None:

@@ -197,15 +197,13 @@ CtpConfig parse_ctp_config(const toml::table& root) {
 }
 
 void parse_tq_td(const toml::table& t, TqApiConfig::Td::TqOptions& out) {
-    out.broker_id          = get_str(t, "broker_id", out.broker_id);
-    out.account_id         = get_str(t, "account_id", out.account_id);
-    out.password           = get_str(t, "password", out.password);
-    out.front_broker       = get_str(t, "front_broker", out.front_broker);
-    out.front_url          = get_str(t, "front_url", out.front_url);
-    out.td_url             = get_str(t, "td_url", out.td_url);
-    out.account_key        = get_str(t, "account_key", out.account_key);
-    out.client_app_id      = get_str(t, "client_app_id", out.client_app_id);
-    out.client_mac_address = get_str(t, "client_mac_address", out.client_mac_address);
+    out.broker_id    = get_str(t, "broker_id", out.broker_id);
+    out.account_id   = get_str(t, "account_id", out.account_id);
+    out.password     = get_str(t, "password", out.password);
+    out.front_broker = get_str(t, "front_broker", out.front_broker);
+    out.front_url    = get_str(t, "front_url", out.front_url);
+    out.td_url       = get_str(t, "td_url", out.td_url);
+    out.account_key  = get_str(t, "account_key", out.account_key);
 }
 
 // 解析一份已加载的 TOML DOM 到 TqApiConfig。

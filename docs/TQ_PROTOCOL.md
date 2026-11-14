@@ -138,9 +138,10 @@ front_broker = ""
 front_url = ""
 td_url = ""                # 显式覆盖动态解析结果
 account_key = ""           # 默认等于 account_id
-client_app_id = "SHINNY_TQ_1.0"
-client_mac_address = ""
 ```
+
+`client_app_id` 固定为官方值 `SHINNY_TQ_1.0`，`client_mac_address` 由
+`util::machine_mac_address()` 从本机非 loopback 网卡读取；两者都不作为用户配置项。
 
 `auto_url=true` 时通过 `[tq_auth]` 登录快期账号并请求动态 TQ TD URL。
 `[tq_auth]` 的快期账号和 `[td.tq]` 的期货账户是两套凭据，不能混用。

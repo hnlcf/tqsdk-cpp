@@ -85,6 +85,7 @@ add_library(tqsdk_core SHARED
     src/gateway/tq/tq_td_gateway.cpp
     src/util/log.cpp
     src/util/audit.cpp
+    src/util/machine_id.cpp
     src/util/http_download.cpp
     src/auth/tq_auth.cpp
     src/auth/dynamic_endpoint.cpp
@@ -337,6 +338,7 @@ if(TQSDK_BUILD_TESTS)
         tests/util/serde_test.cpp
         tests/util/spawn_logged_test.cpp
         tests/util/log_test.cpp
+        tests/util/machine_id_test.cpp
         tests/util/audit_test.cpp
         tests/e2e/mock_e2e_test.cpp
         tests/e2e/mock_e2e_edges_test.cpp

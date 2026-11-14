@@ -117,8 +117,6 @@ struct TqApiConfig {
             std::string front_url;
             std::string td_url; ///< 显式覆盖动态 URL
             std::string account_key;
-            std::string client_app_id = "SHINNY_TQ_1.0";
-            std::string client_mac_address;
         } tq;
 
         /// 通过 TqAuth 解析 Tq 交易网关 URL。

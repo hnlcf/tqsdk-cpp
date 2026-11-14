@@ -32,6 +32,9 @@ bool td_trade_complete(const nlohmann::json& slice) noexcept;
 /// 订单状态推进仍由 TqApi::td_loop -> DiffMergeEngine 完成。
 class TqTdGateway final : public TradingGateway {
 public:
+    /// 官方 OTG 客户端标识；固定值，不作为配置项。
+    static constexpr std::string_view kClientAppId = "SHINNY_TQ_1.0";
+
     struct Options {
         /// wss://host[:port]/path；TQ OTG 当前使用 wss。
         std::string url;
@@ -43,8 +46,6 @@ public:
         std::string               front_broker;
         std::string               front_url;
         std::string               account_key;
-        std::string               client_app_id = "SHINNY_TQ_1.0";
-        std::string               client_mac_address;
         std::chrono::milliseconds reconnect_delay{500};
         std::chrono::milliseconds max_reconnect_delay{10'000};
     };
