@@ -211,7 +211,7 @@ docs/             架构、模块、信息流、状态机、运维、专题
 
 - `./scripts/package_release.sh`：生成 DEB/RPM/TGZ；详见 docs/PACKAGING.md；
 - 最新 Release：`v0.4.0`（错误处理重构、C++23 GCC 14 构建、12 个 assets）；
-- `ctest`：365 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
+- `ctest`：377 项通过（2 项网络测试按环境跳过；以本地构建目录为准）；
 - Web：`pnpm typecheck`、`pnpm test`（28 项）、`pnpm build`、Playwright E2E 通过；
 - 日线回测 helper：`python3 scripts/test_backtest_daily.py`（4/4）；
 - Python 策略/绑定：`python3 -m unittest discover -s python/tests`（21/21）；
